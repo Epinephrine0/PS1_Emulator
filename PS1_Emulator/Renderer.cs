@@ -73,6 +73,8 @@ namespace PS1_Emulator {
         private int texModeLoc;
         private int clutLoc;
         private int texPageLoc;
+        private int display_areay_X_Loc;
+        private int display_areay_Y_Loc;
         private int fbo;
 
         public bool isUsingMouse = false;
@@ -110,6 +112,9 @@ namespace PS1_Emulator {
             texModeLoc = GL.GetUniformLocation(shader.Handle, "TextureMode");
             clutLoc = GL.GetUniformLocation(shader.Handle, "inClut");
             texPageLoc = GL.GetUniformLocation(shader.Handle, "inTexpage");
+
+            display_areay_X_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x");
+            display_areay_Y_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y");
 
             vertexArrayObject = GL.GenVertexArray();
             vertexBufferObject = GL.GenBuffer();                 
@@ -188,7 +193,8 @@ namespace PS1_Emulator {
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
            // GL.Enable(EnableCap.ScissorTest);
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
-            
+
+
         }
 
         public void draw(ref short[] vertices, ref byte[] colors, ref ushort[] uv, ushort clut, ushort page, int texMode) {
@@ -256,13 +262,15 @@ namespace PS1_Emulator {
         }
 
         public void setBlendFactors(float des,float src) {
+
            GL.Uniform4(GL.GetUniformLocation(shader.Handle, "u_blendFactors"), des, des, des, src);
 
         }
         public void readBackTexture(UInt16 x, UInt16 y, UInt16 width, UInt16 height, ref UInt16[] texData) {
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fbo);
 
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fbo);
             GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, texData);
+
         }
 
         void displayVramContent() {
@@ -289,6 +297,9 @@ namespace PS1_Emulator {
 
             GL.Uniform1(FullVram, 0);
 
+            //GL.Uniform1(display_areay_X_Loc, (float)scissorBox_w); //Display area needs more work
+            //GL.Uniform1(display_areay_Y_Loc, (float)scissorBox_h);
+
         }
         public void fill(float r,float g,float b, int x, int y, int width, int height) {
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
@@ -313,6 +324,17 @@ namespace PS1_Emulator {
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
             GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, 1024, 512);
 
+         
+        }
+        internal void VramToVramCopy(int x0_src, int y0_src, int x1_src, int y1_src, int x0_dest, int y0_dest, int x1_dest, int y1_dest) {
+            //WIP
+
+            /*GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0);
+            //GL.BindTexture(TextureTarget.Texture2D, sample_texture);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
+
+            GL.BlitFramebuffer(x0_src,y0_src,x1_src,y1_src,x0_dest,y0_dest,x1_dest,y1_dest, (ClearBufferMask)ClearBuffer.Color,BlitFramebufferFilter.Nearest);*/
+            
 
         }
 
@@ -343,12 +365,10 @@ namespace PS1_Emulator {
                     cpu.IOtick();
 
                     cpu.CDROMtick();
+                   
                     CPU.sync = 0;
                     
-                  
-
                 }
-
 
             }
 
@@ -360,8 +380,6 @@ namespace PS1_Emulator {
                 if (MousePosition.Yx[0] < 480 && MousePosition.Yx[1] < 640) {
                     float y = (float)MouseState.Delta[0];
                     float x = (float)MouseState.Delta[1];
-
-                 
 
                     x = x / 640;
                     x = x * 2;
@@ -406,12 +424,14 @@ namespace PS1_Emulator {
 
             }
            
-            else if (KeyboardState.IsKeyDown(Keys.P)) {
-
-                paused = !paused;
+            else if (KeyboardState.IsKeyDown(Keys.D)) {
+               
                 cpu.bus.print = true;
-                Thread.Sleep(120);
+                Thread.Sleep(40);
 
+            }else if (KeyboardState.IsKeyDown(Keys.P)) {
+                paused = !paused;
+                Thread.Sleep(40);
             }
 
             if (JoystickStates[0] != null) {
@@ -419,7 +439,7 @@ namespace PS1_Emulator {
                     int b = ~(1 << 15);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
 
                 }
@@ -427,14 +447,14 @@ namespace PS1_Emulator {
                     int b = ~(1 << 14);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(2)) {      //Circle
                     int b = ~(1 << 13);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
 
                 }
@@ -442,7 +462,7 @@ namespace PS1_Emulator {
                     int b = ~(1 << 12);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
 
                 }
@@ -450,42 +470,42 @@ namespace PS1_Emulator {
                     int b = ~(1 << 10);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(5)) {      //R1
                     int b = ~(1 << 11);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(6)) {      //L2
                     int b = ~(1 << 8);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(7)) {      //R2
                     int b = ~(1 << 9);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(8)) {      //Share
                     int b = ~(1 << 0);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(9)) {      //Start
                     int b = ~(1 << 3);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(10)) {      //L3
@@ -513,33 +533,31 @@ namespace PS1_Emulator {
                     int b = ~(1 << 4);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(16)) {      //DPad Right
                     int b = ~(1 << 5);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(17)) {      //DPad Down
                     int b = ~(1 << 6);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
                 }
                 else if (JoystickStates[0].IsButtonDown(18)) {      //DPad Left
                     int b = ~(1 << 7);
                     ushort a = (ushort)b;
                     IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(120);
+                    Thread.Sleep(40);
 
 
                 }
-
-
 
 
             }

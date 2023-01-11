@@ -378,9 +378,9 @@ namespace PS1_Emulator {
             if (print) {
                 //Debug.WriteLine("ADDR:" + address.ToString("x"));
             }
+
             if (this.spu.range.contains(mask(address)) != null) {
 
-                //    Debug.WriteLine("Unhandled read to SPU register, address: " + address.ToString("X"));
                 offset = (UInt32)spu.range.contains(mask(address));
 
                 return this.spu.load16(offset);
@@ -424,8 +424,15 @@ namespace PS1_Emulator {
 
                 return this.bios.load16(offset);
             }
+            else if (address == 0xa02c29d4) {    //ignore expansion 1
 
-            throw new Exception("Unhandled load16 at address : " + address.ToString("x"));
+
+                return 0xFF;
+            }
+
+            throw new Exception("Unhandled load16 at address : " + address.ToString("x") + "\n" + 
+                                "Physical address: " + mask(address).ToString("x")
+                                 );
 
 
         }
@@ -480,7 +487,7 @@ namespace PS1_Emulator {
                 IO_PORTS.write(offset, value);  
                 return;
             }
-
+            
             throw new Exception("Unhandled store16 at address : " + address.ToString("x"));
 
 

@@ -66,7 +66,8 @@ namespace PS1_Emulator {
         //Mode from Setmode
         byte mode;
         uint lastSize;
-
+        bool autoPause;
+        bool report;
 
         public enum Command {
             GetStat,
@@ -76,7 +77,8 @@ namespace PS1_Emulator {
             Stop,
             Other,
             Seek,
-            None
+            None,
+            Play
         }
 
         public enum State {
@@ -94,7 +96,7 @@ namespace PS1_Emulator {
         State CDROM_State;
         Command command;
 
-        bool gamePresent = false;
+        bool gamePresent = true;
         bool ledOpen = false;
 
         byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 01).bin");
@@ -102,6 +104,8 @@ namespace PS1_Emulator {
         private byte CDROM_Status() {
 
             DRQSTS = (byte)((currentSector.Count > 0)? 1 : 0);
+            RSLRRDY = (byte)((responseBuffer.Count > 0) ? 1 : 0);
+
             return (byte)((BUSYSTS << 7) | (DRQSTS << 6) | (RSLRRDY << 5) | (PRMWRDY << 4) | (PRMEMPT << 3) | (ADPBUSY << 2) | Index);
 
         }
@@ -336,6 +340,12 @@ namespace PS1_Emulator {
 
                     break;
 
+                case 0x3:
+
+                    play();
+
+                    break;
+
                 case 0x6:
 
                     readN();
@@ -368,7 +378,7 @@ namespace PS1_Emulator {
 
                 case 0xE:
 
-                    setmode();
+                    setMode();
 
                     break;
 
@@ -428,7 +438,33 @@ namespace PS1_Emulator {
 
         }
 
-        private void stop() {
+        
+        private void play() {
+
+            CDROM_State = State.ReadingSectors;
+            command = Command.Play;
+
+            Console.WriteLine("Play");
+            currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
+
+            stat = 0x2; 
+            stat |= (1 << 7);   //Play
+
+            //Response 1
+            responseBuffer.Enqueue(stat);
+            interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+
+            //Hardcoded as fuck
+
+            if (parameterBuffer.Count > 0 && parameterBuffer.Dequeue() != 0) {
+                disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 02).bin");
+                currentIndex = 0;
+            }
+
+
+        }
+
+            private void stop() {
             //The first response returns the current status (this already with bit5 cleared)
             //The second response returns the new status (with bit1 cleared)
 
@@ -564,7 +600,7 @@ namespace PS1_Emulator {
 
         }
         bool doubleSpeed;
-        private void setmode() {
+        private void setMode() {
             CDROM_State = State.RespondingToCommand;
             command = Command.Other;
 
@@ -583,6 +619,8 @@ namespace PS1_Emulator {
             }
 
             doubleSpeed = ((mode >> 7) & 1) != 0;
+            autoPause = ((mode >> 1) & 1) != 0; //For audio play only
+            report = ((mode >> 2) & 1) != 0; //For audio play only
 
             //Response 1
             responseBuffer.Enqueue(stat);
@@ -765,46 +803,63 @@ namespace PS1_Emulator {
                     counter = 0;
                     //lastReadSector.Clear();
 
-                    responseBuffer.Enqueue(stat);
-                        uint size;
-                        if ((mode >> 4 & 1) == 0) {
-                            if (((mode >> 5) & 1) == 0) {
-                                size = 0x800;
-                                lastSize = size;
-                                sectorOffset = 24;
+                    
+                    uint size;
+                    if ((mode >> 4 & 1) == 0) {
+                        if (((mode >> 5) & 1) == 0) {
+                            size = 0x800;
+                            lastSize = size;
+                            sectorOffset = 24;
 
-                        }
-                            else {
-                                size = 0x924;
-                                lastSize = size;
-                                sectorOffset = 12;
+                        } else {
+                            size = 0x924;
+                            lastSize = size;
+                            sectorOffset = 12;
 
-                             }
+                          }
 
-                        }
-                        else {
-                            size = lastSize;
-                        }
+                     } else {
+                        size = lastSize;
+                      }
 
-                        for (uint i = 0; i < size; i++) {
-
-                            lastReadSector.Enqueue(disk[i + currentIndex]);
+                     for (uint i = 0; i < size; i++) {
+                        lastReadSector.Enqueue(disk[i + currentIndex]);
                                 
-                        }
-               
-                        f++;
-                        if (f >= 75) {
-                            f = 0;
-                            s++;
-                        }
-                        if (s >= 60) {
-                            s = 0;
-                            m++;
-                        }
-                        currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
+                     }
 
+                    f++;
+
+                    if (f >= 75) {
+                        f = 0;
+                        s++;
+                     }
+
+                    if (s >= 60) {
+                        s = 0;
+                        m++;
+                     }
+
+                    currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
+                    
+                    if(command != Command.Play) {
+                        responseBuffer.Enqueue(stat);
                         interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
-                        Debug.WriteLine("Moving to MSF: " + (m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0')));
+                    }
+                    else {
+                        
+                        if (report) {
+                            interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
+                        }
+                        if(autoPause && m == 74) {
+                            command = Command.Pause;
+                            CDROM_State = State.Idle;
+                        }
+
+
+                    }
+                    
+
+                    Debug.WriteLine("Moving to MSF: " + (m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0')));
 
 
                     break;

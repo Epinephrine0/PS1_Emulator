@@ -13,45 +13,27 @@ using System.Threading.Tasks;
 
 namespace PS1_Emulator {
     internal class GPU {
-        public Range range = new Range(0x1f801810, 5);            //Assumption 
+        public Range range = new Range(0x1f801810, 5);            //Assumption  
 
-        bool mono_quadrilateral = false;
-        bool textured_quadrilateral = false;
-        bool shaded_triangle = false;
-        bool shaded_quadrilateral = false;
-        bool fill_rectangle = false;
-        public bool TexturedRectangleVariable = false;
-        public bool TexturedRectangleStatic = false;
+        gp0_command? currentCommand = null;
 
-        int  static_width;
-        int  static_height; 
-
-        bool MonochromeRectangleVariable = false;
+        int static_width;
+        int static_height; 
 
         Window window;
 
         ushort[] dummy = null;
 
-        UInt32 img_count = 0;
-
-        List<UInt32> BufArray = new List<UInt32>();
-        List<UInt32> ImageArray = new List<UInt32>();
-
-
-        bool storing_img = false;       //VRAM TO CPU
-
-        //For CPU -> Vram transfer 
-        bool loading_img = false;
-        public UInt16[] TexData;
-
-        UInt16 vram_x;
-        UInt16 vram_y;
-
-        UInt16 vram_img_w;
-        UInt16 vram_img_h;
-
+        UInt32 img_count = 0;       //Number of words for CPU -> VRAM transfer
         List<ushort> vramData = new List<ushort>();
 
+
+        public UInt16[] TexData;    //Array of texture content for VRAM -> CPU transfer
+
+        UInt16 vram_x;              
+        UInt16 vram_y;
+        UInt16 vram_img_w;
+        UInt16 vram_img_h;
 
 
         //Depth of the pixel values in a texture page
@@ -274,44 +256,101 @@ namespace PS1_Emulator {
         public void write_GP0(UInt32 value) {
 
             UInt32 opcode = (value >> 24) & 0xff;
-            //Debug.WriteLine(opcode.ToString("x"));
 
-            if (!readyToDecode(value)) { 
-                return;
+            if (currentCommand != null) {
+                opcode = currentCommand.opcode;
+
             }
+
+            if (img_count > 0) {
+                ushort pixel0 = (ushort)(value & 0xFFFF);
+                ushort pixel1 = (ushort)(value >> 16);
+
+                vramData.Add(pixel0);
+                vramData.Add(pixel1);
+
+                img_count--;
+
+                if(img_count == 0) {
+                    window.update_vram(vram_x, vram_y, vram_img_w, vram_img_h, vramData.ToArray());
+                    ClearMemory(ref vramData);
+                }
+
+                return;
+
+            }
+
             switch (opcode) {
 
                 case 0x00:
                     //NOP
                     break;
 
-
                 case 0x01:
-                    //Clear cache (ignore for now)
+                    //Clear cache (ignored for now)
                     break;
 
                 case 0x2c:
                 case 0x2f:
                 case 0x2e:
-           
-                    ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.textured_quadrilateral = true;
+                case 0x2d:
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 9);
+                    }
+                    
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_quad_texture_opaque();
+                        currentCommand = null;
+ 
+                    }
 
                     break;
 
                 case 0xa0:
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 3);
+                    }
 
-                    ClearMemory(ref ImageArray);
-                    ImageArray.Add(value);
-                    this.loading_img = true;
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+                        img_count = gp0_CPUToVram_Copy();
+                        currentCommand = null;
+                    }
+
+                    
+
                     break;
 
                 case 0xc0:
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 3);
+                    }
 
-                    ClearMemory(ref ImageArray);
-                    ImageArray.Add(value);
-                    this.storing_img = true;
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+                        gp0_VramToCPU_Copy();
+                        currentCommand = null;
+                    }
+
+                    break;
+
+                case 0x80:
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 4);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+                        gp0_VramToVram_Copy();
+                        currentCommand = null;
+                    }
+
                     break;
 
                 case 0xe1:
@@ -348,45 +387,75 @@ namespace PS1_Emulator {
 
                 case 0x28:
                 case 0x2A:
-                    ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.mono_quadrilateral = true;
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 5);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_quad_mono_opaque();
+                        currentCommand = null;
+
+                    }
+
                     break;
 
                 case 0x30:
 
-                    ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.shaded_triangle = true;
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 6);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_triangle_shaded_opaque();
+                        currentCommand = null;
+
+                    }
+
                     break;
 
                 case 0x38:
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 8);
+                    }
 
-                    ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.shaded_quadrilateral = true;
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_quad_shaded_opaque();
+                        currentCommand = null;
+
+                    }
+
+             
                     break;
 
-                case 0x02:
+                case 0x02:  //Fill command
+                case 0x60: //Monochrome Rectangle (variable size) command
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 3);
+                    }
 
-                    ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.fill_rectangle = true;
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_fill_rectangle();
+                        currentCommand = null;
+
+                    }
+
+                    
                     break;
 
-                case 0x2d:
-
-                    ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.textured_quadrilateral = true;
-                    break;
-
-                case 0x60:
-
-                    ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.MonochromeRectangleVariable = true;
-                    break;
+                
+              /*  
 
                 case 0x7C:
 
@@ -397,15 +466,29 @@ namespace PS1_Emulator {
                     static_width = 16;
 
                     break;
+              */
 
 
                 case 0x64:
                 case 0x65:
                 case 0x66:
                 case 0x67:
-                    ClearMemory(ref BufArray);
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 4);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_textured_rectangle();
+                        currentCommand = null;
+
+                    }
+
+                   /* ClearMemory(ref BufArray);
                     BufArray.Add(value);
-                    this.TexturedRectangleVariable = true;
+                    this.TexturedRectangleVariable = true;*/
                     break;
 
                 default:
@@ -416,6 +499,27 @@ namespace PS1_Emulator {
 
 
         }
+
+        private void gp0_VramToVram_Copy() {
+            UInt32 yx_source = currentCommand.buffer[1];
+            UInt32 yx_dest = currentCommand.buffer[2];
+            UInt32 res = currentCommand.buffer[3];  
+
+
+            //this is just saying if it's odd add 1
+            vram_img_w = (ushort)((((res & 0xFFFF) - 1) & 0x3FF) + 1);
+            vram_img_h = (ushort)((((res >> 16) - 1) & 0x1FF) + 1);
+            vram_x = (UInt16)(yx_source & 0x3FF);        //0xffff ?
+            vram_y = (UInt16)((yx_source >> 16) & 0x1FF);
+
+            UInt32 vram_x_dest = (UInt16)(yx_dest & 0x3FF);        //0xffff ?
+            UInt32 vram_y_dest = (UInt16)(yx_dest & 0x3FF);        //0xffff ?
+
+            window.VramToVramCopy(vram_x, vram_y, vram_x + vram_img_w, vram_y + vram_img_h,
+                (int)vram_x_dest, (int)vram_y_dest , (int)(vram_x_dest + vram_img_w), (int)(vram_y_dest + vram_img_h));
+
+        }
+
         public void ClearMemory<T>(ref List<T> list) {
 
             list.Clear();
@@ -428,26 +532,26 @@ namespace PS1_Emulator {
             
             Int16[] vertices = { //x,y,z
 
-           (Int16)BufArray[1], (Int16)(BufArray[1] >> 16) , 0,
-           (Int16)BufArray[3], (Int16)(BufArray[3] >> 16) , 0,
-           (Int16)BufArray[5], (Int16)(BufArray[5] >> 16) , 0,
+           (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
+           (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+           (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0,
 
-           (Int16)BufArray[3], (Int16)(BufArray[3] >> 16) , 0,
-           (Int16)BufArray[5], (Int16)(BufArray[5] >> 16) , 0,
-           (Int16)BufArray[7], (Int16)(BufArray[7] >> 16) , 0
+           (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+           (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0,
+           (Int16)currentCommand.buffer[7], (Int16)(currentCommand.buffer[7] >> 16) , 0
 
 
             };
 
             byte[] colors = { //r,g,b
 
-           (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-           (byte)BufArray[2], (byte)(BufArray[2] >> 8) , (byte)(BufArray[2] >> 16),
-           (byte)BufArray[4], (byte)(BufArray[4] >> 8) , (byte)(BufArray[4] >> 16),
+           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+           (byte)currentCommand.buffer[2], (byte)(currentCommand.buffer[2] >> 8) , (byte)(currentCommand.buffer[2] >> 16),
+           (byte)currentCommand.buffer[4], (byte)(currentCommand.buffer[4] >> 8) , (byte)(currentCommand.buffer[4] >> 16),
 
-           (byte)BufArray[2], (byte)(BufArray[2] >> 8) , (byte)(BufArray[2] >> 16),
-           (byte)BufArray[4], (byte)(BufArray[4] >> 8) , (byte)(BufArray[4] >> 16),
-           (byte)BufArray[6], (byte)(BufArray[6] >> 8) , (byte)(BufArray[6] >> 16),
+           (byte)currentCommand.buffer[2], (byte)(currentCommand.buffer[2] >> 8) , (byte)(currentCommand.buffer[2] >> 16),
+           (byte)currentCommand.buffer[4], (byte)(currentCommand.buffer[4] >> 8) , (byte)(currentCommand.buffer[4] >> 16),
+           (byte)currentCommand.buffer[6], (byte)(currentCommand.buffer[6] >> 8) , (byte)(currentCommand.buffer[6] >> 16),
             };
 
 
@@ -455,10 +559,10 @@ namespace PS1_Emulator {
 
         }
 
-        private void gp0_image_store() {
+        private void gp0_VramToCPU_Copy() {
 
-            UInt32 yx = this.ImageArray[1];
-            UInt32 res = this.ImageArray[2];
+            UInt32 yx = currentCommand.buffer[1];
+            UInt32 res = currentCommand.buffer[2];
 
             //this is just saying if it's odd add 1
             vram_img_w = (ushort)((((res & 0xFFFF) - 1) & 0x3FF) + 1);
@@ -477,9 +581,9 @@ namespace PS1_Emulator {
 
         }
 
-        private UInt16 gp0_image_Load() {
-            UInt32 res = this.ImageArray[2];
-            UInt32 yx = this.ImageArray[1];
+        private UInt16 gp0_CPUToVram_Copy() {
+            UInt32 res = currentCommand.buffer[2];
+            UInt32 yx = currentCommand.buffer[1];
 
             //this is just saying if it's odd add 1
             vram_img_w = (ushort)((((res & 0xFFFF) - 1) & 0x3FF) + 1);
@@ -500,28 +604,27 @@ namespace PS1_Emulator {
         private void gp0_quad_mono_opaque() {
            // Debug.WriteLine("Draw quad command!");
 
-
             Int16[] vertices = { //x,y,z
 
-           (Int16)BufArray[1], (Int16)(BufArray[1] >> 16) , 0,
-           (Int16)BufArray[2], (Int16)(BufArray[2] >> 16) , 0,
-           (Int16)BufArray[3], (Int16)(BufArray[3] >> 16) , 0,
+           (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
+           (Int16)currentCommand.buffer[2], (Int16)(currentCommand.buffer[2] >> 16) , 0,
+           (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
 
-           (Int16)BufArray[2], (Int16)(BufArray[2] >> 16) , 0,
-           (Int16)BufArray[3], (Int16)(BufArray[3] >> 16) , 0,
-           (Int16)BufArray[4], (Int16)(BufArray[4] >> 16) , 0
+           (Int16)currentCommand.buffer[2], (Int16)(currentCommand.buffer[2] >> 16) , 0,
+           (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+           (Int16)currentCommand.buffer[4], (Int16)(currentCommand.buffer[4] >> 16) , 0
 
             };
 
             byte[] colors = { //r,g,b
 
-           (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-           (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-           (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
+           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
-           (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-           (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-           (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
+           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
           
             };
 
@@ -570,6 +673,7 @@ namespace PS1_Emulator {
         private void gp0_drawing_area_BottomRight(UInt32 value) {
             this.drawing_area_bottom = (UInt16)((value >> 10) & 0x3ff);
             this.drawing_area_right = (UInt16)(value & 0x3ff);
+
 
             window.ScissorBox(drawing_area_left, drawing_area_top, drawing_area_right-drawing_area_left, drawing_area_bottom-drawing_area_top);
 
@@ -650,19 +754,10 @@ namespace PS1_Emulator {
         }
 
         private void gp1_reset_command_buffer(uint value) {
-            this.shaded_triangle = false;
-            this.mono_quadrilateral = false;
-            this.textured_quadrilateral = false;
-
-            this.loading_img = false;
-
-            ClearMemory(ref ImageArray);
-            ClearMemory(ref BufArray);
-
-
+            currentCommand = null;
 
             //Reset Fifo
-
+            
         }
 
         private void gp1_acknowledge_irq(uint value) {
@@ -852,150 +947,21 @@ namespace PS1_Emulator {
 
 
 
-   private bool readyToDecode(UInt32 value) {
-
-            if (loading_img || storing_img) {
-                ImageArray.Add(value);
-
-                if (ImageArray.Count == 3) {
-                    if (loading_img) {
-                        this.img_count = gp0_image_Load();
-                        this.loading_img = false;
-                    }
-                    else {
-                        gp0_image_store();
-                        this.storing_img = false;
-                    }
-                  
-
-                }
-
-                return false;
-            }
-
-            if (img_count != 0) { //Image data must be sent to vram 
-
-                ushort pixel0 = (ushort)(value & 0xFFFF);
-                ushort pixel1 = (ushort)(value >> 16);
-
-                vramData.Add(pixel0);
-                vramData.Add(pixel1);
-
-                img_count--;
-
-                if (img_count == 0) {
-                    window.update_vram(vram_x, vram_y, vram_img_w, vram_img_h, vramData.ToArray());
-                    ClearMemory(ref vramData);
-                }
-
-
-                return false;
-            }
-
-
-
-            int limit = -1;
-            if (mono_quadrilateral) {
-
-                limit = 5;
-            }
-            else if (textured_quadrilateral) {
-                limit = 9;
-
-            }
-            else if (shaded_triangle) {
-                limit = 6;
-            }
-            else if (shaded_quadrilateral) {
-                limit = 8;
-            }
-            else if (fill_rectangle || MonochromeRectangleVariable || TexturedRectangleStatic) {
-                limit = 3;
-            }
-            else if (TexturedRectangleVariable) {
-                limit = 4;
-
-            }else {
-                return true;
-            }
-
-            BufArray.Add(value);
-
-            if (BufArray.Count == limit) {
-                if (mono_quadrilateral) {
-
-                    gp0_quad_mono_opaque();
-                    this.mono_quadrilateral = false;
-
-                }
-                else if (textured_quadrilateral) {
-
-                    gp0_quad_texture_opaque();
-                    this.textured_quadrilateral = false;
-
-                }
-                else if (shaded_triangle) {
-
-                    gp0_triangle_shaded_opaque();
-                    this.shaded_triangle = false;
-
-
-                }
-                else if (shaded_quadrilateral) {
-
-                    gp0_quad_shaded_opaque();
-                    this.shaded_quadrilateral = false;
-
-
-                }
-                else if (fill_rectangle) {
-
-                    gp0_fill_rectangle();
-                    this.fill_rectangle = false;
-
-
-                }
-                else if (TexturedRectangleVariable) {
-
-                    gp0_textured_rectangle();
-                    this.TexturedRectangleVariable = false;
-
-
-                }else if (MonochromeRectangleVariable) {
-
-                    gp0_fill_rectangle();
-                    this.MonochromeRectangleVariable = false;
-
-                }
-                else if (TexturedRectangleStatic) {
-
-                    gp0_textured_rectangle_static();
-                    this.TexturedRectangleStatic = false;
-                }
-            }          
-              
-
-           return false;
-
-
-
-        }
-
         private void gp0_textured_rectangle_static() {
             throw new Exception("Doesn't work?");
 
-            UInt32 opcode = (BufArray[0] >> 24) & 0xff;
+            UInt32 opcode = (currentCommand.buffer[0] >> 24) & 0xff;
 
-            ushort clut = (ushort)(BufArray[2] >> 16);
+            ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
             ushort page = (ushort)(page_base_x | (page_base_y << 4));
 
             int texmode = texture_depth;
 
-            ushort tx1 = (ushort)(BufArray[2] & 0xff);
-            ushort ty1 = (ushort)((BufArray[2] >> 8) & 0xff);
+            ushort tx1 = (ushort)(currentCommand.buffer[2] & 0xff);
+            ushort ty1 = (ushort)((currentCommand.buffer[2] >> 8) & 0xff);
 
-            Int16 vertX = (Int16)(BufArray[1] & 0xffff);
-            Int16 vertY = (Int16)((BufArray[1] >> 16) & 0xffff);
+            Int16 vertX = (Int16)(currentCommand.buffer[1] & 0xffff);
+            Int16 vertY = (Int16)((currentCommand.buffer[1] >> 16) & 0xffff);
 
 
             Int16[] vertices = { //x,y,z
@@ -1026,13 +992,13 @@ namespace PS1_Emulator {
                     //Bleding Color 
                     colors = new[]  {         //r,g,b
 
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
                  };
                     break;
@@ -1048,21 +1014,21 @@ namespace PS1_Emulator {
 
         private void gp0_textured_rectangle() {
 
-            UInt32 opcode = (BufArray[0] >> 24) & 0xff;
+            UInt32 opcode = (currentCommand.buffer[0] >> 24) & 0xff;
 
-            ushort clut = (ushort)(BufArray[2] >> 16);
+            ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
             ushort page = (ushort)(page_base_x | (page_base_y << 4));
 
             int texmode = texture_depth;
            
-            ushort tx1 = (ushort)(BufArray[2] & 0xff);
-            ushort ty1 = (ushort)((BufArray[2] >> 8) & 0xff);
+            ushort tx1 = (ushort)(currentCommand.buffer[2] & 0xff);
+            ushort ty1 = (ushort)((currentCommand.buffer[2] >> 8) & 0xff);
 
-            Int16 vertX = (Int16)(BufArray[1] & 0xffff);
-            Int16 vertY = (Int16)((BufArray[1] >> 16) & 0xffff);
+            Int16 vertX = (Int16)(currentCommand.buffer[1] & 0xffff);
+            Int16 vertY = (Int16)((currentCommand.buffer[1] >> 16) & 0xffff);
 
-            Int16 w = (Int16)(BufArray[3] & 0xffff);
-            Int16 h = (Int16)((BufArray[3] >> 16) & 0xffff);
+            Int16 w = (Int16)(currentCommand.buffer[3] & 0xffff);
+            Int16 h = (Int16)((currentCommand.buffer[3] >> 16) & 0xffff);
 
             Int16[] vertices = { //x,y,z
 
@@ -1094,13 +1060,13 @@ namespace PS1_Emulator {
                     //Bleding Color 
                     colors = new[]  {         //r,g,b
 
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
                  };
                     break;
@@ -1123,13 +1089,13 @@ namespace PS1_Emulator {
         }
 
         private void gp0_fill_rectangle() {
-            uint color = (uint)BufArray[0];             //First command contains color
+            uint color = (uint)currentCommand.buffer[0];             //First command contains color
 
-            int x = (int)(BufArray[1] & 0x3F0);
-            int y = (int)((BufArray[1] >> 16) & 0x1FF);
+            int x = (int)(currentCommand.buffer[1] & 0x3F0);
+            int y = (int)((currentCommand.buffer[1] >> 16) & 0x1FF);
 
-            int width = (int)(((BufArray[2] & 0x3FF) + 0x0F) & (~0x0F));
-            int height = (int)((BufArray[2] >> 16) & 0x1FF);
+            int width = (int)(((currentCommand.buffer[2] & 0x3FF) + 0x0F) & (~0x0F));
+            int height = (int)((currentCommand.buffer[2] >> 16) & 0x1FF);
 
             float r = (float)((color & 0xff) / 255.0);                  //Scale to float of range [0,1]
             float g = (float)(((color >> 8) & 0xff) / 255.0);           //because it is going to be passed 
@@ -1139,23 +1105,23 @@ namespace PS1_Emulator {
         }
 
         private void gp0_quad_texture_opaque() {
-            UInt32 opcode = (BufArray[0] >> 24) & 0xff;
+            UInt32 opcode = currentCommand.opcode;
 
-            ushort clut = (ushort)(BufArray[2] >> 16);
-            ushort page = (ushort)((BufArray[4] >> 16) & 0x3fff);
+            ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
+            ushort page = (ushort)((currentCommand.buffer[4] >> 16) & 0x3fff);
             int texmode = (page >> 7) & 3;
 
-            ushort tx1 = (ushort)(BufArray[2] & 0xff);
-            ushort ty1 = (ushort)((BufArray[2] >> 8) & 0xff);
+            ushort tx1 = (ushort)(currentCommand.buffer[2] & 0xff);
+            ushort ty1 = (ushort)((currentCommand.buffer[2] >> 8) & 0xff);
 
-            ushort tx2 = (ushort)(BufArray[4] & 0xff);
-            ushort ty2 = (ushort)((BufArray[4] >> 8) & 0xff);
+            ushort tx2 = (ushort)(currentCommand.buffer[4] & 0xff);
+            ushort ty2 = (ushort)((currentCommand.buffer[4] >> 8) & 0xff);
 
-            ushort tx3 = (ushort)(BufArray[6] & 0xff);
-            ushort ty3 = (ushort)((BufArray[6] >> 8) & 0xff);
+            ushort tx3 = (ushort)(currentCommand.buffer[6] & 0xff);
+            ushort ty3 = (ushort)((currentCommand.buffer[6] >> 8) & 0xff);
 
-            ushort tx4 = (ushort)(BufArray[8] & 0xff);
-            ushort ty4 = (ushort)((BufArray[8] >> 8) & 0xff);
+            ushort tx4 = (ushort)(currentCommand.buffer[8] & 0xff);
+            ushort ty4 = (ushort)((currentCommand.buffer[8] >> 8) & 0xff);
 
 
             ushort[] uv = {
@@ -1171,13 +1137,13 @@ namespace PS1_Emulator {
 
             Int16[] vertices = { //x,y,z
 
-                (Int16)BufArray[1], (Int16)(BufArray[1] >> 16) , 0, 
-                (Int16)BufArray[3], (Int16)(BufArray[3] >> 16) , 0,
-                (Int16)BufArray[5], (Int16)(BufArray[5] >> 16) , 0,
+                (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0, 
+                (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+                (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0,
 
-                (Int16)BufArray[3], (Int16)(BufArray[3] >> 16) , 0,
-                (Int16)BufArray[5], (Int16)(BufArray[5] >> 16) , 0,
-                (Int16)BufArray[7], (Int16)(BufArray[7] >> 16) , 0
+                (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+                (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0,
+                (Int16)currentCommand.buffer[7], (Int16)(currentCommand.buffer[7] >> 16) , 0
 
 
             };
@@ -1190,13 +1156,13 @@ namespace PS1_Emulator {
                     //Bleding Color 
                  colors = new[]  {         //r,g,b
 
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-                (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
                  };
                     break;
@@ -1220,17 +1186,17 @@ namespace PS1_Emulator {
 
             Int16[] vertices = { //x,y,z
 
-           (Int16)BufArray[1], (Int16)(BufArray[1] >> 16) , 0,
-           (Int16)BufArray[3], (Int16)(BufArray[3] >> 16) , 0,
-           (Int16)BufArray[5], (Int16)(BufArray[5] >> 16) , 0
+           (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
+           (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+           (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0
 
             };
 
             byte[] colors = { //r,g,b
 
-           (byte)BufArray[0], (byte)(BufArray[0] >> 8) , (byte)(BufArray[0] >> 16),
-           (byte)BufArray[2], (byte)(BufArray[2] >> 8) , (byte)(BufArray[2] >> 16),
-           (byte)BufArray[4], (byte)(BufArray[4] >> 8) , (byte)(BufArray[4] >> 16)
+           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+           (byte)currentCommand.buffer[2], (byte)(currentCommand.buffer[2] >> 8) , (byte)(currentCommand.buffer[2] >> 16),
+           (byte)currentCommand.buffer[4], (byte)(currentCommand.buffer[4] >> 8) , (byte)(currentCommand.buffer[4] >> 16)
 
             };
 
