@@ -114,6 +114,7 @@ namespace PS1_Emulator {
 
 
         public int counter = 0;
+
         public void tick() {
             counter++;
             if (counter == 50) {
@@ -122,7 +123,6 @@ namespace PS1_Emulator {
                 //JOY_RX_DATA = response(JOY_TX_DATA);
                 IRQ_CONTROL.IRQsignal(7);
             }
-
 
         }
         public void write(uint offset, uint value) {
@@ -276,7 +276,6 @@ namespace PS1_Emulator {
 
         }
 
-        int remaining = 0;
         List<byte> memoryList = new List<byte>();
         bool memorycard = false;
         public uint response(UInt32 command) {
@@ -292,30 +291,12 @@ namespace PS1_Emulator {
 
                 case 0x1:                       //Controller 
                     queue.Clear();
+                    queue.Enqueue(0x41);
+                    queue.Enqueue(0x5A);
+                    queue.Enqueue((byte)(dPadButtons & 0xff));
+                    queue.Enqueue((byte)((dPadButtons >> 8) & 0xff));
+                    //resetDPads();
 
-                   /* if (Renderer.window.isUsingMouse) {
-                        queue.Enqueue(0x12);
-                        queue.Enqueue(0x5A);
-                        queue.Enqueue((byte)(MouseButtons & 0xff));
-                        queue.Enqueue((byte)(MouseButtons >> 8 & 0xff));
-                        queue.Enqueue((byte)(MouseSensors & 0xff));
-                        queue.Enqueue((byte)(MouseSensors >>8 & 0xff));
-                        resetMouse();
-
-
-                    }
-
-                    else { */
-
-                        queue.Enqueue(0x41);
-                        queue.Enqueue(0x5A);
-                        queue.Enqueue((byte)(dPadButtons & 0xff));
-                        queue.Enqueue((byte)((dPadButtons >> 8) & 0xff));
-                        resetDPads();
-
-              //      }
-
-                  
                     return 0xff;
 
                 case 0x42:
@@ -324,33 +305,15 @@ namespace PS1_Emulator {
 
                 case 0x81:                      //Memory Card is not implemented, returning garbage after command 0x52 
 
-                    remaining = 2;
                     return 0xff;
 
-
-                case 0x52:
-
-                    return 0x08;
-
-
                 default:
-                    if (remaining == 0) {
 
-                        throw new ArgumentException(command.ToString("x"));
-
-                    }
-                    else {
-
-                        remaining--;
-                       // memoryList.Insert(memoryList.IndexOf(0x5D), (byte)JOY_TX_DATA);   //Receiving sector number 
-
-                        return 0x0;
-
-                    }
+                    return 0xff;
 
             }
 
-          
+
 
 
         }

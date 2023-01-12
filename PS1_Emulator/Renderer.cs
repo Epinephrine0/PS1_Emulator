@@ -9,6 +9,8 @@ using SixLabors.ImageSharp;
 using System;
 using System.Diagnostics;
 using System.Threading;
+using System.Collections.Generic;
+using System.Linq.Expressions;
 
 namespace PS1_Emulator {
     public class Renderer {
@@ -80,7 +82,28 @@ namespace PS1_Emulator {
         public bool isUsingMouse = false;
 
         Shader shader;
-      
+
+        //Map my button indexes to the corrosponding bits in the PS1 controller
+        public static Dictionary<int, int> buttons_Dictionary = new Dictionary<int, int>()
+         {
+           {0, 15},      //Square
+           {1, 14},      //X
+           {2, 13},      //Circle
+           {3, 12},      //Triangle
+           {4, 10},      //L1
+           {5, 11},      //R1
+           {6, 8},       //L2
+           {7, 9},       //R2
+           {8, 0},       //Select
+           {9, 3},       //Start
+           {10, 1},      //L3
+           {11, 2},      //R3
+           {15, 4},      //Pad up
+           {16, 5},      //Pad right
+           {17, 6},      //Pad down
+           {18, 7},      //Pad Left
+
+        };
 
         public Window(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
              : base(gameWindowSettings, nativeWindowSettings) {
@@ -334,7 +357,7 @@ namespace PS1_Emulator {
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
 
             GL.BlitFramebuffer(x0_src,y0_src,x1_src,y1_src,x0_dest,y0_dest,x1_dest,y1_dest, (ClearBufferMask)ClearBuffer.Color,BlitFramebufferFilter.Nearest);*/
-            
+            throw new Exception();
 
         }
 
@@ -367,207 +390,49 @@ namespace PS1_Emulator {
                     cpu.CDROMtick();
                    
                     CPU.sync = 0;
-                    
-                }
-
-            }
-
-            if (MouseState.IsButtonDown(MouseButton.Middle)) {
-                isUsingMouse = !isUsingMouse;
-            }
-
-            if (isUsingMouse) {     //Mouse doesn't work, TODO: fix?
-                if (MousePosition.Yx[0] < 480 && MousePosition.Yx[1] < 640) {
-                    float y = (float)MouseState.Delta[0];
-                    float x = (float)MouseState.Delta[1];
-
-                    x = x / 640;
-                    x = x * 2;
-                    //x -= 1;
-                    x = x * 128;
-
-
-                    y = y / 480;
-                    y = y * 2;
-                    //y -= 1;
-                    y = y * 128;
-
-                    UInt16 xPos = (UInt16)x;
-                    UInt16 yPos = (UInt16)y;
-
-                    IO_PORTS.MouseSensors = ((UInt16)(xPos | yPos << 8));
-
 
                 }
 
-
-
-                if (MouseState.IsButtonDown(MouseButton.Left)) {
-                    int b = ~(1 << 11);
-                    ushort a = (ushort)b;
-                    IO_PORTS.MouseButtons &= a;
-
-                }
-                if (MouseState.IsButtonDown(MouseButton.Left)) {
-                    int b = ~(1 << 10);
-                    ushort a = (ushort)b;
-                    IO_PORTS.MouseButtons &= a;
-
-                }
-                return;
-
-            }
-
-            if (KeyboardState.IsKeyDown(Keys.Escape)) {
-                
-                Close();
-
-            }
-           
-            else if (KeyboardState.IsKeyDown(Keys.D)) {
-               
-                cpu.bus.print = true;
-                Thread.Sleep(40);
-
-            }else if (KeyboardState.IsKeyDown(Keys.P)) {
-                paused = !paused;
-                Thread.Sleep(40);
             }
 
             if (JoystickStates[0] != null) {
-                if (JoystickStates[0].IsButtonDown(0)) {      //Square
-                    int b = ~(1 << 15);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
+                for (int j = 0; j < JoystickStates[0].ButtonCount; j++) {
+                    if (buttons_Dictionary.ContainsKey(j)) {
+                        if (JoystickStates[0].IsButtonDown(j)) {
+                            int bit = ~(1 << buttons_Dictionary[j]);
+                            IO_PORTS.dPadButtons &= (ushort)(bit);
 
+                        }
+                        else {
+                            int bit = (1 << buttons_Dictionary[j]);
+                            IO_PORTS.dPadButtons |= (ushort)(bit);
+                        }
 
-                }
-                else if (JoystickStates[0].IsButtonDown(1)) {      //X
-                    int b = ~(1 << 14);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(2)) {      //Circle
-                    int b = ~(1 << 13);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
+                    }
 
                 }
-                else if (JoystickStates[0].IsButtonDown(3)) {      //Triangle
-                    int b = ~(1 << 12);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-
-                }
-                else if (JoystickStates[0].IsButtonDown(4)) {      //L1
-                    int b = ~(1 << 10);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(5)) {      //R1
-                    int b = ~(1 << 11);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(6)) {      //L2
-                    int b = ~(1 << 8);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(7)) {      //R2
-                    int b = ~(1 << 9);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(8)) {      //Share
-                    int b = ~(1 << 0);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(9)) {      //Start
-                    int b = ~(1 << 3);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(10)) {      //L3
-
-
-                }
-                else if (JoystickStates[0].IsButtonDown(11)) {      //R3
-
-
-                }
-                else if (JoystickStates[0].IsButtonDown(12)) {      //PS Button
-
-
-                }
-                else if (JoystickStates[0].IsButtonDown(13)) {      //Touch Pad
-
-
-                }
-                else if (JoystickStates[0].IsButtonDown(14)) {      //Mute
-
-
-
-                }
-                else if (JoystickStates[0].IsButtonDown(15)) {      //DPad UP
-                    int b = ~(1 << 4);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(16)) {      //DPad Right
-                    int b = ~(1 << 5);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(17)) {      //DPad Down
-                    int b = ~(1 << 6);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-                }
-                else if (JoystickStates[0].IsButtonDown(18)) {      //DPad Left
-                    int b = ~(1 << 7);
-                    ushort a = (ushort)b;
-                    IO_PORTS.dPadButtons &= a;
-                    Thread.Sleep(40);
-
-
-                }
-
 
             }
 
+
+            if (KeyboardState.IsKeyDown(Keys.Escape)) {
+                Close();
+
+          }else if (KeyboardState.IsKeyDown(Keys.D)) {
+                cpu.bus.print = true;
+                Thread.Sleep(100);
+
+          }else if (KeyboardState.IsKeyDown(Keys.P)) {
+                paused = !paused;
+                Thread.Sleep(100);
+
+          }
+            
+
+            
+                
         }
-
-      
-
-
-
+        
 
         protected override void OnUnload() {
 

@@ -83,7 +83,8 @@ namespace PS1_Emulator {
                 if (pc == 0x80030000) {
                     pc = regs[31];
                     next_pc = pc+4;
-                    fastBoot = false;   
+                    fastBoot = false;
+
                 }
             }
            

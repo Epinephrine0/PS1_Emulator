@@ -17,9 +17,6 @@ namespace PS1_Emulator {
 
         gp0_command? currentCommand = null;
 
-        int static_width;
-        int static_height; 
-
         Window window;
 
         ushort[] dummy = null;
@@ -473,6 +470,8 @@ namespace PS1_Emulator {
                 case 0x65:
                 case 0x66:
                 case 0x67:
+                case 0x7C:
+
                     if (currentCommand == null) {
                         currentCommand = new gp0_command(opcode, 4);
                     }
@@ -946,72 +945,6 @@ namespace PS1_Emulator {
         }
 
 
-
-        private void gp0_textured_rectangle_static() {
-            throw new Exception("Doesn't work?");
-
-            UInt32 opcode = (currentCommand.buffer[0] >> 24) & 0xff;
-
-            ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
-            ushort page = (ushort)(page_base_x | (page_base_y << 4));
-
-            int texmode = texture_depth;
-
-            ushort tx1 = (ushort)(currentCommand.buffer[2] & 0xff);
-            ushort ty1 = (ushort)((currentCommand.buffer[2] >> 8) & 0xff);
-
-            Int16 vertX = (Int16)(currentCommand.buffer[1] & 0xffff);
-            Int16 vertY = (Int16)((currentCommand.buffer[1] >> 16) & 0xffff);
-
-
-            Int16[] vertices = { //x,y,z
-
-                 vertX, vertY , 0,
-                (short)(vertX+static_width),vertY, 0,
-                 vertX, (short)(vertY+static_height) ,0,
-
-                (short)(vertX+static_width),vertY, 0,
-                (short)(vertX+static_width),(short)(vertY+static_height),0,
-                vertX, (short)(vertY+static_height) ,0,
-
-            };
-            ushort[] uv = {
-                tx1, ty1,        //First triangle
-                (ushort)(tx1+static_width), ty1,
-                tx1, (ushort)(ty1+static_height),
-
-                (ushort)(tx1+static_width), ty1,       //Second triangle
-                (ushort)(tx1+static_width), (ushort)(ty1+static_height),
-                tx1, (ushort)(ty1+static_height)
-             };
-
-            byte[] colors;
-
-            switch (opcode) {
-                case 0x7C:
-                    //Bleding Color 
-                    colors = new[]  {         //r,g,b
-
-                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
-                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
-                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
-
-                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
-                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
-                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
-
-                 };
-                    break;
-
-
-                default:
-                    throw new Exception("opcode: " + opcode.ToString("x"));
-            }
-
-
-            window.draw(ref vertices, ref colors, ref uv, clut, page, texmode);
-        }
-
         private void gp0_textured_rectangle() {
 
             UInt32 opcode = (currentCommand.buffer[0] >> 24) & 0xff;
@@ -1027,36 +960,26 @@ namespace PS1_Emulator {
             Int16 vertX = (Int16)(currentCommand.buffer[1] & 0xffff);
             Int16 vertY = (Int16)((currentCommand.buffer[1] >> 16) & 0xffff);
 
-            Int16 w = (Int16)(currentCommand.buffer[3] & 0xffff);
-            Int16 h = (Int16)((currentCommand.buffer[3] >> 16) & 0xffff);
+            Int16 w; 
+            Int16 h;
 
-            Int16[] vertices = { //x,y,z
-
-                 vertX, vertY , 0,
-                (short)(vertX+w),vertY, 0,
-                 vertX, (short)(vertY+h) ,0,
-
-                (short)(vertX+w),vertY, 0,
-                (short)(vertX+w),(short)(vertY+h),0,
-                vertX, (short)(vertY+h) ,0,
-
-
-            };
-            ushort[] uv = {
-                tx1, ty1,        //First triangle
-                (ushort)(tx1+w), ty1,
-                tx1, (ushort)(ty1+h),
-
-                (ushort)(tx1+w), ty1,       //Second triangle
-                (ushort)(tx1+w), (ushort)(ty1+h),
-                tx1, (ushort)(ty1+h)
-             };
+            if (opcode == 0x7C) {
+                h = 16; 
+                w = 16;
+            }
+            else {
+                w = (Int16)(currentCommand.buffer[3] & 0xffff);
+                h = (Int16)((currentCommand.buffer[3] >> 16) & 0xffff);
+            }
+           
 
             byte[] colors;
 
             switch (opcode) {
                 case 0x64:
                 case 0x66:
+                case 0x7C:
+
                     //Bleding Color 
                     colors = new[]  {         //r,g,b
 
@@ -1073,6 +996,7 @@ namespace PS1_Emulator {
 
                 case 0x65:
                 case 0x67:
+
                     colors = NoBlendColors;
 
                     break;
@@ -1081,7 +1005,30 @@ namespace PS1_Emulator {
                     throw new Exception("opcode: " + opcode.ToString("x"));
             }
 
+            Int16[] vertices = { //x,y,z
 
+                 vertX, vertY , 0,
+                (short)(vertX+w),vertY, 0,
+                 vertX, (short)(vertY+h) ,0,
+
+                (short)(vertX+w),vertY, 0,
+                (short)(vertX+w),(short)(vertY+h),0,
+                vertX, (short)(vertY+h) ,0,
+
+
+            };
+
+            ushort[] uv = {
+                tx1, ty1,        //First triangle
+                (ushort)(tx1+w), ty1,
+                tx1, (ushort)(ty1+h),
+
+                (ushort)(tx1+w), ty1,       //Second triangle
+                (ushort)(tx1+w), (ushort)(ty1+h),
+                tx1, (ushort)(ty1+h)
+             };
+
+            
             window.draw(ref vertices, ref colors, ref uv, clut, page, texmode);
 
 

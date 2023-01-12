@@ -607,7 +607,7 @@ namespace PS1_Emulator {
             }
 
             // I asuume a word trasfer from CDROM
-            if (transfer_size != 512 && ch.get_portnum() == 3 ) {
+            if (transfer_size != 512 && ch.get_portnum() == 3) {
                 Debug.WriteLine("CDROM DMA transfer size: " + transfer_size);
             }
 
