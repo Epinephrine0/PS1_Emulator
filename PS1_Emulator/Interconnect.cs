@@ -172,8 +172,10 @@ namespace PS1_Emulator {
             }else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
                 return 0x200931E1;
             }
-            else if (scratchpad.range.contains(mask(address)) != null) {  
-                return 0;
+            else if (scratchpad.range.contains(mask(address)) != null) {
+                offset = (UInt32)scratchpad.range.contains(mask(address));
+
+                return scratchpad.read(offset);
             }
             //else if (this.MDEC.range.contains(mask(address)) != null) { 
             //   return MDEC.read(offset);
@@ -302,10 +304,11 @@ namespace PS1_Emulator {
                 offset = (UInt32)TIMER2.range.contains(mask(address));
 
                 TIMER2.set(offset, value);    
-            }else if (this.scratchpad.range.contains(mask(address)) != null) {  //Ignoring scratchpad
-
-
+            }else if (this.scratchpad.range.contains(mask(address)) != null) {  
+                offset = (UInt32)scratchpad.range.contains(mask(address));
+                scratchpad.write(offset,value);
             }
+
            // else if (this.MDEC.range.contains(mask(address)) != null) {
            //     offset = (UInt32)MDEC.range.contains(mask(address));
           //      MDEC.write(offset,value);
@@ -487,7 +490,16 @@ namespace PS1_Emulator {
                 IO_PORTS.write(offset, value);  
                 return;
             }
-            
+            else if (this.scratchpad.range.contains(mask(address)) != null) {
+                offset = (UInt32)scratchpad.range.contains(mask(address));
+
+                this.scratchpad.store16(offset, value);
+
+                //Debug.WriteLine("ignoring scratchpad");
+
+                return;
+            }
+
             throw new Exception("Unhandled store16 at address : " + address.ToString("x"));
 
 
@@ -528,7 +540,10 @@ namespace PS1_Emulator {
 
             }else if (this.scratchpad.range.contains(mask(address)) != null) {
 
-                Debug.WriteLine("Ignoring store8 to Scratchpad");
+                offset = (UInt32)scratchpad.range.contains(mask(address));
+
+                this.scratchpad.store8(offset, value);
+                //Debug.WriteLine("Ignoring store8 to Scratchpad");
                 return;
             }
             else if (address == 0x1f8010f6) { //I don't even know what I am ignoring 
