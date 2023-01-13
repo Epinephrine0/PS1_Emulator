@@ -11,6 +11,8 @@ using System.Diagnostics;
 using System.Threading;
 using System.Collections.Generic;
 using System.Linq.Expressions;
+using static System.Net.Mime.MediaTypeNames;
+using System.IO;
 
 namespace PS1_Emulator {
     public class Renderer {
@@ -357,7 +359,7 @@ namespace PS1_Emulator {
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
 
             GL.BlitFramebuffer(x0_src,y0_src,x1_src,y1_src,x0_dest,y0_dest,x1_dest,y1_dest, (ClearBufferMask)ClearBuffer.Color,BlitFramebufferFilter.Nearest);*/
-            throw new Exception();
+            //throw new Exception();
 
         }
 
@@ -374,7 +376,16 @@ namespace PS1_Emulator {
 
             for (int i=0; i < CYCLES_PER_FRAME; i++) {        //Timings are nowhere near accurate 
                 if (!paused) {
+
+                   /* try {
+                        cpu.emu_cycle();
+
+                    }catch(Exception ex) {
+                         File.WriteAllTextAsync("Crash_Log.txt", ex.Message);
+                         Close();
+                    }*/
                     cpu.emu_cycle();
+
 
                     CPU.incrementSynchronizer();
                     CPU.incrementSynchronizer();
@@ -395,7 +406,10 @@ namespace PS1_Emulator {
 
             }
 
-            if (JoystickStates[0] != null) {
+
+            IO_PORTS.padPresent = JoystickStates[0] != null;
+
+            if (IO_PORTS.padPresent) {
                 for (int j = 0; j < JoystickStates[0].ButtonCount; j++) {
                     if (buttons_Dictionary.ContainsKey(j)) {
                         if (JoystickStates[0].IsButtonDown(j)) {
@@ -411,26 +425,23 @@ namespace PS1_Emulator {
                     }
 
                 }
+            }
+
+            if (KeyboardState.IsKeyDown(Keys.Escape)) {
+                Close();
+            }
+            else if (KeyboardState.IsKeyDown(Keys.D)) {
+                cpu.bus.print = true;
+                Thread.Sleep(100);
+
+            }
+            else if (KeyboardState.IsKeyDown(Keys.P)) {
+                paused = !paused;
+                Thread.Sleep(100);
 
             }
 
 
-            if (KeyboardState.IsKeyDown(Keys.Escape)) {
-                Close();
-
-          }else if (KeyboardState.IsKeyDown(Keys.D)) {
-                cpu.bus.print = true;
-                Thread.Sleep(100);
-
-          }else if (KeyboardState.IsKeyDown(Keys.P)) {
-                paused = !paused;
-                Thread.Sleep(100);
-
-          }
-            
-
-            
-                
         }
         
 

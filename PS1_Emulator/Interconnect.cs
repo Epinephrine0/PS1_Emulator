@@ -427,12 +427,13 @@ namespace PS1_Emulator {
 
                 return this.bios.load16(offset);
             }
-            else if (address == 0xa02c29d4) {    //ignore expansion 1
-
+            else if (this.expansion1.range.contains(mask(address)) != null) {    //ignore expansion 1
 
                 return 0xFF;
             }
-
+            
+            Console.WriteLine("Ignored address: " + address.ToString("x"));    
+            return 0xFF;
             throw new Exception("Unhandled load16 at address : " + address.ToString("x") + "\n" + 
                                 "Physical address: " + mask(address).ToString("x")
                                  );

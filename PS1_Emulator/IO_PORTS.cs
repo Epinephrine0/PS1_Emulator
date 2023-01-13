@@ -59,6 +59,7 @@ namespace PS1_Emulator {
          bool clkOutputPolarity;
 
         Queue<Byte> queue = new Queue<Byte>();
+        public static bool padPresent;
         public static UInt16 dPadButtons = 0xffff;
         public static UInt16 MouseButtons = 0xffff & (0b00 << 8);
         public static UInt16 MouseSensors = 0;
@@ -73,6 +74,16 @@ namespace PS1_Emulator {
                     //Debug.WriteLine("rx read data: " + JOY_RX_DATA.ToString("x"));
                     fifoFull = false;
                     counter = 0;
+
+                    if (!padPresent) { return 0xff; }
+
+                    if (JOYoutput) {
+                        TXREADY2 = true;
+                        if (SlotNum == 1) {                     //Second controller & memory card are unconnected
+                            ACKLevel = false;
+                            return 0xff;
+                        }
+                    }
 
                     return (byte)response(JOY_TX_DATA); 
 
@@ -121,7 +132,7 @@ namespace PS1_Emulator {
                 ACKLevel = false;
                 IRQ = true;
                 //JOY_RX_DATA = response(JOY_TX_DATA);
-                IRQ_CONTROL.IRQsignal(7);
+                IRQ_CONTROL.IRQsignal(7);   //if en ?
             }
 
         }
@@ -132,23 +143,14 @@ namespace PS1_Emulator {
             switch (offset) {
                 case 0:
 
-                   JOY_TX_DATA = value;        //Data sent 
-                   //Debug.WriteLine("TX data: " + JOY_TX_DATA.ToString("x"));
+                    JOY_TX_DATA = value;        //Data sent 
 
                     JOY_RX_DATA = 0xFF;
                     fifoFull = true;
 
                     TXREADY1 = true;
                     TXREADY2 = false;
-                   
-                    /*
-                    if (JOYoutput) {
-                        TXREADY2 = true;
-                        if (SlotNum == 1) {                     //Second controller ?
-                            ACKLevel = false;
-                        }
-                    }
-                    */
+                    //Counter starts
 
                     break;
 
@@ -194,7 +196,7 @@ namespace PS1_Emulator {
         private ushort getCTRL() {
             uint joy_ctrl = 0;
             joy_ctrl |= TXEN ? 1u : 0u;
-            joy_ctrl |= (JOYoutput ? 1u : 0u) << 1;
+            joy_ctrl |= (JOYoutput ? 1u : 0u) << 1; 
             joy_ctrl |= (RXEN ? 1u : 0u) << 2;
             // bit 4 only writeable
             // bit 6 only writeable
@@ -231,7 +233,7 @@ namespace PS1_Emulator {
         }
         public void set_joy_ctrl(ushort value) {
             TXEN = (value & 1) != 0;
-            JOYoutput = ((value >> 1) & 1) != 0;
+            JOYoutput = ((value >> 1) & 1) != 0;                 //JOYn Output      (0=High, 1=Low/Select) (/JOYn as defined in Bit13)
             RXEN = ((value >> 2) & 1) != 0;
             Acknowledge = ((value >> 4) & 1) != 0;  
             Reset = ((value >> 6) & 1) != 0;
@@ -239,7 +241,7 @@ namespace PS1_Emulator {
             TX_IRQ_EN = ((value >> 10) & 1) != 0;
             RX_IRQ_EN = ((value >> 11) & 1) != 0;
             Acknowledge_IRQ_EN = ((value >> 12) & 1) != 0;
-            SlotNum = ((uint)((value >> 13) & 1));
+            SlotNum = ((uint)((value >> 13) & 1));              //Desired Slot Number  (0=/JOY1, 1=/JOY2) (set to LOW when Bit1=1)
 
             if (Acknowledge) {
                 RXParityError = false;
