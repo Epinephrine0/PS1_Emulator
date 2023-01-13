@@ -100,7 +100,7 @@ namespace PS1_Emulator {
         bool gamePresent = true;
         bool ledOpen = false;
 
-        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 01).bin");
+        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Crash Bandicoot\Crash Bandicoot.bin");
 
         private byte CDROM_Status() {
 
@@ -151,8 +151,6 @@ namespace PS1_Emulator {
                         case 0:
 
                             parameterBuffer.Enqueue(value);
-
-                            //Console.WriteLine("Parameter enqueued: " + value.ToString("x"));
                             
                             break;
 
@@ -217,9 +215,6 @@ namespace PS1_Emulator {
 
                         case 1:
 
-
-                            //Console.WriteLine("Acknowledged INT by writing: " + (value & 7));
-
                             IRQ_flag &= (byte) ~(value & 0x1F);
 
                             if(interrupts.Count > 0 && interrupts.Peek().delay <= 0) {
@@ -274,7 +269,7 @@ namespace PS1_Emulator {
                         case 1:
 
                             if(responseBuffer.Count > 0) {
-                                Console.WriteLine("Responding");
+
                                 return responseBuffer.Dequeue();
 
                             }
@@ -298,7 +293,7 @@ namespace PS1_Emulator {
 
                         case 1:
                         case 3:
-                            //Console.WriteLine("Reading IRQ FLAG: "+ IRQ_flag);
+                            //Debug.WriteLine("Reading IRQ FLAG: "+ IRQ_flag);
                             return (byte)(IRQ_flag | 0xe0);   //0-4 > INT flag ,the rest are 1s
 
 
@@ -386,6 +381,11 @@ namespace PS1_Emulator {
                 case 0x15:
 
                     seekl();
+                    break;
+
+                case 0x16:
+
+                    seekP();
 
                     break;
 
@@ -439,13 +439,32 @@ namespace PS1_Emulator {
 
         }
 
-        
+        private void seekP() {
+            CDROM_State = State.RespondingToCommand;
+            command = Command.Seek;
+
+            currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
+
+            Debug.WriteLine("seekl");
+
+            stat = 0x42; //Seek
+
+            //Response 1
+            responseBuffer.Enqueue(stat);
+            interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+
+            //Response 2
+            stat = (byte)(stat & (~0x40));
+            responseBuffer.Enqueue(stat);
+            interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
+        }
+
         private void play() {
 
             CDROM_State = State.ReadingSectors;
             command = Command.Play;
 
-            Console.WriteLine("Play");
+            Console.WriteLine("[CDROM] Play");
             currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
 
             stat = 0x2; 
@@ -458,7 +477,7 @@ namespace PS1_Emulator {
             //Hardcoded as fuck
 
             if (parameterBuffer.Count > 0 && parameterBuffer.Dequeue() != 0) {
-                disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 02).bin");
+                //disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 02).bin");
                 currentIndex = 0;
             }
 
@@ -518,7 +537,7 @@ namespace PS1_Emulator {
         }
 
         private void mute() {
-            Console.WriteLine("Mute");
+            Debug.WriteLine("Mute");
 
             CDROM_State = State.RespondingToCommand;
             command = Command.Other;
@@ -530,7 +549,7 @@ namespace PS1_Emulator {
 
         private void demute() {
           
-            Console.WriteLine("Demute");
+            Debug.WriteLine("Demute");
 
             CDROM_State = State.RespondingToCommand;
             command = Command.Other;
@@ -544,7 +563,7 @@ namespace PS1_Emulator {
             CDROM_State = State.RespondingToCommand;
 
            
-            Console.WriteLine("Pause, next MSF: " + m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0'));
+            Debug.WriteLine("Pause, next MSF: " + m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0'));
 
             
             //Response 1
@@ -568,7 +587,7 @@ namespace PS1_Emulator {
         }
 
         private void init() {
-            Console.WriteLine("Init");
+            Debug.WriteLine("Init");
             CDROM_State = State.RespondingToCommand;
             command = Command.Init;
 
@@ -587,7 +606,8 @@ namespace PS1_Emulator {
 
         private void readN() {
             CDROM_State = State.ReadingSectors;
-            Console.WriteLine("ReadN");
+            Console.WriteLine("[CDROM] ReadN at MSF: " + m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0'));
+
             currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
 
             stat = 0x2; //Read
@@ -598,7 +618,6 @@ namespace PS1_Emulator {
             interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
             //Further responses [INT1] are added in tick() 
-
         }
         bool doubleSpeed;
         private void setMode() {
@@ -606,7 +625,7 @@ namespace PS1_Emulator {
             command = Command.Other;
 
             mode = parameterBuffer.Dequeue();
-            Console.WriteLine("Setmode: " + mode.ToString("x"));
+            Debug.WriteLine("Setmode: " + mode.ToString("x"));
 
             if (((mode >> 4) & 1) == 0) {
                 if (((mode >> 5) & 1) == 0) {
@@ -635,7 +654,7 @@ namespace PS1_Emulator {
 
             currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
 
-            Console.WriteLine("seekl");
+            Debug.WriteLine("seekl");
 
             stat = 0x42; //Seek
 
@@ -659,7 +678,7 @@ namespace PS1_Emulator {
             CDROM_State = State.RespondingToCommand;
             command = Command.Other;
 
-            Console.WriteLine("setloc");
+            Debug.WriteLine("setloc");
 
             seekParameters[0] = parameterBuffer.Dequeue();  //Minutes
             seekParameters[1] = parameterBuffer.Dequeue();  //Seconds 
@@ -670,7 +689,7 @@ namespace PS1_Emulator {
             f = (uint)((seekParameters[2] & 0xF) * 1 + ((seekParameters[2] >> 4) & 0xF) * 10);
 
 
-            Console.WriteLine(m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0'));
+            Debug.WriteLine(m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0'));
 
             responseBuffer.Enqueue(stat);
             interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
@@ -680,7 +699,7 @@ namespace PS1_Emulator {
         private void getID() {
             CDROM_State = State.RespondingToCommand;
             command = Command.GetID;
-            Console.WriteLine("getid");
+            Debug.WriteLine("getid");
 
             responseBuffer.Enqueue(stat);
             stat = 0x40;  //0x40 seek
@@ -721,7 +740,7 @@ namespace PS1_Emulator {
 
         }
         private void getStat() {
-            Console.WriteLine("Getstat");
+            Debug.WriteLine("Getstat");
 
             CDROM_State = State.RespondingToCommand;
             command = Command.GetStat;
@@ -737,7 +756,7 @@ namespace PS1_Emulator {
         }
 
         public void setDateAndVersion() {
-            Console.WriteLine("setDateVersion");
+            Debug.WriteLine("setDateVersion");
             CDROM_State = State.RespondingToCommand;
             command = Command.Other;
 
@@ -772,7 +791,7 @@ namespace PS1_Emulator {
 
                 if ((IRQ_enable & IRQ_flag) != 0) {
                     IRQ_CONTROL.IRQsignal(2);
-                    Console.WriteLine("CDROM IRQ Fired");
+
                 }
 
             }
@@ -804,7 +823,6 @@ namespace PS1_Emulator {
                     counter = 0;
                     //lastReadSector.Clear();
 
-                    
                     uint size;
                     if ((mode >> 4 & 1) == 0) {
                         if (((mode >> 5) & 1) == 0) {
@@ -823,46 +841,54 @@ namespace PS1_Emulator {
                         size = lastSize;
                       }
 
-                     for (uint i = 0; i < size; i++) {
-                        lastReadSector.Enqueue(disk[i + currentIndex]);
-                                
-                     }
-
-                    f++;
-
-                    if (f >= 75) {
-                        f = 0;
-                        s++;
-                     }
-
-                    if (s >= 60) {
-                        s = 0;
-                        m++;
-                     }
-
-                    currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
+                     
                     
                     if(command != Command.Play) {
+                        for (uint i = 0; i < size; i++) {
+                            lastReadSector.Enqueue(disk[i + currentIndex]);
+
+                        }
+
+                        f++;
+
+                        if (f >= 75) {
+                            f = 0;
+                            s++;
+                        }
+
+                        if (s >= 60) {
+                            s = 0;
+                            m++;
+                        }
+
+                        currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
                         responseBuffer.Enqueue(stat);
-                        interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
+                        if (m < 74) {
+
+                            interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
+
+                        }
+                        else {
+                            interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end
+                            Console.WriteLine("[CDROM] Data end INT4 issued!");
+                        }
                     }
                     else {
-                        
+                        lastReadSector.Clear();
+
                         if (report) {
-                            interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
+                            //interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
                         }
                         if(autoPause && m == 74) {
-                            command = Command.Pause;
-                            CDROM_State = State.Idle;
+                            responseBuffer.Enqueue(stat);
+                            interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end
+                            pause();
+                            Console.WriteLine("[CDROM] Data end INT4 issued!");
                         }
 
 
                     }
                     
-
-                    Console.WriteLine("Moving to MSF: " + (m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0')));
-
-
                     break;
 
             }

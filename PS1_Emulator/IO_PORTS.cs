@@ -150,7 +150,7 @@ namespace PS1_Emulator {
 
                     TXREADY1 = true;
                     TXREADY2 = false;
-                    //Counter starts
+                    //Counter starts?
 
                     break;
 
@@ -255,8 +255,8 @@ namespace PS1_Emulator {
             
         }
         public void reset() {
-             set_joy_ctrl((ushort)0);
-             set_joy_mode((ushort)0);
+            set_joy_ctrl((ushort)0);
+            set_joy_mode((ushort)0);
 
             JOY_RX_DATA = 0xff;
             JOY_TX_DATA = 0;

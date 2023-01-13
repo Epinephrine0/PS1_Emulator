@@ -435,6 +435,8 @@ namespace PS1_Emulator {
 
                 case 0x02:  //Fill command
                 case 0x60: //Monochrome Rectangle (variable size) command
+                case 0x62: //Monochrome Rectangle (variable size) (semi-transparent) command
+
                     if (currentCommand == null) {
                         currentCommand = new gp0_command(opcode, 3);
                     }
@@ -447,30 +449,14 @@ namespace PS1_Emulator {
                         currentCommand = null;
 
                     }
-
-                    
                     break;
-
-                
-              /*  
-
-                case 0x7C:
-
-                    ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.TexturedRectangleStatic = true;
-                    static_height = 16;
-                    static_width = 16;
-
-                    break;
-              */
+            
 
 
                 case 0x64:
                 case 0x65:
                 case 0x66:
                 case 0x67:
-                case 0x7C:
 
                     if (currentCommand == null) {
                         currentCommand = new gp0_command(opcode, 4);
@@ -484,10 +470,25 @@ namespace PS1_Emulator {
                         currentCommand = null;
 
                     }
+                    break;
 
-                   /* ClearMemory(ref BufArray);
-                    BufArray.Add(value);
-                    this.TexturedRectangleVariable = true;*/
+                case 0x74:
+                case 0x75:
+                case 0x7C:
+
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 3);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_textured_rectangle();
+                        currentCommand = null;
+
+                    }
+
                     break;
 
                 default:
@@ -966,6 +967,9 @@ namespace PS1_Emulator {
             if (opcode == 0x7C) {
                 h = 16; 
                 w = 16;
+            }else if (opcode == 0x74 || opcode == 0x75) {
+                h = 8;
+                w = 8;
             }
             else {
                 w = (Int16)(currentCommand.buffer[3] & 0xffff);
@@ -978,6 +982,7 @@ namespace PS1_Emulator {
             switch (opcode) {
                 case 0x64:
                 case 0x66:
+                case 0x74:
                 case 0x7C:
 
                     //Bleding Color 
@@ -996,6 +1001,7 @@ namespace PS1_Emulator {
 
                 case 0x65:
                 case 0x67:
+                case 0x75:
 
                     colors = NoBlendColors;
 
@@ -1041,7 +1047,11 @@ namespace PS1_Emulator {
             int x = (int)(currentCommand.buffer[1] & 0x3F0);
             int y = (int)((currentCommand.buffer[1] >> 16) & 0x1FF);
 
-            int width = (int)(((currentCommand.buffer[2] & 0x3FF) + 0x0F) & (~0x0F));
+
+            //int width = (int)(((currentCommand.buffer[2] & 0x3FF) + 0x0F) & (~0x0F));
+            //int height = (int)((currentCommand.buffer[2] >> 16) & 0x1FF);
+
+            int width = (int)(currentCommand.buffer[2] & 0x3FF);
             int height = (int)((currentCommand.buffer[2] >> 16) & 0x1FF);
 
             float r = (float)((color & 0xff) / 255.0);                  //Scale to float of range [0,1]

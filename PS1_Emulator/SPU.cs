@@ -26,12 +26,12 @@ namespace PS1_Emulator {
         
         //STAT:
         byte SPU_Mode = 0;                   //0-5
-        byte IRQ_Flag = 0;                        //6
-        byte DMA_Read_Write_Request = 0;     //7       seems to be same as SPUCNT.Bit5
-        public byte DMA_Write_Request = 0;          //8            
+        byte IRQ_Flag = 0;                   //6
+        byte DMA_Read_Write_Request = 0;     //7 seems to be same as SPUCNT.Bit5
+        public byte DMA_Write_Request = 0;   //8            
         byte DMA_Read_Request = 0;           //9            
-        byte Data_transfer_busy = 0;         //10         (1 = busy)           
-        byte Writing_Capture_Buffers = 0;    //11         Writing to First/Second half of Capture Buffers (0=First, 1=Second)
+        byte Data_transfer_busy = 0;         //10 (1 = busy)           
+        byte Writing_Capture_Buffers = 0;    //11 Writing to First/Second half of Capture Buffers (0=First, 1=Second)
 
 
         Int16 mainVolumeLeft;
@@ -237,8 +237,6 @@ namespace PS1_Emulator {
                     break;
 
                 case 0x1a8:
-
-                    
 
                     if((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
 
@@ -561,8 +559,6 @@ namespace PS1_Emulator {
 
         internal void DMAtoSPU(uint data) {
             if ((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
-
-
 
             RAM[currentAddress] = (byte)(data & 0xFF);
             RAM[currentAddress + 1] = (byte)((data >> 8) & 0xFF);

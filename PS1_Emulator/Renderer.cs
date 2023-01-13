@@ -359,7 +359,7 @@ namespace PS1_Emulator {
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
 
             GL.BlitFramebuffer(x0_src,y0_src,x1_src,y1_src,x0_dest,y0_dest,x1_dest,y1_dest, (ClearBufferMask)ClearBuffer.Color,BlitFramebufferFilter.Nearest);*/
-            //throw new Exception();
+            throw new Exception("VramToVramCopy");
 
         }
 
@@ -377,14 +377,14 @@ namespace PS1_Emulator {
             for (int i=0; i < CYCLES_PER_FRAME; i++) {        //Timings are nowhere near accurate 
                 if (!paused) {
 
-                   /* try {
+                    try {
                         cpu.emu_cycle();
 
                     }catch(Exception ex) {
-                         File.WriteAllTextAsync("Crash_Log.txt", ex.Message);
+                         File.WriteAllTextAsync("Exception.txt", ex.ToString());
                          Close();
-                    }*/
-                    cpu.emu_cycle();
+                    }
+                    //cpu.emu_cycle();
 
 
                     CPU.incrementSynchronizer();

@@ -148,7 +148,6 @@ namespace PS1_Emulator {
                         ch_irq_flags = (byte)(ch_irq_flags | (1 << i));
                     }
                    
-                    channels[i].finished = false;
                 }
             }
 
@@ -171,7 +170,10 @@ namespace PS1_Emulator {
             this.mastet_enabled = (value >> 23) & 1;
             this.ch_irq_flags = (byte)(this.ch_irq_flags & ~((value >> 24) & 0x3f));      //0x7f??
 
-            
+            for (int i = 0; i < channels.Length; i++) {
+                channels[i].finished = ch_irq_flags >> i != 0;
+            }
+
         }
         public UInt32 irq() {
             UInt32 irq = (UInt32)(ch_irq_flags & ch_irq_en);

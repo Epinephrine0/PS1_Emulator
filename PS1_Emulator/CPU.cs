@@ -76,18 +76,17 @@ namespace PS1_Emulator {
          
             this.current_pc = pc;   //Save current pc In case of an exception
 
-
+            //Should move these to J,Jal,Jr,Jalr instead of checking on every instruction
             intercept(pc);
-
             if (fastBoot) {       //Skip Sony logo, doesn't work 
                 if (pc == 0x80030000) {
                     pc = regs[31];
                     next_pc = pc+4;
                     fastBoot = false;
-
                 }
             }
-           
+           //----------------------------------------------------------------------
+
             this.bus.TIMER1_tick();   
             this.bus.TIMER2_tick();    
 
@@ -126,7 +125,7 @@ namespace PS1_Emulator {
 
             decode_execute(current);
             if (openEvent) {
-                Debug.WriteLine("$v0: " + outRegs[2].ToString("x"));
+                Console.WriteLine("$v0: " + outRegs[2].ToString("x"));
                 openEvent= false;
             }
            
@@ -226,12 +225,14 @@ namespace PS1_Emulator {
                         case 0x9E:
                         case 0xA2:
                         case 0xA3:
-                            CDROM_trace(regs[9]);
+                            if (bus.print) {
+                                CDROM_trace(regs[9]);
+                            }
                             break;
 
                         default:
                             if (bus.print) {
-                                Debug.WriteLine("Function A: " + regs[9].ToString("x"));
+                                Console.WriteLine("Function A: " + regs[9].ToString("x"));
                             }
 
                             break;
@@ -288,11 +289,11 @@ namespace PS1_Emulator {
 
                         case 0xB:
                             if (bus.print) {
-                                Debug.WriteLine("TestEvent");
-                                Debug.WriteLine("$a0: " + regs[4].ToString("X"));
-                                Debug.WriteLine("$a1: " + regs[5].ToString("X"));
-                                Debug.WriteLine("$a2: " + regs[6].ToString("X"));
-                                Debug.WriteLine("$a3: " + regs[7].ToString("X"));
+                                Console.WriteLine("TestEvent");
+                                Console.WriteLine("$a0: " + regs[4].ToString("X"));
+                                Console.WriteLine("$a1: " + regs[5].ToString("X"));
+                                Console.WriteLine("$a2: " + regs[6].ToString("X"));
+                                Console.WriteLine("$a3: " + regs[7].ToString("X"));
                                
 
                             }
@@ -301,26 +302,22 @@ namespace PS1_Emulator {
 
                      
                         case 0x08:
-                            //  if (bus.print) {
-                            Debug.WriteLine("OpenEvent");
-                            Debug.WriteLine("$a0: " + regs[4].ToString("X"));
-                            Debug.WriteLine("$a1: " + regs[5].ToString("X"));
-                            Debug.WriteLine("$a2: " + regs[6].ToString("X"));
-                            Debug.WriteLine("$a3: " + regs[7].ToString("X"));
+                         
+                            /*Console.WriteLine("OpenEvent");
+                            Console.WriteLine("$a0: " + regs[4].ToString("X"));
+                            Console.WriteLine("$a1: " + regs[5].ToString("X"));
+                            Console.WriteLine("$a2: " + regs[6].ToString("X"));
+                            Console.WriteLine("$a3: " + regs[7].ToString("X"));
 
-                            openEvent = true;
-                            if (regs[4] == 0xF0000003) {
-                                //cdevent = true;
-                            }
-
-                            // }
+                            openEvent = true;*/
+                            
 
 
                             break;
 
                         default:
                             if (bus.print) {
-                                Debug.WriteLine("Function B: " + regs[9].ToString("x"));
+                                Console.WriteLine("Function B: " + regs[9].ToString("x"));
                             }
                             break;
 
@@ -330,92 +327,92 @@ namespace PS1_Emulator {
                     break;
                 case 0xC0:
                     if (bus.print) {
-                        Debug.WriteLine("Function C: " + regs[9].ToString("x"));
+                        Console.WriteLine("Function C: " + regs[9].ToString("x"));
                     }
                     break;
             }
         }
      
         public void CDROM_trace(uint func) {
-            Debug.Write("CDROM: ");
+            Console.Write("CDROM: ");
 
             switch (func) {
                 case 0xA4:
-                    Debug.WriteLine("CdGetLbn");
+                    Console.WriteLine("CdGetLbn");
                     break;
 
                 case 0xA5:
-                    Debug.WriteLine("CdReadSector");
+                    Console.WriteLine("CdReadSector");
                     break;
 
                 case 0xA6:
-                    Debug.WriteLine("CdGetStatus");
+                    Console.WriteLine("CdGetStatus");
                     break;
 
                 case 0x78:
-                    Debug.WriteLine("CdAsyncSeekL");
+                    Console.WriteLine("CdAsyncSeekL");
                     break;
 
                 case 0x7C:
-                    Debug.WriteLine("CdAsyncGetStatus");
+                    Console.WriteLine("CdAsyncGetStatus");
                     break;
 
                 case 0x7E:
-                    Debug.WriteLine("CdAsyncReadSector");
+                    Console.WriteLine("CdAsyncReadSector");
                     break;
 
                 case 0x81:
-                    Debug.WriteLine("CdAsyncSetMode");
+                    Console.WriteLine("CdAsyncSetMode");
                     break;
 
                 case 0x94:
-                    Debug.WriteLine("CdromGetInt5errCode");
+                    Console.WriteLine("CdromGetInt5errCode");
                     break;
 
                 case 0x54:
                 case 0x71:
-                    Debug.WriteLine("_96_init");
+                    Console.WriteLine("_96_init");
                     break;
 
                 case 0x56:
                 case 0x72:
-                    Debug.WriteLine(" _96_remove");
+                    Console.WriteLine(" _96_remove");
                     break;
 
                 case 0x90:
-                    Debug.WriteLine("CdromIoIrqFunc1");
+                    Console.WriteLine("CdromIoIrqFunc1");
                     break;
 
                 case 0x91:
-                    Debug.WriteLine("CdromDmaIrqFunc1");
+                    Console.WriteLine("CdromDmaIrqFunc1");
                     break;
 
                 case 0x92:
-                    Debug.WriteLine("CdromIoIrqFunc2");
+                    Console.WriteLine("CdromIoIrqFunc2");
                     break; 
 
                 case 0x93:
-                    Debug.WriteLine("CdromDmaIrqFunc2");
+                    Console.WriteLine("CdromDmaIrqFunc2");
                     break;
 
                 case 0x95:
-                    Debug.WriteLine("CdInitSubFunc");
+                    Console.WriteLine("CdInitSubFunc");
                     break;
 
                 case 0x9E:
-                    Debug.WriteLine("SetCdromIrqAutoAbort");
+                    Console.WriteLine("SetCdromIrqAutoAbort");
                     break;
 
                 case 0xA2:
-                    Debug.WriteLine("EnqueueCdIntr");
+                    Console.WriteLine("EnqueueCdIntr");
                     break;
 
                 case 0xA3:
-                    Debug.WriteLine("DequeueCdIntr");
+                    Console.WriteLine("DequeueCdIntr");
                     break;
 
                 default:
-                    Debug.WriteLine("Unknown function: A(0x" + func.ToString("x")+")");
+                    Console.WriteLine("Unknown function: A(0x" + func.ToString("x")+")");
                     break;
 
 
@@ -872,8 +869,10 @@ namespace PS1_Emulator {
 
         }
         private void op_illegal(Instruction instruction) {
-            Debug.WriteLine("Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0'));
-            Debug.WriteLine("PC: " + pc.ToString("x"));
+            Console.ForegroundColor = ConsoleColor.Red; 
+
+            Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') +
+                "at PC: " + pc.ToString("x"));
 
             exception(IllegalInstruction);
 

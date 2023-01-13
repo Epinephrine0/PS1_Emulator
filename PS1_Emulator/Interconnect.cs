@@ -427,12 +427,19 @@ namespace PS1_Emulator {
 
                 return this.bios.load16(offset);
             }
+            else if (this.scratchpad.range.contains(mask(address)) != null) {
+                offset = (UInt32)scratchpad.range.contains(mask(address));
+                
+                return this.scratchpad.load16(offset);
+            }
             else if (this.expansion1.range.contains(mask(address)) != null) {    //ignore expansion 1
 
                 return 0xFF;
             }
             
-            Console.WriteLine("Ignored address: " + address.ToString("x"));    
+
+            Console.WriteLine("[BUS] Ignored load16 from address: " + address.ToString("x"));    
+
             return 0xFF;
             throw new Exception("Unhandled load16 at address : " + address.ToString("x") + "\n" + 
                                 "Physical address: " + mask(address).ToString("x")
@@ -647,6 +654,7 @@ namespace PS1_Emulator {
 
                             if(transfer_size - 1 <= 0) {
                                 this.spu.DMA_Write_Request = 0;
+                                
                             }
 
                             break;
