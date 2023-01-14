@@ -40,13 +40,11 @@ namespace PS1_Emulator {
                     case 4:
                         mode = value;
                         timerSettings(mode);
-                        Debug.WriteLine("Timer1 mode set: " + mode.ToString("x"));
 
                         break;
 
                     case 8:
                         target = value;
-                        Debug.WriteLine("Timer1 target set: " + mode.ToString("x"));
 
                         break;
 

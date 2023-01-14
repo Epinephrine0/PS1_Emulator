@@ -68,7 +68,7 @@ namespace PS1_Emulator {
 
             Console.ForegroundColor = ConsoleColor.Green;   //For TTY Console
             Console.Title = "TTY Console";
-            testRom = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\tests\gpu\triangle\triangle.exe");
+            testRom = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\tests\cdrom\timing\timing.exe");
         }
 
        
@@ -88,7 +88,6 @@ namespace PS1_Emulator {
            //----------------------------------------------------------------------
 
             this.bus.TIMER1_tick();   
-            this.bus.TIMER2_tick();    
 
             //PC must be 32 bit aligned 
             if (this.current_pc % 4 !=0) {
@@ -142,7 +141,7 @@ namespace PS1_Emulator {
         private void intercept(uint pc) {
 
             switch (pc) {
-          /*      case 0x80030000:   //For executing EXEs
+                case 0x80030000:   //For executing EXEs
                     uint addressInRAM = (uint)(testRom[0x018] | (testRom[0x018 + 1] << 8) | (testRom[0x018 + 2] << 16) | (testRom[0x018 + 3] << 24));
 
                     for (int i = 0x800; i < testRom.Length; i++) {
@@ -154,7 +153,7 @@ namespace PS1_Emulator {
                     next_pc = pc + 4;
 
                     break;
-          */
+          
               
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
                     char character;

@@ -25,13 +25,13 @@ namespace PS1_Emulator {
         UInt16 SPUCNT;
         
         //STAT:
-        byte SPU_Mode = 0;                   //0-5
-        byte IRQ_Flag = 0;                   //6
-        byte DMA_Read_Write_Request = 0;     //7 seems to be same as SPUCNT.Bit5
-        public byte DMA_Write_Request = 0;   //8            
-        byte DMA_Read_Request = 0;           //9            
-        byte Data_transfer_busy = 0;         //10 (1 = busy)           
-        byte Writing_Capture_Buffers = 0;    //11 Writing to First/Second half of Capture Buffers (0=First, 1=Second)
+        byte SPU_Mode;                          //0-5
+        byte IRQ_Flag;                          //6
+        public byte DMA_Read_Write_Request;     //7 seems to be same as SPUCNT.Bit5
+        public byte DMA_Write_Request;          //8            
+        public byte DMA_Read_Request;           //9            
+        byte Data_transfer_busy;                //10 (1 = busy)           
+        byte Writing_Capture_Buffers;           //11 Writing to First/Second half of Capture Buffers (0=First, 1=Second)
 
 
         Int16 mainVolumeLeft;

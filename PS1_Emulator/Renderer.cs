@@ -390,6 +390,8 @@ namespace PS1_Emulator {
                     CPU.incrementSynchronizer();
                     CPU.incrementSynchronizer();
 
+                    cpu.bus.TIMER2_tick(CPU.sync);
+
                     cpu.SPUtick();      
 
                     cpu.GPUtick();

@@ -76,8 +76,8 @@ namespace PS1_Emulator {
             }
 
         }
-        public void TIMER2_tick() {
-            this.TIMER2.tick();
+        public void TIMER2_tick(int cycles) {
+            this.TIMER2.tick(cycles);
         }
         public void SPU_Tick(int cycles) {
             this.spu.SPU_Tick(cycles);
@@ -366,6 +366,11 @@ namespace PS1_Emulator {
 
                 return IO_PORTS.read(offset);
             }
+            else if (this.scratchpad.range.contains(mask(address)) != null) {
+                offset = (UInt32)scratchpad.range.contains(mask(address));
+
+                return scratchpad.load8(offset);
+            }
             else if (address == 0x1f8010f6) { //I don't even know what I am ignoring 
 
                 return 0;
@@ -653,7 +658,7 @@ namespace PS1_Emulator {
                             this.spu.DMAtoSPU(data);
 
                             if(transfer_size - 1 <= 0) {
-                                this.spu.DMA_Write_Request = 0;
+                                this.spu.DMA_Read_Request = 0;
                                 
                             }
 

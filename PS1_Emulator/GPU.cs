@@ -235,6 +235,7 @@ namespace PS1_Emulator {
                 vblank_counter = 0;
                 window.display();
                 IRQ_CONTROL.IRQsignal(0);
+                IRQ_CONTROL.IRQsignal(9);
 
                 this.TIMER1.GPUinVblank = true;
 
