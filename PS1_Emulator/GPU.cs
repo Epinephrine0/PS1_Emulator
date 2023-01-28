@@ -32,7 +32,6 @@ namespace PS1_Emulator {
         UInt16 vram_img_w;
         UInt16 vram_img_h;
 
-
         //Depth of the pixel values in a texture page
         public Dictionary<string, byte> TextureDepth = new Dictionary<string, byte>{
          { "T4Bit", 0 },
@@ -259,6 +258,7 @@ namespace PS1_Emulator {
                 opcode = currentCommand.opcode;
 
             }
+            
 
             if (img_count > 0) {
                 ushort pixel0 = (ushort)(value & 0xFFFF);
@@ -277,7 +277,7 @@ namespace PS1_Emulator {
                 return;
 
             }
-
+            
             switch (opcode) {
 
                 case 0x00:
@@ -381,10 +381,29 @@ namespace PS1_Emulator {
                     gp0_mask_bit(value);
                     break;
 
-              
+
+                case 0x20:  //PS logo (uses gte)?
+                case 0x22:
+
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 4);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_triangle_shaded_opaque();
+
+                        currentCommand = null;
+
+                    }
+
+                    break;
 
                 case 0x28:
                 case 0x2A:
+
                     if (currentCommand == null) {
                         currentCommand = new gp0_command(opcode, 5);
                     }
@@ -437,7 +456,7 @@ namespace PS1_Emulator {
                 case 0x02:  //Fill command
                 case 0x60: //Monochrome Rectangle (variable size) command
                 case 0x62: //Monochrome Rectangle (variable size) (semi-transparent) command
-
+               
                     if (currentCommand == null) {
                         currentCommand = new gp0_command(opcode, 3);
                     }
@@ -451,8 +470,21 @@ namespace PS1_Emulator {
 
                     }
                     break;
-            
 
+                case 0x68:  //1x1 Monochrome Rectangle
+                    if (currentCommand == null) {
+                        currentCommand = new gp0_command(opcode, 2);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_fill_rectangle();
+                        currentCommand = null;
+
+                    }
+                    break;
 
                 case 0x64:
                 case 0x65:
@@ -492,6 +524,7 @@ namespace PS1_Emulator {
 
                     break;
 
+
                 default:
 
                     throw new Exception("Unhandled GP0 opcode :" + opcode.ToString("X")); 
@@ -500,6 +533,8 @@ namespace PS1_Emulator {
 
 
         }
+
+     
 
         private void gp0_VramToVram_Copy() {
             UInt32 yx_source = currentCommand.buffer[1];
@@ -513,11 +548,10 @@ namespace PS1_Emulator {
             vram_x = (UInt16)(yx_source & 0x3FF);        //0xffff ?
             vram_y = (UInt16)((yx_source >> 16) & 0x1FF);
 
-            UInt32 vram_x_dest = (UInt16)(yx_dest & 0x3FF);        //0xffff ?
-            UInt32 vram_y_dest = (UInt16)(yx_dest & 0x3FF);        //0xffff ?
+            UInt16 vram_x_dest = (UInt16)(yx_dest & 0x3FF);        //0xffff ?
+            UInt16 vram_y_dest = (UInt16)((yx_dest >> 16) & 0x3FF);        //0xffff ?
 
-            window.VramToVramCopy(vram_x, vram_y, vram_x + vram_img_w, vram_y + vram_img_h,
-                (int)vram_x_dest, (int)vram_y_dest , (int)(vram_x_dest + vram_img_w), (int)(vram_y_dest + vram_img_h));
+            window.VramToVramCopy(vram_x, vram_y, vram_x_dest, vram_y_dest, vram_img_w, vram_img_h);
 
         }
 
@@ -964,19 +998,20 @@ namespace PS1_Emulator {
 
             Int16 w; 
             Int16 h;
-
+            
             if (opcode == 0x7C) {
                 h = 16; 
                 w = 16;
-            }else if (opcode == 0x74 || opcode == 0x75) {
+
+            }
+            else if (opcode == 0x74 || opcode == 0x75) {
                 h = 8;
                 w = 8;
             }
-            else {
-                w = (Int16)(currentCommand.buffer[3] & 0xffff);
-                h = (Int16)((currentCommand.buffer[3] >> 16) & 0xffff);
+            else {  //(max 1023x511)
+                w = (Int16)(currentCommand.buffer[3] & 0x3ff); 
+                h = (Int16)((currentCommand.buffer[3] >> 16) & 0x1ff);
             }
-           
 
             byte[] colors;
 
@@ -1045,15 +1080,32 @@ namespace PS1_Emulator {
         private void gp0_fill_rectangle() {
             uint color = (uint)currentCommand.buffer[0];             //First command contains color
 
-            int x = (int)(currentCommand.buffer[1] & 0x3F0);
-            int y = (int)((currentCommand.buffer[1] >> 16) & 0x1FF);
-
+            Int16 x = (Int16)(currentCommand.buffer[1] & 0x3ff);
+            Int16 y = (Int16)((currentCommand.buffer[1] >> 16) & 0x3ff);
 
             //int width = (int)(((currentCommand.buffer[2] & 0x3FF) + 0x0F) & (~0x0F));
             //int height = (int)((currentCommand.buffer[2] >> 16) & 0x1FF);
 
-            int width = (int)(currentCommand.buffer[2] & 0x3FF);
-            int height = (int)((currentCommand.buffer[2] >> 16) & 0x1FF);
+            ushort width;
+            ushort height;
+
+            switch (currentCommand.opcode) {
+                case 0x68:
+                    width = height = 1;
+                    break;
+                case 0x60:
+                case 0x62:
+                case 0x02:
+
+                    width = (ushort)(currentCommand.buffer[2] & 0x3FF);
+                    height = (ushort)((currentCommand.buffer[2] >> 16) & 0x1FF);
+
+                    break;
+
+                default:
+                    throw new Exception("GP0 opcode: " + currentCommand.opcode.ToString("x"));
+            }
+
 
             float r = (float)((color & 0xff) / 255.0);                  //Scale to float of range [0,1]
             float g = (float)(((color >> 8) & 0xff) / 255.0);           //because it is going to be passed 
@@ -1142,22 +1194,54 @@ namespace PS1_Emulator {
 
         private void gp0_triangle_shaded_opaque() {
 
-            Int16[] vertices = { //x,y,z
 
-           (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
-           (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
-           (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0
+            Int16[] vertices;
+            byte[] colors;
 
-            };
+            switch (currentCommand.opcode) {
+                case 0x20:
+                case 0x22:
+                    vertices = new Int16[]{ //x,y,z
 
-            byte[] colors = { //r,g,b
+                    (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
+                    (Int16)currentCommand.buffer[2], (Int16)(currentCommand.buffer[2] >> 16) , 0,
+                    (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0
 
-           (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
-           (byte)currentCommand.buffer[2], (byte)(currentCommand.buffer[2] >> 8) , (byte)(currentCommand.buffer[2] >> 16),
-           (byte)currentCommand.buffer[4], (byte)(currentCommand.buffer[4] >> 8) , (byte)(currentCommand.buffer[4] >> 16)
+                     };
+                    colors = new byte[]{ //r,g,b
 
-            };
+                    (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                    (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                    (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16)
 
+                    };
+
+                    break;
+
+                case 0x30:
+                    vertices = new Int16[]{ //x,y,z
+
+                    (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
+                    (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+                    (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0
+
+                     };
+
+                    colors = new byte[]{ //r,g,b
+
+                    (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                    (byte)currentCommand.buffer[2], (byte)(currentCommand.buffer[2] >> 8) , (byte)(currentCommand.buffer[2] >> 16),
+                    (byte)currentCommand.buffer[4], (byte)(currentCommand.buffer[4] >> 8) , (byte)(currentCommand.buffer[4] >> 16)
+
+                    };
+                    break;
+
+                default:
+                    throw new Exception((currentCommand.opcode).ToString("x"));
+                   
+            }
+
+            
 
 
             window.draw(ref vertices, ref colors, ref dummy, 0, 0, -1);

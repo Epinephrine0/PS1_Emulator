@@ -327,6 +327,7 @@ namespace PS1_Emulator {
 
         }
         public void fill(float r,float g,float b, int x, int y, int width, int height) {
+
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
             GL.ClearColor(r, g, b, 1.0f);       //Fill by clear needs Scissor box
             GL.Scissor(x,y,width,height);
@@ -340,7 +341,8 @@ namespace PS1_Emulator {
 
 
         public void update_vram(int x, int y , int width, int height, ushort[] textureData) {
-
+            if (width == 0) { width = 1024; }
+            if (height == 0) { height = 512; }
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
             GL.BindTexture(TextureTarget.Texture2D, vram_texture);
             GL.TexSubImage2D(TextureTarget.Texture2D,0,x,y,width,height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
@@ -351,7 +353,7 @@ namespace PS1_Emulator {
 
          
         }
-        internal void VramToVramCopy(int x0_src, int y0_src, int x1_src, int y1_src, int x0_dest, int y0_dest, int x1_dest, int y1_dest) {
+        internal void VramToVramCopy(int x0_src, int y0_src, int x0_dest, int y0_dest, int width, int height) {
             //WIP
 
             /*GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0);
@@ -359,8 +361,15 @@ namespace PS1_Emulator {
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
 
             GL.BlitFramebuffer(x0_src,y0_src,x1_src,y1_src,x0_dest,y0_dest,x1_dest,y1_dest, (ClearBufferMask)ClearBuffer.Color,BlitFramebufferFilter.Nearest);*/
-            throw new Exception("VramToVramCopy");
+            if(width == 0) { width = 1024; }
+            if(height == 0) { height = 512; }
+            GL.BindTexture(TextureTarget.Texture2D, sample_texture);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0); 
+            GL.CopyImageSubData(sample_texture,ImageTarget.Texture2D,0,x0_src,y0_src,0,vram_texture,ImageTarget.Texture2D,0,x0_dest,y0_dest,0,width,height,0);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
+            GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, 1024, 512);
 
+            //throw new Exception("VramToVramCopy");
         }
 
         public void display() {
@@ -377,14 +386,14 @@ namespace PS1_Emulator {
             for (int i=0; i < CYCLES_PER_FRAME; i++) {        //Timings are nowhere near accurate 
                 if (!paused) {
 
-                    try {
+                    /*try {
                         cpu.emu_cycle();
 
                     }catch(Exception ex) {
                          File.WriteAllTextAsync("Exception.txt", ex.ToString());
                          Close();
-                    }
-                    //cpu.emu_cycle();
+                    }*/
+                    cpu.emu_cycle();
 
 
                     CPU.incrementSynchronizer();

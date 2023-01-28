@@ -82,9 +82,6 @@ namespace PS1_Emulator {
 
                 }
 
-
-
-
             }
             public void tick() {
                 if (!pulse && finished) {

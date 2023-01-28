@@ -226,8 +226,6 @@ namespace PS1_Emulator {
             }
             else if (ram.range.contains(mask(address)) != null) {             //Write to RAM
 
-
-
                 offset = (UInt32)ram.range.contains(mask(address));
 
                 this.ram.write(offset, value);
@@ -282,7 +280,9 @@ namespace PS1_Emulator {
                         break;
 
                     default:
-                        throw new Exception("Unhandled write to offset: " + offset + " val: " + value.ToString("x"));
+                        throw new Exception("Unhandled write to offset: " + offset + " val: " + value.ToString("x")
+                                            + "Physical address: " + mask(address).ToString("x")
+                            ); ; 
                 }
 
 
@@ -315,7 +315,10 @@ namespace PS1_Emulator {
           //  }
 
             else {
-                throw new Exception("Cannot find address: " + address.ToString("X") + " in memory map");
+
+                throw new Exception("Cannot find address: " + address.ToString("X") + " in memory map"
+                                    + " Physical address: " + mask(address).ToString("x")
+                            );
 
             }
         }

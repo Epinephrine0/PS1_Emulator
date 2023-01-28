@@ -168,7 +168,7 @@ namespace PS1_Emulator {
         /// </summary>
         /// <param name="name">The name of the uniform</param>
         /// <param name="data">The data to set</param>
-        public void SetVector3(string name, Vector3 data) {
+        public void SetVector3(string name, OpenTK.Mathematics.Vector3 data) {
             GL.UseProgram(Handle);
             GL.Uniform3(_uniformLocations[name], data);
         }

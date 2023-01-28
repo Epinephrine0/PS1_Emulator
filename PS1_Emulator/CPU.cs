@@ -1,4 +1,5 @@
-﻿using OpenTK.Graphics.OpenGL;
+﻿using NAudio.Wave;
+using OpenTK.Graphics.OpenGL;
 using System;
 using System.Buffers.Text;
 using System.Collections.Generic;
@@ -30,7 +31,8 @@ namespace PS1_Emulator {
         private bool _branch;
         private bool delay_slot;
 
-
+        //Geometry Transformation Engine - Coprocessor 2
+        GTE gte = new GTE();
 
         public static int sync = 0;
 
@@ -63,12 +65,11 @@ namespace PS1_Emulator {
             this.LO = 0xdeadbeef;
             this._branch = false;
             this.delay_slot = false;
-           
 
-
+            
             Console.ForegroundColor = ConsoleColor.Green;   //For TTY Console
             Console.Title = "TTY Console";
-            testRom = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\tests\cdrom\timing\timing.exe");
+            testRom = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\tests\gte\test-all\test-all.exe");
         }
 
        
@@ -99,8 +100,8 @@ namespace PS1_Emulator {
             
 
             delay_slot = _branch;
-            _branch = false;
-
+            _branch = false;       
+                                
             pc = next_pc;
             next_pc = next_pc + 4;
 
@@ -110,6 +111,7 @@ namespace PS1_Emulator {
 
             outRegs[0] = 0;
 
+           // gte.load_delayed();
 
             if (IRQ_CONTROL.isRequestingIRQ()) {                          //Interrupt check 
                 cause |= 1 << 10;
@@ -135,13 +137,15 @@ namespace PS1_Emulator {
             for (int i = 0; i < regs.Length; i++) {       
                 regs[i] = outRegs[i];
             }
+           // gte.copy();
+            gte.tick(sync);
 
         }
 
         private void intercept(uint pc) {
 
             switch (pc) {
-          /*      case 0x80030000:   //For executing EXEs
+                case 0x80030000:   //For executing EXEs
                     uint addressInRAM = (uint)(testRom[0x018] | (testRom[0x018 + 1] << 8) | (testRom[0x018 + 2] << 16) | (testRom[0x018 + 3] << 24));
 
                     for (int i = 0x800; i < testRom.Length; i++) {
@@ -151,10 +155,9 @@ namespace PS1_Emulator {
                     }
                     pc = (uint)(testRom[0x10] | (testRom[0x10 + 1] << 8) | (testRom[0x10 + 2] << 16) | (testRom[0x10 + 3] << 24));
                     next_pc = pc + 4;
-
+                    //Console.WriteLine("Execute at PC:" + pc.ToString("x"));
                     break;
-          */
-              
+               
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
                     char character;
 
@@ -625,7 +628,7 @@ namespace PS1_Emulator {
                     break;
 
                 case 0x32:
-
+                    
                     op_lwc2(instruction);
                     break;
 
@@ -644,11 +647,7 @@ namespace PS1_Emulator {
                     op_swc1(instruction);
                     break;
 
-                case 0x40:
-
-                    op_swc2(instruction);
-                    break;
-
+            
                 case 0x41:
 
                     op_swc3(instruction);
@@ -657,7 +656,7 @@ namespace PS1_Emulator {
 
                 case 0x3A:
 
-                    op_swc2_pre_release6(instruction);
+                    op_swc2(instruction);
                     break;
 
                 default:
@@ -871,23 +870,33 @@ namespace PS1_Emulator {
             Console.ForegroundColor = ConsoleColor.Red; 
 
             Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') +
-                "at PC: " + pc.ToString("x"));
+                " at PC: " + pc.ToString("x"));
 
-            exception(IllegalInstruction);
+            Console.ForegroundColor = ConsoleColor.Green;
+
+            //exception(IllegalInstruction);
 
         }
 
         private void op_swc3(Instruction instruction) {
             exception(CoprocessorError); //StoreWord is not supported in this cop
         }
-        private void op_swc2_pre_release6(Instruction instruction) {
-            //Debug.WriteLine("StoreWord cop2 [GTE] instruction ignored");
-        }
-
         private void op_swc2(Instruction instruction) {
-            //Debug.WriteLine("StoreWord cop2 [GTE] instruction ignored");
+
+            uint address = regs[instruction.get_rs()] + instruction.signed_imm();
+
+            if (address % 4 != 0) {
+                exception(LoadAddressError);
+                return;
+            }
+
+            uint rt = instruction.get_rt();
+            uint word = gte.read(rt);
+            bus.store32(address, word);
+
         }
 
+       
 
         private void op_swc1(Instruction instruction) {
             exception(CoprocessorError); //StoreWord is not supported in this cop
@@ -902,8 +911,19 @@ namespace PS1_Emulator {
         }
 
         private void op_lwc2(Instruction instruction) {
+            //TODO add 2 instructions delay
 
-          //  Debug.WriteLine("LoadWord cop2 [GTE] instruction ignored");
+            uint address = regs[instruction.get_rs()] + instruction.signed_imm();
+
+            if (address % 4 != 0) {
+                exception(LoadAddressError);
+                return;
+            }
+
+            uint word = bus.load32(address);
+            uint rt = instruction.get_rt();
+            gte.write(rt, word);
+
         }
 
         private void op_lwc1(Instruction instruction) {
@@ -915,6 +935,8 @@ namespace PS1_Emulator {
         }
 
         private void op_swr(Instruction instruction) {
+            //TODO add 2 instructions delay
+
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
             UInt32 final_address = regs[base_] + addressRegPos;
@@ -1039,6 +1061,10 @@ namespace PS1_Emulator {
 
                     throw new Exception("lwr instruction error, pos:" + pos);
             }
+            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            }
 
             pendingload.Item1 = instruction.get_rt();  //Position
             pendingload.Item2 = finalValue;           //Value
@@ -1085,14 +1111,91 @@ namespace PS1_Emulator {
                     throw new Exception("lwl instruction error, pos:" + pos);
             }
 
+            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            }
+
             pendingload.Item1 = instruction.get_rt();  //Position
             pendingload.Item2 = finalValue;           //Value
 
         }
 
         private void op_cop2(Instruction instruction) {
-            //throw new NotImplementedException("Cop2 instruction");
-            //Debug.WriteLine("ignoring Cop2 (GTE) instruction");
+
+            if(((instruction.get_rs() >> 4) & 1) == 1) {    //COP2 imm25 command
+                if (gte.currentCommand == null) {
+                    gte.loadCommand(instruction);
+                }
+                else {
+                    stall();
+                }
+               
+                return;
+            }
+
+            //GTE registers reads/writes have delay of 1 (?) instruction
+
+            switch (instruction.get_rs()) {
+                
+                case 0b00000:   //MFC
+                    if (gte.currentCommand == null) {
+                        //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+                        if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                            outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+                        }
+
+                        pendingload.Item1 = instruction.get_rt();
+                        pendingload.Item2 = gte.read(instruction.get_rd());
+                    }
+                    else {
+                        stall();
+                    }
+            
+                    break;
+
+                case 0b00010:   //CFC
+                    if (gte.currentCommand == null) {
+
+                        //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+                        if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                            outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+                        }
+
+                        pendingload.Item1 = instruction.get_rt();
+                        pendingload.Item2 = gte.read(instruction.get_rd() + 32);
+                    }
+                    else {
+                        stall();
+                    }
+                    
+                    break;
+
+                case 0b00110:  //CTC 
+                    uint rd = instruction.get_rd();
+                    uint value = regs[instruction.get_rt()];
+                    gte.write(rd + 32,value);
+
+                    break;
+
+                case 0b00100:  //MTC 
+                     rd = instruction.get_rd();
+                     value = regs[instruction.get_rt()];
+                     gte.write(rd, value);   //Same as CTC but without adding 32 to the position
+
+                     break;
+
+
+                default:
+
+                    throw new Exception("Unhandled GTE opcode: " + instruction.get_rs().ToString("X"));
+            }
+        }
+
+        private void stall() {
+            pc -= 4;        //Stalling the CPU on the same instruction
+            next_pc -= 4;
+
         }
 
         private void op_cop3(Instruction instruction) {
@@ -1122,12 +1225,22 @@ namespace PS1_Emulator {
 
             //aligned?
             Int16 hw = (Int16)bus.load16(final_address);
+            if (final_address % 2 == 0) {
 
-            pendingload.Item1 = instruction.get_rt();  //Position
-            pendingload.Item2 = (UInt32) hw;           //Value
-            
+                //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+                if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                    outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+                }
 
-           
+                pendingload.Item1 = instruction.get_rt();  //Position
+                pendingload.Item2 = (UInt32)(hw);           //Value
+
+            }
+            else {
+                exception(LoadAddressError);
+            }
+
+
         }
 
         private void op_lhu(Instruction instruction) {
@@ -1138,6 +1251,11 @@ namespace PS1_Emulator {
 
             if (final_address % 2 == 0) {
                 UInt32 hw = (UInt32) bus.load16(final_address);
+
+                //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+                if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                    outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+                }
 
                 pendingload.Item1 = instruction.get_rt();  //Position
                 pendingload.Item2 = hw;                    //Value
@@ -1376,7 +1494,7 @@ namespace PS1_Emulator {
                 this.HI = (UInt32)numerator;
                 return;
             }
-            else if (numerator == 0x80000000 && denominator == 0xffffffff) {
+            else if ((uint)numerator == 0x80000000 && (uint)denominator == 0xffffffff) {
             
                 this.LO = 0x80000000;
                 this.HI = 0;
@@ -1384,9 +1502,11 @@ namespace PS1_Emulator {
                 return;
             }
 
-  
-           this.LO = (UInt32) (numerator / denominator);
-           this.HI = (UInt32) (numerator % denominator);
+     
+            this.LO = (UInt32)unchecked(numerator / denominator);
+            this.HI = (UInt32)unchecked(numerator % denominator);
+            
+           
 
 
         }
@@ -1423,9 +1543,9 @@ namespace PS1_Emulator {
         }
 
         private void op_bxx(Instruction instruction) {         //*
-            Int32 value = (Int32)instruction.getfull();
+            uint value = (uint)instruction.getfull();
             
-            if (((value >> 17) & 0xF) == 0x80) {
+            if (((value >> 17) & 0xF) == 0x8) {
 
                 this.outRegs[31] = this.next_pc;         //Store return address if the value of bits [20:17] == 0x80
             }
@@ -1457,6 +1577,11 @@ namespace PS1_Emulator {
             UInt32 base_ = instruction.get_rs();
 
             byte b = bus.load8(regs[base_] + addressRegPos);
+
+            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            }
 
             pendingload.Item1 = instruction.get_rt();  //Position
             pendingload.Item2 = (UInt32)b;    //Value
@@ -1527,10 +1652,13 @@ namespace PS1_Emulator {
 
             sbyte sb = (sbyte)bus.load8(regs[base_] + addressRegPos);
 
+            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            }
+
             pendingload.Item1 = instruction.get_rt();  //Position
-            pendingload.Item2 = (UInt32) sb;    //Value
-
-
+            pendingload.Item2 = (UInt32)sb;           //Value
 
         }
 
@@ -1678,11 +1806,16 @@ namespace PS1_Emulator {
 
             //Address must be 32 bit aligned
             if (final_address % 4 == 0) {
+
+                //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+                if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                    outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+                }
+
                 pendingload.Item1 = instruction.get_rt();          //Position
                 pendingload.Item2 = bus.load32(final_address);    //Value
 
               
-
             }
             else {
                 exception(LoadAddressError);
@@ -1771,6 +1904,11 @@ namespace PS1_Emulator {
         }
 
         private void op_mfc0(Instruction instruction) {
+            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
+            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
+                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            }
+
             pendingload.Item1 = instruction.get_rt();
 
             switch (instruction.get_rd()) {
@@ -1795,7 +1933,7 @@ namespace PS1_Emulator {
                     break;
 
                 default:
-
+                    return;
                     throw new Exception("Unhandled cop0 register: " + instruction.get_rd());
             }
 
@@ -1829,8 +1967,9 @@ namespace PS1_Emulator {
                     break;
 
                 case 13:
-
-                    if (regs[instruction.get_rt()] != 0) {
+                    //cause register, mostly read-only data describing the
+                    //cause of an exception. Apparently only bits[9:8] are writable
+                    if (regs[instruction.get_rt()] != 0) { 
 
                         throw new Exception("Unhandled write to CAUSE register: " + instruction.get_rd());
 
