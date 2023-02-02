@@ -281,8 +281,7 @@ namespace PS1_Emulator {
 
                     default:
                         throw new Exception("Unhandled write to offset: " + offset + " val: " + value.ToString("x")
-                                            + "Physical address: " + mask(address).ToString("x")
-                            ); ; 
+                                            + "Physical address: " + mask(address).ToString("x"));
                 }
 
 
@@ -448,7 +447,7 @@ namespace PS1_Emulator {
 
             Console.WriteLine("[BUS] Ignored load16 from address: " + address.ToString("x"));    
 
-            return 0xFF;
+            
             throw new Exception("Unhandled load16 at address : " + address.ToString("x") + "\n" + 
                                 "Physical address: " + mask(address).ToString("x")
                                  );

@@ -50,6 +50,7 @@ namespace PS1_Emulator {
         bool openEvent = false;
         bool fastBoot = false;
 
+        
 
         public CPU(Interconnect bus) {
             this.pc = 0xbfc00000;         
@@ -69,7 +70,6 @@ namespace PS1_Emulator {
             
             Console.ForegroundColor = ConsoleColor.Green;   //For TTY Console
             Console.Title = "TTY Console";
-            testRom = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\tests\gte\test-all\test-all.exe");
         }
 
        
@@ -123,21 +123,15 @@ namespace PS1_Emulator {
 
 
             }
-
+            
             decode_execute(current);
-            if (openEvent) {
-                Console.WriteLine("$v0: " + outRegs[2].ToString("x"));
-                openEvent= false;
-            }
            
-
             outRegs[0] = 0;
 
-
-            for (int i = 0; i < regs.Length; i++) {       
+            for (int i = 0; i < regs.Length; i++) {
                 regs[i] = outRegs[i];
             }
-           // gte.copy();
+
             gte.tick(sync);
 
         }
@@ -145,19 +139,11 @@ namespace PS1_Emulator {
         private void intercept(uint pc) {
 
             switch (pc) {
-                case 0x80030000:   //For executing EXEs
-                    uint addressInRAM = (uint)(testRom[0x018] | (testRom[0x018 + 1] << 8) | (testRom[0x018 + 2] << 16) | (testRom[0x018 + 3] << 24));
+               case 0x80030000:   //For executing EXEs
+                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gte\test-all\test-all.exe");
 
-                    for (int i = 0x800; i < testRom.Length; i++) {
-
-                        bus.store8((uint)(addressInRAM), testRom[i]);
-                        addressInRAM++;
-                    }
-                    pc = (uint)(testRom[0x10] | (testRom[0x10 + 1] << 8) | (testRom[0x10 + 2] << 16) | (testRom[0x10 + 3] << 24));
-                    next_pc = pc + 4;
-                    //Console.WriteLine("Execute at PC:" + pc.ToString("x"));
                     break;
-               
+
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
                     char character;
 
@@ -334,7 +320,25 @@ namespace PS1_Emulator {
                     break;
             }
         }
-     
+
+        private void loadTestRom(string path) {
+            testRom = File.ReadAllBytes(path);
+
+
+            uint addressInRAM = (uint)(testRom[0x018] | (testRom[0x018 + 1] << 8) | (testRom[0x018 + 2] << 16) | (testRom[0x018 + 3] << 24));
+
+            for (int i = 0x800; i < testRom.Length; i++) {
+
+                bus.store8((uint)(addressInRAM), testRom[i]);
+                addressInRAM++;
+            }
+            this.pc = (uint)(testRom[0x10] | (testRom[0x10 + 1] << 8) | (testRom[0x10 + 2] << 16) | (testRom[0x10 + 3] << 24));
+            next_pc = this.pc + 4;
+            //Console.WriteLine("Execute at PC:" + pc.ToString("x"));
+
+
+        }
+
         public void CDROM_trace(uint func) {
             Console.Write("CDROM: ");
 
@@ -868,10 +872,7 @@ namespace PS1_Emulator {
         }
         private void op_illegal(Instruction instruction) {
             Console.ForegroundColor = ConsoleColor.Red; 
-
-            Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') +
-                " at PC: " + pc.ToString("x"));
-
+            Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') + " at PC: " + pc.ToString("x"));
             Console.ForegroundColor = ConsoleColor.Green;
 
             //exception(IllegalInstruction);
@@ -1123,14 +1124,18 @@ namespace PS1_Emulator {
 
         private void op_cop2(Instruction instruction) {
 
-            if(((instruction.get_rs() >> 4) & 1) == 1) {    //COP2 imm25 command
-                if (gte.currentCommand == null) {
+            if (((instruction.get_rs() >> 4) & 1) == 1) {    //COP2 imm25 command
+                /*if (gte.currentCommand == null) {
+
                     gte.loadCommand(instruction);
+
                 }
                 else {
                     stall();
-                }
-               
+                }*/
+
+                gte.execute(instruction);
+
                 return;
             }
 
@@ -1139,7 +1144,7 @@ namespace PS1_Emulator {
             switch (instruction.get_rs()) {
                 
                 case 0b00000:   //MFC
-                    if (gte.currentCommand == null) {
+                    /*if (gte.currentCommand == null) {
                         //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
                         if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
                             outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
@@ -1150,12 +1155,14 @@ namespace PS1_Emulator {
                     }
                     else {
                         stall();
-                    }
-            
+                    }*/
+
+                    pendingload.Item1 = instruction.get_rt();
+                    pendingload.Item2 = gte.read(instruction.get_rd());
                     break;
 
                 case 0b00010:   //CFC
-                    if (gte.currentCommand == null) {
+                    /*if (gte.currentCommand == null) {
 
                         //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
                         if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
@@ -1167,11 +1174,14 @@ namespace PS1_Emulator {
                     }
                     else {
                         stall();
-                    }
-                    
+                    }*/
+
+                    pendingload.Item1 = instruction.get_rt();
+                    pendingload.Item2 = gte.read(instruction.get_rd() + 32);
                     break;
 
                 case 0b00110:  //CTC 
+
                     uint rd = instruction.get_rd();
                     uint value = regs[instruction.get_rt()];
                     gte.write(rd + 32,value);
@@ -1179,11 +1189,12 @@ namespace PS1_Emulator {
                     break;
 
                 case 0b00100:  //MTC 
-                     rd = instruction.get_rd();
-                     value = regs[instruction.get_rt()];
-                     gte.write(rd, value);   //Same as CTC but without adding 32 to the position
 
-                     break;
+                    rd = instruction.get_rd();
+                    value = regs[instruction.get_rt()];
+                    gte.write(rd, value);   //Same as CTC but without adding 32 to the position
+
+                    break;
 
 
                 default:
@@ -1392,7 +1403,8 @@ namespace PS1_Emulator {
 
         private void exception(UInt32 cause){
 
-           
+           // if ((bus.load32(pc) >> 26) == 0x12) { return; }
+
             UInt32 handler;                                         //Get the handler
 
             if ((this.SR & (1 << 22)) != 0) {
@@ -1838,8 +1850,6 @@ namespace PS1_Emulator {
                 exception(Overflow);    
             
             }
-
-
 
           
         }

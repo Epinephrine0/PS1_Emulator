@@ -3,17 +3,18 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 using System;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Drawing.Drawing2D;
 
 namespace PS1_Emulator {
     internal class GTE {
 
-        uint[] readCPR = new uint[64];
-        uint[] writeCPR = new uint[64];
         public command currentCommand;
 
         (UInt32, UInt32) pendingload; //to emulate the load delay
+
         public bool delay_Slot;
+        
 
         private readonly byte[] unr_table = {
             0xFF, 0xFD, 0xFB, 0xF9, 0xF7, 0xF5, 0xF3, 0xF1, 0xEF, 0xEE, 0xEC, 0xEA, 0xE8, 0xE6, 0xE4, 0xE3,
@@ -74,22 +75,23 @@ namespace PS1_Emulator {
             S[3] = new Vector3();
         }
 
-        //From GTE
+        
+        
         public uint read(uint rt) {
 
             switch (rt) {
                 case 0:
                     return V[0].XY;
                 case 1:
-                    return (uint)(short)V[0].Z;
+                    return (uint)V[0].Z;
                 case 2:
                     return V[1].XY;
                 case 3:
-                    return (uint)(short)V[1].Z;
+                    return (uint)V[1].Z;
                 case 4:
                     return V[2].XY;
                 case 5:
-                    return (uint)(short)V[2].Z;
+                    return (uint)V[2].Z;
                 case 6:
                     return RGBC;
                 case 7:
@@ -107,9 +109,8 @@ namespace PS1_Emulator {
                 case 13:
                     return S[1].XY;
                 case 14:
-                    return S[2].XY;
                 case 15:
-                    return S[3].XY;
+                    return S[2].XY;
                 case 16:
                     return (ushort)S[0].Z;
                 case 17:
@@ -210,20 +211,13 @@ namespace PS1_Emulator {
                 case 63:
                     return flagRegister();
             }
-            throw new Exception("We should reach here");
+            throw new Exception("We should not reach here");
 
         }
+        
 
         internal void write(uint rd, uint value) {
-            // if(rd == 12 && value !=0) { throw new Exception(value.ToString("x")); }
-            /*if (readCPR[rd] != writeCPR[rd]) {
-                writeCPR[rd] = readCPR[rd];
-            }
-
-            pendingload.Item1 = rd;    //Position
-            pendingload.Item2 = value; //Value
-            delay_Slot = true;*/
-
+           
             switch (rd) {
                 case 0:
 
@@ -288,7 +282,7 @@ namespace PS1_Emulator {
 
                 case 12:
 
-                   S[0].XY = value;
+                    S[0].XY = value;
                     break;
 
                 case 13:
@@ -372,7 +366,6 @@ namespace PS1_Emulator {
                     break;
 
                 case 28:
-
                     IR[1] = (short)((value & 0x1f) * 0x80);
                     IR[2] = (short)(((value >> 5) & 0x1f) * 0x80);
                     IR[3] = (short)(((value >> 10) & 0x1f) * 0x80);
@@ -564,6 +557,10 @@ namespace PS1_Emulator {
                 case 63:
                     FLAG = value;
                     break;
+
+                default:
+
+                    throw new Exception("we should not reach here");
             }
 
 
@@ -571,10 +568,10 @@ namespace PS1_Emulator {
         }
         private uint flagRegister() {
 
-            bool Bits30_to_23_HasErrors = ((FLAG >> 23) & 0XFF) != 0;
-            bool Bits18_to_13_HasErrors = ((FLAG >> 13) & 0X3F) != 0;
+            bool Bits30_to_23_HaveErrors = ((FLAG >> 23) & 0XFF) != 0;
+            bool Bits18_to_13_HaveErrors = ((FLAG >> 13) & 0X3F) != 0;
 
-            if (Bits30_to_23_HasErrors || Bits18_to_13_HasErrors) {
+            if (Bits30_to_23_HaveErrors || Bits18_to_13_HaveErrors) {
                 FLAG = (uint)(FLAG | (1 << 31));
             }
             else {
@@ -741,6 +738,7 @@ namespace PS1_Emulator {
             tx = currentCommand.getfull() >> 13 & 3;
             vx = currentCommand.getfull() >> 15 & 3;
             mx = currentCommand.getfull() >> 17 & 3;
+
             switch (opcode) {
                 case 0x01:
 
@@ -1141,7 +1139,7 @@ namespace PS1_Emulator {
 
             OTZ = (ushort)Math.Clamp(avg >> 12, 0, 0xFFFF);
 
-            if (OTZ != (ushort)(avg >> 12)) {
+            if ((avg >> 12) > 0xFFFF || (avg >> 12) < 0) {
                 FLAG |= 1 << 18;
             }
 
@@ -1181,43 +1179,10 @@ namespace PS1_Emulator {
             Color[2] = RGB_Check(1, MAC[1] >> 4) | RGB_Check(2, MAC[2] >> 4) << 8 | RGB_Check(3, MAC[3] >> 4) << 16 | ((uint)(RGBC >> 24)) << 24;
         }
 
-        internal void load_delayed() {
-            /*if (delay_Slot) {
-                writeCPR[pendingload.Item1] = pendingload.Item2;
-                delay_Slot = false;
 
-                switch (pendingload.Item1) {
-
-                    case 15:
-                        writeCPR[12] = readCPR[13];
-                        writeCPR[13] = readCPR[14];
-                        writeCPR[14] = pendingload.Item2;
-                        break;
-
-
-
-                    case 28:
-
-                        writeCPR[9] = (pendingload.Item2 & 0x1f) * 0x80;
-                        writeCPR[10] = ((pendingload.Item2 >> 5) & 0x1f) * 0x80;
-                        writeCPR[11] = ((pendingload.Item2 >> 10) & 0x1f) * 0x80;
-
-                        break;
-                }
-            }*/
-        }
-
-
-
-        internal void copy() {
-            for (int i = 0; i < readCPR.Length; i++) {
-                readCPR[i] = writeCPR[i];
-            }
-
-        }
+    
         public void tick(int cycles) {
             if (currentCommand != null) {
-                //Console.WriteLine(currentCommand.delay);
                 currentCommand.delay -= cycles;
 
                 if (currentCommand.delay <= 0) {
@@ -1265,7 +1230,7 @@ namespace PS1_Emulator {
                     new Vector3(IR[0], RT.getElement(1,3), RT.getElement(2,2)),
                   
 
-            };
+                    };
           
                     matrix = new Matrix3(garbage);
                     break;
@@ -1335,23 +1300,28 @@ namespace PS1_Emulator {
 
             
             //Calculate first portion to check for errors only
-            MAC[1] = (int)(MAC_Check(1, (long)T[0] * 0x1000 + (long)matrix.getElement(1, 1) * vector[vx].X) >> (int)(sf * 12));
-            MAC[2] = (int)(MAC_Check(2, (long)T[1] * 0x1000 + (long)matrix.getElement(2, 1) * vector[vx].X) >> (int)(sf * 12));
-            MAC[3] = (int)(MAC_Check(3, (long)T[2] * 0x1000 + (long)matrix.getElement(3, 1) * vector[vx].X) >> (int)(sf * 12));
-            IR_Check(1, (int)Math.Clamp(MAC[1], -0x8000, +0x7FFF), MAC[1]);
-            IR_Check(2, (int)Math.Clamp(MAC[2], -0x8000, +0x7FFF), MAC[2]);
-            IR_Check(3, (int)Math.Clamp(MAC[3], -0x8000, +0x7FFF), MAC[3]);
+            long MAC1_ = MAC_Check(1, (long)T[0] * 0x1000 + (long)matrix.getElement(1, 1) * vector[vx].X);
+            long MAC2_ = MAC_Check(2, (long)T[1] * 0x1000 + (long)matrix.getElement(2, 1) * vector[vx].X);
+            long MAC3_ = MAC_Check(3, (long)T[2] * 0x1000 + (long)matrix.getElement(3, 1) * vector[vx].X);
+           
+            IR_Check(1, Math.Clamp((int)(MAC1_ >> (int)sf * 12), -0x8000, +0x7FFF), (int)(MAC1_ >> (int)sf * 12));
+            IR_Check(2, Math.Clamp((int)(MAC2_ >> (int)sf * 12), -0x8000, +0x7FFF), (int)(MAC2_ >> (int)sf * 12));
+            IR_Check(3, Math.Clamp((int)(MAC3_ >> (int)sf * 12), -0x8000, +0x7FFF), (int)(MAC3_ >> (int)sf * 12));
 
             //Now calculate the real (buggy) values, and check for errors of course
 
-            MAC[1] = (int)MAC_Check(1, MAC_Check(1, (long)matrix.getElement(1, 2) * vector[vx].Y) + 
-                     (long)matrix.getElement(1, 3) * vector[vx].Z) >> (int)(sf * 12);
+             MAC1_ = MAC_Check(1, MAC_Check(1, (long)matrix.getElement(1, 2) * vector[vx].Y) + 
+                     (long)matrix.getElement(1, 3) * vector[vx].Z);
 
-            MAC[2] = (int)MAC_Check(2, MAC_Check(2, (long)matrix.getElement(2, 2) * vector[vx].Y) + 
-                     (long)matrix.getElement(2, 3) * vector[vx].Z) >> (int)(sf * 12);
+             MAC2_ = MAC_Check(2, MAC_Check(2, (long)matrix.getElement(2, 2) * vector[vx].Y) + 
+                     (long)matrix.getElement(2, 3) * vector[vx].Z);
 
-            MAC[3] = (int)MAC_Check(3, MAC_Check(3, (long)matrix.getElement(3, 2) * vector[vx].Y) +
-                     (long)matrix.getElement(3, 3) * vector[vx].Z) >> (int)(sf * 12);
+             MAC3_ = MAC_Check(3, MAC_Check(3, (long)matrix.getElement(3, 2) * vector[vx].Y) +
+                     (long)matrix.getElement(3, 3) * vector[vx].Z);
+
+            MAC[1] = (int)(MAC1_ >> (int)(sf * 12));
+            MAC[2] = (int)(MAC2_ >> (int)(sf * 12));
+            MAC[3] = (int)(MAC3_ >> (int)(sf * 12));
 
             IR[1] = IR_Check(1, (int)Math.Clamp(MAC[1], lm ? 0 : -0x8000, +0x7FFF), MAC[1]);
             IR[2] = IR_Check(2, (int)Math.Clamp(MAC[2], lm ? 0 : -0x8000, +0x7FFF), MAC[2]);
@@ -1415,29 +1385,8 @@ namespace PS1_Emulator {
             Color[2] = RGB_Check(1, MAC[1] >> 4) | RGB_Check(2, MAC[2] >> 4) << 8 | RGB_Check(3, MAC[3] >> 4) << 16 | ((uint)(RGBC >> 24)) << 24;
 
         }
-        void interpolateColor2(int mac1, int mac2, int mac3) {
-            long IR1 = ((long)(int)far_Color[0] << 12) - mac1;
-            long IR2 = ((long)(int)far_Color[1] << 12) - mac2; 
-            long IR3 = ((long)(int)far_Color[2] << 12) - mac3;
-
-            IR[1] = (short)Math.Clamp(IR1,  -0x8000, +0x7FFF);
-            IR[2] = (short)Math.Clamp(IR2,  -0x8000, +0x7FFF);
-            IR[3] = (short)Math.Clamp(IR3,  -0x8000, +0x7FFF);
-
-            MAC[1] = (int)(MAC_Check(1, ((long)IR[1] * IR[0]) + mac1) >> (int)sf * 12);
-            MAC[2] = (int)(MAC_Check(2, ((long)IR[2] * IR[0]) + mac2) >> (int)sf * 12);
-            MAC[3] = (int)(MAC_Check(3, ((long)IR[3] * IR[0]) + mac3) >> (int)sf * 12);
-
-            IR1 = Math.Clamp(MAC[1], lm ? 0 : -0x8000, +0x7FFF);
-            IR2 = Math.Clamp(MAC[2], lm ? 0 : -0x8000, +0x7FFF);
-            IR3 = Math.Clamp(MAC[3], lm ? 0 : -0x8000, +0x7FFF);
-
-            IR[1] = IR_Check(1, (int)IR1, MAC[1]);
-            IR[2] = IR_Check(2, (int)IR2, MAC[2]);
-            IR[3] = IR_Check(3, (int)IR3, MAC[3]);
-
-        }
-        private void interpolateColor(int mac1,int mac2, int mac3) {
+       
+        private void interpolateColor(int mac1,int mac2, int mac3) {    //Thanks to ProjectPSX by BlueStorm
             /* 
                Details on "MAC+(FC-MAC)*IR0" :
 
@@ -1454,9 +1403,9 @@ namespace PS1_Emulator {
             int IR2_Saturated;
             int IR3_Saturated;
 
-            MAC[1] = (int)(MAC_Check(1, ((long)(int)far_Color[0] << 12) - mac1) >> (int)sf * 12);
-            MAC[2] = (int)(MAC_Check(2, ((long)(int)far_Color[1] << 12) - mac2) >> (int)sf * 12);
-            MAC[3] = (int)(MAC_Check(3, ((long)(int)far_Color[2] << 12) - mac3) >> (int)sf * 12);
+            MAC[1] = (int)(MAC_Check(1, ((long)far_Color[0] << 12) - mac1) >> (int)sf * 12);
+            MAC[2] = (int)(MAC_Check(2, ((long)far_Color[1] << 12) - mac2) >> (int)sf * 12);
+            MAC[3] = (int)(MAC_Check(3, ((long)far_Color[2] << 12) - mac3) >> (int)sf * 12);
 
             IR1_Saturated = Math.Clamp(MAC[1], -0x8000, +0x7FFF);
             IR2_Saturated = Math.Clamp(MAC[2], -0x8000, +0x7FFF);
@@ -1533,9 +1482,9 @@ namespace PS1_Emulator {
             
             MAC[0] = (int)MAC_Check(0, avg);
 
-            OTZ = (ushort)Math.Clamp(avg >> 12, 0,0xFFFF);
+            OTZ = (ushort)Math.Clamp(avg >> 12, 0, 0xFFFF);
 
-            if (OTZ != (ushort)(avg >> 12)) {           
+            if ((avg >> 12) > 0xFFFF || (avg >> 12) < 0) {           
                 FLAG |= 1 << 18;
             }
 
@@ -1544,19 +1493,19 @@ namespace PS1_Emulator {
         private void NCDS(int r) {
 
 
-            MAC[1] = ((int)(MAC_Check(1, ((long)LLM.getElement(1,1) * V[r].X + 
+            MAC[1] = (int)(MAC_Check(1, ((long)LLM.getElement(1,1) * V[r].X + 
                     (long)LLM.getElement(1, 2) * V[r].Y + 
-                    (long)LLM.getElement(1, 3) * V[r].Z)) >> (int)sf*12));
+                    (long)LLM.getElement(1, 3) * V[r].Z)) >> (int)sf * 12);
 
 
-            MAC[2] = ((int)(MAC_Check(2, ((long)LLM.getElement(2, 1) * V[r].X +
+            MAC[2] = (int)(MAC_Check(2, ((long)LLM.getElement(2, 1) * V[r].X +
                     (long)LLM.getElement(2, 2) * V[r].Y +
-                    (long)LLM.getElement(2, 3) * V[r].Z)) >> (int)sf * 12));
+                    (long)LLM.getElement(2, 3) * V[r].Z)) >> (int)sf * 12);
 
 
-            MAC[3] = ((int)(MAC_Check(3, ((long)LLM.getElement(3, 1) * V[r].X +
+            MAC[3] = (int)(MAC_Check(3, ((long)LLM.getElement(3, 1) * V[r].X +
                     (long)LLM.getElement(3, 2) * V[r].Y +
-                    (long)LLM.getElement(3, 3) * V[r].Z)) >> (int)sf * 12));
+                    (long)LLM.getElement(3, 3) * V[r].Z)) >> (int)sf * 12);
 
    
 
@@ -1585,9 +1534,9 @@ namespace PS1_Emulator {
 
 
 
-            MAC[1] = (int)MAC_Check(1, ((byte)RGBC  * (long)IR[1])) << 4;
-            MAC[2] = (int)MAC_Check(2, ((byte)(RGBC >> 8)  * (long)IR[2])) << 4;
-            MAC[3] = (int)MAC_Check(3, ((byte)(RGBC >> 16)  * (long)IR[3]) << 4);
+            MAC[1] = (int)MAC_Check(1, (byte)RGBC  * (long)IR[1]) << 4;
+            MAC[2] = (int)MAC_Check(2, (byte)(RGBC >> 8)  * (long)IR[2]) << 4;
+            MAC[3] = (int)MAC_Check(3, (byte)(RGBC >> 16)  * (long)IR[3]) << 4;
 
 
             interpolateColor(MAC[1], MAC[2], MAC[3]);
@@ -1650,36 +1599,41 @@ namespace PS1_Emulator {
             long MAC3_ = ((MAC_Check(3, MAC_Check(3, MAC_Check(3, (long)TR[2] * 0x1000 + 
                 (long)RT.getElement(3,1) * V[r].X) + (long)RT.getElement(3,2) * V[r].Y) + 
                 (long)RT.getElement(3,3) * V[r].Z)) );
+
             MAC[3] = (int)(MAC3_ >> (int)(sf * 12));
 
-            uint IR3_Saturated = (uint)Math.Clamp(MAC[3], lm ? 0 : -0x8000, +0x7FFF);
-            IR[3] = (short)IR3_Saturated;
+            IR[3] = (short)Math.Clamp(MAC[3], lm ? 0 : -0x8000, +0x7FFF);
 
-            if (sf == 1) {
-                IR_Check(3, (int)IR3_Saturated, MAC[3]);
-
-            }
-            else {
-                int MAC3 = (int)MAC[3] >> 12;
-                int MAC3_Saturated = Math.Clamp(MAC3, -0x8000, +0x7FFF);
-
-                if (MAC3 != MAC3_Saturated) {
-                    FLAG |= 1 << 22;
-
-                }
-
+            if ((int)(MAC3_ >> 12) < -0x8000 || (int)(MAC3_ >> 12) > 0x7FFF) {
+                FLAG = FLAG | (uint)(1 << (25 - 3));
             }
 
+            /*  
+                        if (sf == 1) {
+                            IR_Check(3, (int)IR3_Saturated, MAC[3]);
+
+                        }
+                        else {
+                            int MAC3 = (int)MAC[3] >> 12;
+                            int MAC3_Saturated = Math.Clamp(MAC3, -0x8000, +0x7FFF);
+
+                            if (MAC3 != MAC3_Saturated) {
+                                FLAG |= 1 << 22;
+
+                            }
+
+                        }
+            */
             //The older entries are moved one stage down
-           
+
             S[0].Z = S[1].Z;
             S[1].Z = S[2].Z;
             S[2].Z = S[3].Z;
           
-            uint SZ3_Saturated = (uint)Math.Clamp(MAC3_ >> (int)((1 - sf) * 12), 0, 0xFFFF);
-            S[3].Z = (short)SZ3_Saturated;
+            uint SZ3_Saturated = (uint)Math.Clamp(MAC3_ >> 12, 0, 0xFFFF);
+            S[3].Z = (short)(SZ3_Saturated);
 
-            if ((int)(MAC[3] >> 12) != SZ3_Saturated) {
+            if ((int)(MAC3_ >> 12) < 0 || (int)(MAC3_ >> 12) > 0xFFFF) {
                 FLAG |= 1 << 18;
 
             }
@@ -1705,6 +1659,7 @@ namespace PS1_Emulator {
                 FLAG |= 1 << 17;
 
             }
+
 
             S[0].XY = S[1].XY;
             S[1].XY = S[2].XY;
@@ -1776,7 +1731,7 @@ namespace PS1_Emulator {
                     }
 
 
-                    return (MAC_value << 20) >> 20;
+                    return (MAC_value << 20) >> 20; //Thanks to ProjectPSX by BlueStorm
 
             }
 
@@ -1796,4 +1751,5 @@ namespace PS1_Emulator {
 
 
     }
+ 
 }

@@ -876,7 +876,7 @@ namespace PS1_Emulator {
                             responseBuffer.Enqueue(stat);
                             interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end
                             pause();
-                            //Console.WriteLine("[CDROM] Data end INT4 issued!");
+                            Console.WriteLine("[CDROM] Data end INT4 issued!");
                         }
 
                     }
