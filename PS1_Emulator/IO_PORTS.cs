@@ -11,7 +11,11 @@ using System.Threading.Tasks;
 
 namespace PS1_Emulator {
     public class IO_PORTS {
-        public Range range = new Range(0x1F801040, 0x1E+1);        //Assumption, I hope it's correct
+        //TODO:
+        //Baudrate timer
+        //..?
+
+        public Range range = new Range(0x1F801040, 0x1E+1);      
         UInt16 JOY_CTRL = 0;
         UInt16 JOY_BAUD = 0;
         UInt16 JOY_MODE = 0;
@@ -103,8 +107,6 @@ namespace PS1_Emulator {
                    
                     fifoFull = false;
                     counter = 0;
-
-                    //if (!padPresent) { return 0xff; }
 
                     if (JOYoutput) {
                         TXREADY2 = true;
@@ -219,7 +221,6 @@ namespace PS1_Emulator {
 
                     }
 
-                    //counter = ACKLevel ? 1500 : -1;
 
                     if (!ACKLevel) {
                         controller.sequenceNum = 0;

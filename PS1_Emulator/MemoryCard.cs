@@ -15,35 +15,28 @@ namespace PS1_Emulator {
         byte MSB_address;
         byte LSB_address;
         ushort address;
-        char accessType = 'X';
+        char accessType = 'X';                 
         int sequenceNumber;
         byte CHK;
         public bool ack;
-
-       
-
 
         public MemoryCard(byte[] data) {
 
             this.data = data;
          
-
-
         }
 
 
         internal byte response(uint command) {
             sequenceNumber++;
             ack = true;
-            //Console.WriteLine("SEQ: " + (sequenceNumber) + " Command: " + command.ToString("x"));
 
             switch (sequenceNumber) {
                 case 1:
                     switch (accessType) {
                         case 'X':
-                            accessType = (char)command;     //1 Setting accsess type 'R', 'W', 'S'
+                            accessType = (char)command;     //1: Setting accsess type 'R' for Read , 'W' for Write , 'S' for ID
                             return FLAG;
-
 
                         default:
 
@@ -53,18 +46,18 @@ namespace PS1_Emulator {
                 default:
 
 
-                    switch (accessType) {
+                    switch (accessType) {               //Sequence depends completely on the selected accsess type
                         case 'R':
 
-                            return readingPath(command);
+                            return memoryRead(command);
 
                         case 'W':
 
-                            return writingPath(command);
+                            return memoryWrite(command);
 
                         case 'S':
 
-                            return idPath(command);
+                            return memory_ID(command);
 
                         default: throw new Exception("Unknown access type: " + accessType);
                     }
@@ -78,7 +71,7 @@ namespace PS1_Emulator {
 
         }
 
-        private byte idPath(uint command) {
+        private byte memory_ID(uint command) {
 
             switch (sequenceNumber) {
 
@@ -100,7 +93,7 @@ namespace PS1_Emulator {
 
 
         }
-        private byte readingPath(uint command) {
+        private byte memoryRead(uint command) {
 
 
             switch (sequenceNumber) {
@@ -119,12 +112,12 @@ namespace PS1_Emulator {
 
                     if (address > 0x3FF) {
                         Console.Write("[MEMORYCARD] Wrong read address! : " + address.ToString("x"));
-                        FLAG |= 0x4;                //Error
-                        address &= 0x3FF;
+                        FLAG |= 0x4;                //Error, the handling is different for official Sony memory cards
+                        address &= 0x3FF;           //It is easier to handle it like 3d party memory cards do
                          
                     }
 
-                    //Console.Write(" Reading Sector: " + address.ToString("x") + "  ");
+                  
                     return 0x0;
                 
                 case 6: return 0x5C;                   //Receive Command Acknowledge 1  ;<-- late /ACK after this byte-pair
@@ -132,6 +125,7 @@ namespace PS1_Emulator {
                 case 8: return MSB_address;            //Receive Confirmed Address MSB
                 case 9: return LSB_address;            //Receive Confirmed Address LSB
 
+                //Handle 128 byte transfer
                 case int num when (sequenceNumber >= 10 && sequenceNumber < 10 + 128):
                     byte dataSector = data[(address * 128) + sequenceNumber - 10];
 
@@ -141,8 +135,6 @@ namespace PS1_Emulator {
                 case 10 + 128: return CHK;              //Receive Checksum (MSB xor LSB xor Data bytes)
                 case 11 + 128:
                     reset();
-                    //Console.WriteLine("\n [MEMORYCARD] DONE READING!");
-
                     return 0x47;                        //Receive Memory End Byte (should be always 47h="G"=Good for Read)
 
                 default:
@@ -153,7 +145,7 @@ namespace PS1_Emulator {
 
         }
 
-        private byte writingPath(uint command) {
+        private byte memoryWrite(uint command) {
 
             switch (sequenceNumber) {
 
@@ -171,20 +163,20 @@ namespace PS1_Emulator {
 
                     if (address > 0x3FF) {
                         Console.Write("[MEMORYCARD] Wrong write address! : " + address.ToString("x"));
-                        FLAG |= 0x4;                //Error
-                        address &= 0x3ff;
+                        FLAG |= 0x4;                //Error, the handling is different for official Sony memory cards
+                        address &= 0x3FF;           //It is easier to handle it like 3d party memory cards do
                     }
                     return 0x0;
 
-
-                case int num when (sequenceNumber >= 6 && sequenceNumber < 134):
+                //Handle 128 byte transfer
+                case int num when (sequenceNumber >= 6 && sequenceNumber < 6 + 128):
 
                     data[(address*128) + sequenceNumber - 6] = (byte)command;
                     CHK = (byte)(CHK ^ (byte)command);
 
                     return 0x0;                         //Don't care
 
-                case 134:                           //Receive Checksum (MSB xor LSB xor Data bytes)
+                case 6 + 128:                           //Receive Checksum (MSB xor LSB xor Data bytes)
                    
                     if (CHK != (byte)command) {
                         FLAG |= 0x4;
@@ -194,12 +186,12 @@ namespace PS1_Emulator {
                     return 0x0;                         //Don't care
                  
 
-                case 135: return 0x5C;              //Receive Command Acknowledge 1
-                case 136: return 0x5D;              //Receive Command Acknowledge 2
+                case 7 + 128: return 0x5C;              //Receive Command Acknowledge 1
+                case 8 + 128: return 0x5D;              //Receive Command Acknowledge 2
 
-                case 137:                         //Receive Memory End Byte (47h=Good, 4Eh=BadChecksum, FFh=BadSector)
+                case 9 + 128:                           //Receive Memory End Byte (47h=Good, 4Eh=BadChecksum, FFh=BadSector)
 
-                    writeToMemoryCard();
+                    saveMemoryContent();
                     reset();
 
                     return 0x47;
@@ -214,7 +206,7 @@ namespace PS1_Emulator {
 
         }
 
-        private void writeToMemoryCard() {
+        private void saveMemoryContent() {
 
             File.WriteAllBytes("memoryCard.mcd",data);
             FLAG  = (byte)(FLAG & (~0x8));
