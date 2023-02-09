@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace PS1_Emulator {
-    public class MemoryCard {       //WIP
+    public class MemoryCard {       
         byte[] data;
         byte FLAG = 0x8;
         byte MSB_address;
