@@ -28,7 +28,7 @@ namespace PS1_Emulator {
         public CD_ROM CD_ROM;   //for hacky stuff on the cpu side 
         TIMER1 TIMER1;
         TIMER2 TIMER2;
-        IO_PORTS IO_PORTS;
+        public IO_PORTS IO_PORTS;
         Scratchpad scratchpad;
         MDEC MDEC;
 
@@ -82,8 +82,8 @@ namespace PS1_Emulator {
         public void SPU_Tick(int cycles) {
             this.spu.SPU_Tick(cycles);
         }
-        public void IOports_tick() {
-            this.IO_PORTS.tick();
+        public void IOports_tick(int cycles) {
+            this.IO_PORTS.tick(cycles);
         }
 
         public UInt32 load32(UInt32 address) {

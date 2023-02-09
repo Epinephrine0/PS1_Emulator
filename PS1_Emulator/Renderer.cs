@@ -390,7 +390,7 @@ namespace PS1_Emulator {
                         cpu.emu_cycle();
 
                     }catch(Exception ex) {
-                         File.WriteAllTextAsync("Exception.txt", ex.ToString());
+                         File.WriteAllTextAsync("Crash.log", ex.ToString());
                          Close();
                     }*/
                     cpu.emu_cycle();
@@ -418,19 +418,19 @@ namespace PS1_Emulator {
             }
 
 
-            IO_PORTS.padPresent = JoystickStates[0] != null;
+            cpu.bus.IO_PORTS.controller.isConnected = JoystickStates[0] != null;
 
-            if (IO_PORTS.padPresent) {
+            if (cpu.bus.IO_PORTS.controller.isConnected) {
                 for (int j = 0; j < JoystickStates[0].ButtonCount; j++) {
                     if (buttons_Dictionary.ContainsKey(j)) {
                         if (JoystickStates[0].IsButtonDown(j)) {
                             int bit = ~(1 << buttons_Dictionary[j]);
-                            IO_PORTS.dPadButtons &= (ushort)(bit);
+                            cpu.bus.IO_PORTS.controller.buttons &= (ushort)(bit);
 
                         }
                         else {
                             int bit = (1 << buttons_Dictionary[j]);
-                            IO_PORTS.dPadButtons |= (ushort)(bit);
+                            cpu.bus.IO_PORTS.controller.buttons |= (ushort)(bit);
                         }
 
                     }

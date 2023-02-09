@@ -125,6 +125,14 @@ namespace PS1_Emulator {
 
                     break;
 
+                // 1F801E00h..1F801E5Fh - Voice 0..23 Internal Registers
+                
+                case uint when ((offset + baseAddress) >= 0x1F801E00 && (offset + baseAddress) <= 0x1F801E5F):
+
+                    //Console.WriteLine("[SPU] ignored write to " + (offset + baseAddress).ToString("x"));
+
+                    break;
+
 
                 case 0x1aa:
                      setCtrl(value);
@@ -276,7 +284,6 @@ namespace PS1_Emulator {
                     throw new NotImplementedException("Offset: " +offset.ToString("x")+ "\n" 
                                                       +"Full address: 0x" + (offset+0x1f801c00).ToString("x"));
 
-
             }
 
 
@@ -366,19 +373,49 @@ namespace PS1_Emulator {
                             throw new Exception("unknown voice register: " + (offset & 0xf).ToString("x"));
 
                     }
+
+                // 1F801E00h..1F801E5Fh - Voice 0..23 Internal Registers
+
+                case uint when ((offset + baseAddress) >= 0x1F801E00 && (offset + baseAddress) <= 0x1F801E5F):
+
+                    //Console.WriteLine("[SPU] ignored read from " + (offset + baseAddress).ToString("x"));
+                    return 0;
+
+                //1F801D98h - Voice 0..23 Reverb mode aka Echo On (EON) (R/W)
                 case 0x19a: // ???
                     return 0;
                 case 0x198: // ???
                     return 0;
 
                 case 0x1b8:
+
                     return (ushort)mainVolumeLeft;  
 
                 case 0x1ba:
+
                     return (ushort)mainVolumeRight;  
+
                 case 0x1a6:
 
                     return (ushort)transfer_address;
+
+                case 0x190:
+
+                    return (ushort)PMON;
+
+                case 0x192:
+
+                    return (ushort)(PMON >> 16);
+
+                case 0x194:
+
+                    return (ushort)NON;
+
+                case 0x196:
+
+                    return (ushort)(NON >> 16);
+
+
                 default:
                     throw new NotImplementedException("Offset: " + offset.ToString("x") + "\n"
                                                       + "Full address: 0x" + (offset + 0x1f801c00).ToString("x"));

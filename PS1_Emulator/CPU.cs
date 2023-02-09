@@ -435,7 +435,7 @@ namespace PS1_Emulator {
 
         }
         public void IOtick() {
-            bus.IOports_tick();
+            bus.IOports_tick(sync);
         }
 
         public void GPUtick() {

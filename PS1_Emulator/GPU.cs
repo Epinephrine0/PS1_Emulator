@@ -473,7 +473,8 @@ namespace PS1_Emulator {
 
                     break;
 
-                case 0x38:
+                case 0x38: //opaque
+                case 0x3A: //semi-transparent
                     if (currentCommand == null) {
                         currentCommand = new gp0_command(opcode, 8);
                     }

@@ -2,13 +2,15 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    internal class IO_PORTS {
+    public class IO_PORTS {
         public Range range = new Range(0x1F801040, 0x1E+1);        //Assumption, I hope it's correct
         UInt16 JOY_CTRL = 0;
         UInt16 JOY_BAUD = 0;
@@ -23,8 +25,10 @@ namespace PS1_Emulator {
         bool fifoFull = false;
 
         public static int delay = 0;
+        MemoryCard memoryCard;
+        public Controller controller;
 
-
+        bool PADS_Communication;
         //JOYSTAT
         bool TXREADY1 = true;
         bool TXREADY2 = true;
@@ -58,24 +62,49 @@ namespace PS1_Emulator {
          bool parityTypeOdd;
          bool clkOutputPolarity;
 
-        Queue<Byte> queue = new Queue<Byte>();
-        public static bool padPresent;
-        public static UInt16 dPadButtons = 0xffff;
+
+        //public static UInt16 dPadButtons = 0xffff;
         public static UInt16 MouseButtons = 0xffff & (0b00 << 8);
         public static UInt16 MouseSensors = 0;
 
+
+        enum SelectedDevice {
+            Controller, MemoryCard, None
+        }
+        SelectedDevice selectedDevice = SelectedDevice.None;
+        public IO_PORTS() {
+
+            byte[] memoryCardData;
+
+            try{
+
+                memoryCardData = File.ReadAllBytes("MemoryCard.mcd");
+
+            }catch(FileNotFoundException e) {
+
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Could not find memory card, will create a new one.");
+                Console.ForegroundColor = ConsoleColor.Green;
+                memoryCardData = new byte[128*1024];
+                File.WriteAllBytes("MemoryCard.mcd", memoryCardData);
+            }
+
+
+            memoryCard = new MemoryCard(memoryCardData);
+            controller = new Controller();
+
+
+        }
         public byte read(uint offset) {
-            //Debug.WriteLine("read from I/O Port: " + offset.ToString("x"));
 
             switch (offset) {
 
                  case 0:
-                    //response(JOY_TX_DATA);
-                    //Debug.WriteLine("rx read data: " + JOY_RX_DATA.ToString("x"));
+                   
                     fifoFull = false;
                     counter = 0;
 
-                    if (!padPresent) { return 0xff; }
+                    //if (!padPresent) { return 0xff; }
 
                     if (JOYoutput) {
                         TXREADY2 = true;
@@ -84,8 +113,9 @@ namespace PS1_Emulator {
                             return 0xff;
                         }
                     }
+                   
 
-                    return (byte)response(JOY_TX_DATA); 
+                    return (byte)JOY_RX_DATA; 
 
 
                 default:
@@ -95,7 +125,6 @@ namespace PS1_Emulator {
 
         }
         public UInt16 read16(uint offset) {
-        //    Debug.WriteLine("read from I/O Port: " + offset.ToString("x"));
 
             switch (offset) {
 
@@ -125,32 +154,83 @@ namespace PS1_Emulator {
 
 
         public int counter = 0;
+        bool en = false;
+        public void tick(int cycles) {
+            //counter += ACKLevel ? cycles : 0;
+            counter -= cycles;
 
-        public void tick() {
-            counter++;
-            if (counter == 50) {
+            if (counter < 0) {
                 ACKLevel = false;
                 IRQ = true;
-                //JOY_RX_DATA = response(JOY_TX_DATA);
-                IRQ_CONTROL.IRQsignal(7);   //if en ?
+                IRQ_CONTROL.IRQsignal(7);  
+                
             }
 
         }
         public void write(uint offset, uint value) {
-            //Debug.WriteLine("write from I/O Port: " + offset.ToString("x"));
 
             
             switch (offset) {
                 case 0:
 
                     JOY_TX_DATA = value;        //Data sent 
-
                     JOY_RX_DATA = 0xFF;
                     fifoFull = true;
-
                     TXREADY1 = true;
-                    TXREADY2 = false;
-                    //Counter starts?
+                    
+                    if (JOYoutput) {
+                        //en = true;
+                        TXREADY2 = true;
+                        if (selectedDevice == SelectedDevice.Controller) {
+                            JOY_RX_DATA = controller.response(JOY_TX_DATA);
+                            ACKLevel = controller.ack;
+
+                            //Console.WriteLine("Sent: " + JOY_TX_DATA.ToString("x"));
+                            //Console.WriteLine("Response: " + JOY_RX_DATA.ToString("x") + " ACK: " + ACKLevel);
+
+                        }
+                        else if(selectedDevice == SelectedDevice.MemoryCard) {
+
+                            JOY_RX_DATA = memoryCard.response(JOY_TX_DATA);
+                            ACKLevel = memoryCard.ack;
+
+                            //Console.WriteLine("Sent: " + JOY_TX_DATA.ToString("x"));
+                            //Console.WriteLine("Response: " + JOY_RX_DATA.ToString("x") + " ACK: " + ACKLevel);
+
+                        }
+                        else {
+                            if (JOY_TX_DATA == 0x01) {
+                                selectedDevice = SelectedDevice.Controller;
+                                JOY_RX_DATA = 0xFF;
+                                ACKLevel = true;
+
+                            }
+                            else if (JOY_TX_DATA == 0x81) {
+                                selectedDevice = SelectedDevice.MemoryCard;
+                                JOY_RX_DATA = 0xFF;
+                                ACKLevel = true;
+                            }
+                            
+                        }
+
+                    }
+                    else {
+                        ACKLevel = false;
+
+                    }
+
+                    //counter = ACKLevel ? 1500 : -1;
+
+                    if (!ACKLevel) {
+                        controller.sequenceNum = 0;
+                        memoryCard.reset();
+                        counter = -1;
+                        selectedDevice = SelectedDevice.None;
+
+                    }
+                    else {
+                        counter = 1500;
+                    }
 
                     break;
 
@@ -249,10 +329,20 @@ namespace PS1_Emulator {
                 Acknowledge = false;
             }
 
+            if (!JOYoutput) {
+                memoryCard.reset();
+                selectedDevice = SelectedDevice.None;
+                controller.sequenceNum = 0;
+
+            }
+
             if (Reset) {
                 reset();
+                memoryCard.reset();
+                selectedDevice = SelectedDevice.None;
+                controller.sequenceNum = 0;
             }
-            
+
         }
         public void reset() {
             set_joy_ctrl((ushort)0);
@@ -278,11 +368,43 @@ namespace PS1_Emulator {
 
         }
 
-        List<byte> memoryList = new List<byte>();
-        bool memorycard = false;
-        public uint response(UInt32 command) {
+       
+       /* public uint response(UInt32 command) {
+            if (command == 0x81) {
+                memoryCard.state = MemoryCard.State.Active;
+                return 0xff;
+            }
+            if (command == 0x01) {
+                PADS_Communication = true;
+                pads.Clear();
+                pads.Enqueue(0x41);
+                pads.Enqueue(0x5A);
+                pads.Enqueue((byte)(dPadButtons & 0xff));
+                pads.Enqueue((byte)((dPadButtons >> 8) & 0xff));
+                return 0xff;
+            }
 
-            switch (command) {
+
+            if (memoryCard.state == MemoryCard.State.Active) {
+                //Console.WriteLine("[IO] " + command.ToString("x"));
+                byte r = memoryCard.response(command);
+                Console.WriteLine(" Response: " + r.ToString("x"));
+                return r;
+
+            }
+
+            if (PADS_Communication) {
+
+                if (pads.Count == 0) {
+                    return 0xff;
+                }
+
+                return pads.Dequeue();
+
+            }
+            return 0xff;
+
+           *//* switch (command) {
                 case 0x0:
 
                     if (queue.Count == 0) {
@@ -292,6 +414,7 @@ namespace PS1_Emulator {
                     return queue.Dequeue();
 
                 case 0x1:                       //Controller 
+
                     queue.Clear();
                     queue.Enqueue(0x41);
                     queue.Enqueue(0x5A);
@@ -305,7 +428,11 @@ namespace PS1_Emulator {
 
                     return queue.Dequeue();
 
-                case 0x81:                      //Memory Card is not implemented, returning garbage after command 0x52 
+                case 0x81:                 //Memory Card
+                    //Console.WriteLine("[IO] " + command.ToString("x"));
+
+                    //memoryCard.reset();
+                    memoryCard.state = MemoryCard.State.Active;
 
                     return 0xff;
 
@@ -313,23 +440,14 @@ namespace PS1_Emulator {
 
                     return 0xff;
 
-            }
+            }*//*
 
 
 
 
-        }
+        }*/
 
-        private void resetMouse() {
-            MouseSensors = 0;
-            MouseButtons = 0xffff & (0b00 << 8);
-
-        }
-
-        public void resetDPads() {
-            dPadButtons = 0xffff;
-        }
-
+      
 
     }
 
