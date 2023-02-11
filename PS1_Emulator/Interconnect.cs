@@ -24,7 +24,7 @@ namespace PS1_Emulator {
         EXPANSION1 expansion1;
         EXPANSION2 expansion2;
         DMA DMA;
-        GPU GPU;
+        public GPU GPU;
         public CD_ROM CD_ROM;   //for hacky stuff on the cpu side 
         TIMER1 TIMER1;
         TIMER2 TIMER2;
@@ -87,10 +87,7 @@ namespace PS1_Emulator {
         }
 
         public UInt32 load32(UInt32 address) {
-            if (print) {
-                //Debug.WriteLine("ADDR:" + address.ToString("x"));
-              
-            }
+            
 
             if (bios.range.contains(mask(address)) != null) {
 
@@ -104,8 +101,6 @@ namespace PS1_Emulator {
 
                 offset = (UInt32)ram.range.contains(mask(address));
                 
-             
-
                 return ram.read(offset);                        
 
             }

@@ -12,10 +12,10 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    internal class GPU {
+    public class GPU {
         public Range range = new Range(0x1f801810, 5);            //Assumption  
 
-        gp0_command? currentCommand = null;
+        GP0_Command? currentCommand = null;
 
         Window window;
 
@@ -92,8 +92,8 @@ namespace PS1_Emulator {
         bool preserve_masked_pixels;
         byte field;
         bool texture_disable;
-        HorizontalRes hrez;
-        byte vrez;
+        public HorizontalRes hrez;
+        public byte vrez;
         byte vmode;
         byte display_depth;
         bool interlaced;
@@ -116,10 +116,10 @@ namespace PS1_Emulator {
         Int16 drawing_y_offset;
         UInt16 display_vram_x_start;
         UInt16 display_vram_y_start;
-        UInt16 display_horiz_start;
-        UInt16 display_horiz_end;
-        UInt16 display_line_start;
-        UInt16 display_line_end;
+        public UInt16 display_horiz_start;
+        public UInt16 display_horiz_end;
+        public UInt16 display_line_start;
+        public UInt16 display_line_end;
 
 
         UInt32 evenodd;
@@ -225,16 +225,19 @@ namespace PS1_Emulator {
 
         int vblank_counter = 0;
         int hblank_counter = 0;
-
         public void tick(int cycles) {
             vblank_counter += cycles;
             hblank_counter += cycles;
-
+            
             if (vblank_counter >= vblank && vblank > 0) {
                 vblank_counter = 0;
-                window.display();
+
+                if (!display_disabled) {
+                    window.display();
+                }
+
                 IRQ_CONTROL.IRQsignal(0);
-                IRQ_CONTROL.IRQsignal(9);
+                IRQ_CONTROL.IRQsignal(9);   //Fake
 
                 this.TIMER1.GPUinVblank = true;
 
@@ -294,7 +297,7 @@ namespace PS1_Emulator {
                 case 0x2d:
 
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 9);
+                        currentCommand = new GP0_Command(opcode, 9);
                     }
                     
                     currentCommand.add_parameter(value);
@@ -310,7 +313,7 @@ namespace PS1_Emulator {
 
                 case 0xa0:
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 3);
+                        currentCommand = new GP0_Command(opcode, 3);
                     }
 
                     currentCommand.add_parameter(value);
@@ -326,7 +329,7 @@ namespace PS1_Emulator {
 
                 case 0xc0:
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 3);
+                        currentCommand = new GP0_Command(opcode, 3);
                     }
 
                     currentCommand.add_parameter(value);
@@ -340,7 +343,7 @@ namespace PS1_Emulator {
 
                 case 0x80:
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 4);
+                        currentCommand = new GP0_Command(opcode, 4);
                     }
 
                     currentCommand.add_parameter(value);
@@ -386,7 +389,7 @@ namespace PS1_Emulator {
                 case 0x20:  //PS logo (uses gte)?
                 case 0x22:
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 4);
+                        currentCommand = new GP0_Command(opcode, 4);
                     }
 
                     currentCommand.add_parameter(value);
@@ -405,7 +408,7 @@ namespace PS1_Emulator {
                 case 0x2A:
 
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 5);
+                        currentCommand = new GP0_Command(opcode, 5);
                     }
 
                     currentCommand.add_parameter(value);
@@ -423,7 +426,7 @@ namespace PS1_Emulator {
                 case 0x3C: //opaque
 
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 12);
+                        currentCommand = new GP0_Command(opcode, 12);
                     }
 
                     currentCommand.add_parameter(value);
@@ -441,7 +444,7 @@ namespace PS1_Emulator {
                 case 0x34:  //Transparenet (not handled)
                 case 0x36:  //opaque
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 9);
+                        currentCommand = new GP0_Command(opcode, 9);
                     }
 
                     currentCommand.add_parameter(value);
@@ -459,7 +462,7 @@ namespace PS1_Emulator {
                 case 0x30:
 
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 6);
+                        currentCommand = new GP0_Command(opcode, 6);
                     }
 
                     currentCommand.add_parameter(value);
@@ -476,7 +479,7 @@ namespace PS1_Emulator {
                 case 0x38: //opaque
                 case 0x3A: //semi-transparent
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 8);
+                        currentCommand = new GP0_Command(opcode, 8);
                     }
 
                     currentCommand.add_parameter(value);
@@ -496,7 +499,7 @@ namespace PS1_Emulator {
                 case 0x62: //Monochrome Rectangle (variable size) (semi-transparent) command
                
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 3);
+                        currentCommand = new GP0_Command(opcode, 3);
                     }
 
                     currentCommand.add_parameter(value);
@@ -511,7 +514,7 @@ namespace PS1_Emulator {
 
                 case 0x68:  //1x1 Monochrome Rectangle
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 2);
+                        currentCommand = new GP0_Command(opcode, 2);
                     }
 
                     currentCommand.add_parameter(value);
@@ -530,7 +533,7 @@ namespace PS1_Emulator {
                 case 0x67:
 
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 4);
+                        currentCommand = new GP0_Command(opcode, 4);
                     }
 
                     currentCommand.add_parameter(value);
@@ -548,7 +551,7 @@ namespace PS1_Emulator {
                 case 0x7C:
 
                     if (currentCommand == null) {
-                        currentCommand = new gp0_command(opcode, 3);
+                        currentCommand = new GP0_Command(opcode, 3);
                     }
 
                     currentCommand.add_parameter(value);
@@ -968,8 +971,6 @@ namespace PS1_Emulator {
             this.display_line_start = (UInt16)(value & 0x3ff);
             this.display_line_end = (UInt16)((value>>10) & 0x3ff);
 
-            
-
         }
 
         private void gp1_display_horizontal_range(UInt32 value) {
@@ -1015,11 +1016,11 @@ namespace PS1_Emulator {
 
         private void gp1_display_mode(UInt32 value) {
             byte hr1 = ((byte)(value & 3));
-            byte hr2 = ((byte)((value>>6) & 1));
+            byte hr2 = ((byte)((value >> 6) & 1));
 
             this.hrez = new HorizontalRes(hr1, hr2);
-
-            switch ((value&0x4)!=0) {
+            
+            switch ((value&0x4)!= 0) {
 
                 case true:
 
@@ -1075,6 +1076,7 @@ namespace PS1_Emulator {
                 throw new Exception("Unsupported display mode: " + value.ToString("X"));
             }
 
+           
         }
 
         private void gp0_draw_mode(UInt32 value) {
@@ -1436,16 +1438,35 @@ namespace PS1_Emulator {
         }
     }
 
-   class HorizontalRes {
+    public class HorizontalRes {
         byte HR;
+        byte HR1;
+        byte HR2;
     public HorizontalRes(byte hr1, byte hr2) { 
 
-        this.HR = (byte) ((hr2&1) | ((hr1 & 3) << 1));
+        this.HR = (byte) ((hr2 & 1) | ((hr1 & 3) << 1));
+        this.HR1 = hr1;
+        this.HR2 = hr2;
 
         }
 
-        public byte getHR() {
-            return this.HR;
+        public float getHR() {
+            if (HR2 == 1) {
+                return 368f;
+            }
+            else {
+                switch (HR1) {
+                    case 0: return 256f;
+                    case 1: return 320f;
+                    case 2: return 512f;
+                    case 3: return 640f;
+
+                }
+
+            }
+
+            return 0f;  
+
         }
         public UInt32 intoStatus() {      //Bits [18:16] of GPUSTAT
             return ((UInt32)this.HR) << 16;

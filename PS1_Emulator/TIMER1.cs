@@ -14,7 +14,7 @@ namespace PS1_Emulator {
     using System.Threading.Tasks;
 
     namespace PS1_Emulator {
-        internal class TIMER1 {
+        public class TIMER1 {
             public Range range = new Range(0x1F801110, 0xF + 1);        //Assumption 
            
             uint mode;

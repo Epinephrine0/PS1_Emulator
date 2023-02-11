@@ -457,18 +457,15 @@ namespace PS1_Emulator {
 
         private int clk_counter = 0;
         public const int CYCLES_PER_SAMPLE = 0x300;
-       
         byte[] outputBuffer = new byte[2048];
         int outputBufferPtr = 0;
-        Stopwatch stopwatch = new Stopwatch();
         int sumLeft;
         int sumRight;
         public void SPU_Tick(int cycles) {        //SPU Clock
             clk_counter += cycles;
-            //stopwatch.Start();
 
             if (clk_counter < CYCLES_PER_SAMPLE) {
-               
+                
                 return;
             }
 
@@ -514,7 +511,7 @@ namespace PS1_Emulator {
                     voices[i].checkSamplesIndex();
                 }
                 else {
-                    Debug.WriteLine("Noise generator !");
+                    Console.WriteLine("[SPU] Noise generator !");
                     voices[i].adsr.adsrVolume = 0;
                     voices[i].latest = 0;
 
@@ -527,31 +524,27 @@ namespace PS1_Emulator {
 
                 sumLeft += (sample * voices[i].getVolumeLeft()) >> 15;
                 sumRight += (sample * voices[i].getVolumeRight()) >> 15;
-               
 
             }
+            
 
             sumLeft = (Math.Clamp(sumLeft, -0x8000, 0x7FFE) * mainVolumeLeft) >> 15;
             sumRight = (Math.Clamp(sumRight, -0x8000, 0x7FFE) * mainVolumeRight) >> 15;
-
+           
           
             if (((SPUCNT >> 14) & 0x1) == 0) {
                 sumLeft = 0;
                 sumRight = 0;
             }
-
+           
             outputBuffer[outputBufferPtr++] = (byte)sumLeft;
             outputBuffer[outputBufferPtr++] = (byte)(sumLeft >> 8);
             outputBuffer[outputBufferPtr++] = (byte)sumRight;
             outputBuffer[outputBufferPtr++] = (byte)(sumRight >> 8);
 
+      
             if (outputBufferPtr >= 2048) {
-                 //if(stopwatch.ElapsedMilliseconds > delay) { 
-                 //   Console.WriteLine("NEW DELAY " + stopwatch.ElapsedMilliseconds); 
-                 //   delay = stopwatch.ElapsedMilliseconds; 
-                //    stopwatch.Reset();
-              //  }
-                
+                 
                 playAudio(outputBuffer);
                 outputBufferPtr -= 2048;
 
@@ -587,7 +580,7 @@ namespace PS1_Emulator {
             bufferedWaveProvider.AddSamples(samples, 0, samples.Length);
 
             if (waveOutEvent.PlaybackState != PlaybackState.Playing) {
-                waveOutEvent.Volume = 1; //Muted
+                waveOutEvent.Volume = 1; 
                 waveOutEvent.Play();
 
             }

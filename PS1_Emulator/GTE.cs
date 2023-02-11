@@ -1181,18 +1181,7 @@ namespace PS1_Emulator {
 
 
     
-        public void tick(int cycles) {
-            if (currentCommand != null) {
-                currentCommand.delay -= cycles;
-
-                if (currentCommand.delay <= 0) {
-                    execute(currentCommand.value);
-                    currentCommand = null;
-
-                }
-            }
-
-        }
+       
         
 
         private void MVMVA(uint mx, uint vx, uint tx) {

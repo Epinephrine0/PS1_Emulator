@@ -5,12 +5,12 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    internal class gp0_command {
+    internal class GP0_Command {
         public int num_of_parameters;
         public uint opcode;
         public uint[] buffer;
         public int parameters_ptr;
-        public gp0_command(uint opcode, int num_of_paramerters) { 
+        public GP0_Command(uint opcode, int num_of_paramerters) { 
         
             this.num_of_parameters = num_of_paramerters;
             this.opcode = opcode;

@@ -22,13 +22,14 @@ namespace PS1_Emulator {
         public Renderer() {
 
             var nativeWindowSettings = new NativeWindowSettings() {
-                Size = new Vector2i(1024, 512),
+                Size = new Vector2i(1280, 720),
                 Title = "PS1 Emulator",
                 // This is needed to run on macos
                 Flags = ContextFlags.ForwardCompatible,
                 APIVersion = Version.Parse("4.6.0"),
-                WindowBorder = WindowBorder.Fixed,
+                WindowBorder = WindowBorder.Resizable,
                 Location = new Vector2i((1980 - 1024) / 2, (1080 - 512) / 2)
+               
             };
             var Gws = GameWindowSettings.Default;
             Gws.RenderFrequency = 60;
@@ -36,9 +37,10 @@ namespace PS1_Emulator {
 
             var windowIcon = new WindowIcon(new OpenTK.Windowing.Common.Input.Image(300, 300, ImageToByteArray(@"C:\Users\Old Snake\Desktop\PS1\PSX logo.jpg")));
             nativeWindowSettings.Icon = windowIcon;
-            
-            window = new Window(Gws, nativeWindowSettings);
-            window.Run();
+            //nativeWindowSettings.WindowState = WindowState.Fullscreen;
+
+             window = new Window(Gws, nativeWindowSettings);
+             window.Run();
 
         }
 
@@ -79,9 +81,13 @@ namespace PS1_Emulator {
         private int texPageLoc;
         private int display_areay_X_Loc;
         private int display_areay_Y_Loc;
+        private int display_area_X_Offset_Loc;
+        private int display_area_Y_Offset_Loc;
         private int fbo;
 
         public bool isUsingMouse = false;
+        public bool showTextures = false;
+        public bool isFullScreen = false;
 
         Shader shader;
 
@@ -127,7 +133,7 @@ namespace PS1_Emulator {
             shader = new Shader("C:\\Users\\Old Snake\\Desktop\\PS1\\shader.vert", "C:\\Users\\Old Snake\\Desktop\\PS1\\shader.frag");
             shader.Use();
 
-            
+            GL.Viewport(0, 0, this.Size.X, this.Size.Y);
             GL.ClearColor(0, 0, 0, 1);
             GL.Clear(ClearBufferMask.ColorBufferBit);
 
@@ -140,7 +146,10 @@ namespace PS1_Emulator {
 
             display_areay_X_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x");
             display_areay_Y_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y");
+            display_area_X_Offset_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x_offset");
+            display_area_Y_Offset_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y_offset");
 
+           
             vertexArrayObject = GL.GenVertexArray();
             vertexBufferObject = GL.GenBuffer();                 
             colorsBuffer = GL.GenBuffer();
@@ -210,6 +219,9 @@ namespace PS1_Emulator {
         int scissorBox_h;
 
         public void ScissorBox(int x,int y,int width,int height) {
+
+            GL.Viewport(0, 0, 1024, 512);
+
             scissorBox_x = x;
             scissorBox_y = y;
             scissorBox_w = width;
@@ -223,7 +235,8 @@ namespace PS1_Emulator {
         }
 
         public void draw(ref short[] vertices, ref byte[] colors, ref ushort[] uv, ushort clut, ushort page, int texMode) {
-           
+            GL.Viewport(0, 0, 1024, 512);
+
             GL.Uniform1(texModeLoc, texMode);
 
            // GL.Enable(EnableCap.ScissorTest);
@@ -254,43 +267,8 @@ namespace PS1_Emulator {
 
         }
 
-        public void blendingMode(uint page) { 
-            GL.Enable(EnableCap.Blend);
 
-            uint mode = (page >> 5) & 3;
-            GL.BlendFuncSeparate(BlendingFactorSrc.Src1Color,BlendingFactorDest.Src1Alpha,BlendingFactorSrc.One,BlendingFactorDest.Zero);
-
-            switch (mode) {
-                case 0:
-                    GL.BlendEquation(BlendEquationMode.FuncAdd);
-                    setBlendFactors(0.5f, 0.5f);
-
-                    break;
-                case 1:
-                    GL.BlendEquation(BlendEquationMode.FuncAdd);
-                    setBlendFactors(1f, 1f);
-
-                    break;
-                case 2:
-                    GL.BlendEquationSeparate(BlendEquationMode.FuncReverseSubtract, BlendEquationMode.FuncAdd);
-                    setBlendFactors(1f, 1f);
-
-                    break;
-                case 3:
-                    GL.BlendEquation(BlendEquationMode.FuncAdd);
-                    setBlendFactors(1f, 0.25f);
-
-                    break;
-
-            }
-
-        }
-
-        public void setBlendFactors(float des,float src) {
-
-           GL.Uniform4(GL.GetUniformLocation(shader.Handle, "u_blendFactors"), des, des, des, src);
-
-        }
+      
         public void readBackTexture(UInt16 x, UInt16 y, UInt16 width, UInt16 height, ref UInt16[] texData) {
 
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fbo);
@@ -298,13 +276,13 @@ namespace PS1_Emulator {
 
         }
 
-        void displayVramContent() {
+        void displayFrame() {
             //Disable the ScissorTest and unbind the FBO to draw the entire vram texture to the screen
             GL.Disable(EnableCap.ScissorTest);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
 
             GL.Disable(EnableCap.Blend);
-            GL.Viewport(0, 0, 1024, 512);
+            GL.Viewport(0, 0, this.Size.X, this.Size.Y);
             GL.Enable(EnableCap.Texture2D);
             GL.BindTexture(TextureTarget.Texture2D, vram_texture);
 
@@ -313,6 +291,10 @@ namespace PS1_Emulator {
             GL.DisableVertexAttribArray(1);
             GL.DisableVertexAttribArray(2);
 
+
+
+            ModifyAspectRatio();
+
             GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
             //Enable ScissorTest and bind FBO for next draws 
@@ -320,13 +302,15 @@ namespace PS1_Emulator {
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.Enable(EnableCap.ScissorTest);
 
+
+
             GL.Uniform1(FullVram, 0);
 
-            //GL.Uniform1(display_areay_X_Loc, (float)scissorBox_w); //Display area needs more work
-            //GL.Uniform1(display_areay_Y_Loc, (float)scissorBox_h);
+       
 
         }
         public void fill(float r,float g,float b, int x, int y, int width, int height) {
+            GL.Viewport(0, 0, 1024, 512);
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
             GL.ClearColor(r, g, b, 1.0f);       //Fill by clear needs Scissor box
@@ -374,12 +358,68 @@ namespace PS1_Emulator {
 
         public void display() {
             
-            displayVramContent();
+            displayFrame();
             SwapBuffers();
 
         }
 
-     
+        public void ModifyAspectRatio() {
+            float disp_x = cpu.bus.GPU.hrez.getHR();
+            float disp_y = cpu.bus.GPU.vrez == 0 ? 240f : 480f;
+
+
+            if (!showTextures) {
+                GL.Uniform1(display_areay_X_Loc, disp_x);
+                GL.Uniform1(display_areay_Y_Loc, disp_y);
+
+                if (disp_x / disp_y < (float)this.Size.X / this.Size.Y) {
+
+                    float offset = (disp_x / disp_y) * (float)this.Size.Y;  //Random formula by JyAli
+                    offset = ((float)this.Size.X - offset) / this.Size.X;
+                    GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
+                    GL.Uniform1(display_area_X_Offset_Loc, offset);
+
+
+                    GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                    GL.Scissor(0, 0, (int)(offset * this.Size.X), this.Size.Y);
+                    GL.Clear(ClearBufferMask.ColorBufferBit);
+                    GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+
+                }
+                else if (disp_x / disp_y > (float)this.Size.X / this.Size.Y) {
+
+                    float offset = (disp_y / disp_x) * (float)this.Size.X;  //Random formula by JyAli
+
+                    GL.Uniform1(display_area_Y_Offset_Loc, ((float)this.Size.Y - offset) / this.Size.Y);
+                    GL.Uniform1(display_area_X_Offset_Loc, 0.0f);
+
+                    GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                    GL.Scissor(0, 0, this.Size.X, (int)(offset * this.Size.Y));
+                    GL.Clear(ClearBufferMask.ColorBufferBit);
+                    GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+
+                }
+                else {
+                    GL.Uniform1(display_area_X_Offset_Loc, 0.0f);
+                    GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
+
+                }
+            }
+            else {
+                GL.Uniform1(display_area_X_Offset_Loc, 0.0f);
+                GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
+                GL.Uniform1(display_areay_X_Loc, 1024.0f);
+                GL.Uniform1(display_areay_Y_Loc, 512.0f);
+            }
+
+
+
+        }
+        protected override void OnResize(ResizeEventArgs e) {
+            base.OnResize(e);
+            GL.Viewport(0,0,this.Size.X,this.Size.Y);
+        }
+
         protected override void OnRenderFrame(FrameEventArgs e) {
             base.OnRenderFrame(e);
 
@@ -448,6 +488,17 @@ namespace PS1_Emulator {
             }
             else if (KeyboardState.IsKeyDown(Keys.P)) {
                 paused = !paused;
+                Thread.Sleep(100);
+
+            }
+            else if (KeyboardState.IsKeyDown(Keys.Tab)) {
+                showTextures = !showTextures;
+                Thread.Sleep(100);
+
+            }
+            else if (KeyboardState.IsKeyDown(Keys.F)) {
+                isFullScreen = !isFullScreen;
+                this.WindowState = isFullScreen ? WindowState.Fullscreen : WindowState.Normal;
                 Thread.Sleep(100);
 
             }

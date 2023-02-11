@@ -111,7 +111,6 @@ namespace PS1_Emulator {
 
             outRegs[0] = 0;
 
-           // gte.load_delayed();
 
             if (IRQ_CONTROL.isRequestingIRQ()) {                          //Interrupt check 
                 cause |= 1 << 10;
@@ -132,7 +131,6 @@ namespace PS1_Emulator {
                 regs[i] = outRegs[i];
             }
 
-            gte.tick(sync);
 
         }
 
