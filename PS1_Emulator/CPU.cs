@@ -47,10 +47,11 @@ namespace PS1_Emulator {
         private const UInt32 Overflow = 0xc;
         byte[] testRom;
 
-        bool openEvent = false;
         bool fastBoot = false;
 
-        
+        Action<Instruction>[] lookUpTable;      //TODO
+
+
 
         public CPU(Interconnect bus) {
             this.pc = 0xbfc00000;         
@@ -81,12 +82,12 @@ namespace PS1_Emulator {
             intercept(pc);
             if (fastBoot) {       //Skip Sony logo, doesn't work 
                 if (pc == 0x80030000) {
-                    pc = regs[31];
+                    pc = outRegs[31];
                     next_pc = pc+4;
                     fastBoot = false;
                 }
             }
-           //----------------------------------------------------------------------
+            //----------------------------------------------------------------------
 
             this.bus.TIMER1_tick();   
 
@@ -104,7 +105,6 @@ namespace PS1_Emulator {
                                 
             pc = next_pc;
             next_pc = next_pc + 4;
-
 
             outRegs[pendingload.Item1] = pendingload.Item2;     //Load any pending load 
             pendingload = (0, 0);                              //Reset 
@@ -1805,7 +1805,7 @@ namespace PS1_Emulator {
             
             if ((this.SR & 0x10000) != 0) {     //Can be removed?
 
-                Debug.WriteLine("loading from memory ignored, cache is isolated");      
+                //Debug.WriteLine("loading from memory ignored, cache is isolated");      
                 return;
             }
 

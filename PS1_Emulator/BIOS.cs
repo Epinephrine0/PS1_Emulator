@@ -10,6 +10,7 @@ namespace PS1_Emulator {
         byte[] data;
         UInt32 size = 512 * 1024;
         public Range range = new Range(0x1fc00000, 512 * 1024);
+        public string ID { get; set; }  
 
         public BIOS(string path) {
             data = File.ReadAllBytes(path);
@@ -19,6 +20,9 @@ namespace PS1_Emulator {
                 throw new Exception("BIOS file is not valid");
             }
 
+            for (int i = 0x12C; i < 0x13E; i++) {
+                ID += (char)data[i];
+            }
         }
         
 
@@ -49,5 +53,6 @@ namespace PS1_Emulator {
 
             return ((ushort)(b0 | (b1 << 8)));
         }
+
     }
 }

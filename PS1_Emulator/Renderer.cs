@@ -28,12 +28,12 @@ namespace PS1_Emulator {
                 Flags = ContextFlags.ForwardCompatible,
                 APIVersion = Version.Parse("4.6.0"),
                 WindowBorder = WindowBorder.Resizable,
-                Location = new Vector2i((1980 - 1024) / 2, (1080 - 512) / 2)
                
             };
             var Gws = GameWindowSettings.Default;
             Gws.RenderFrequency = 60;
             Gws.UpdateFrequency = 60;
+            nativeWindowSettings.Location = new Vector2i((1980 - nativeWindowSettings.Size.X) / 2, (1080 - nativeWindowSettings.Size.Y) / 2);
 
             var windowIcon = new WindowIcon(new OpenTK.Windowing.Common.Input.Image(300, 300, ImageToByteArray(@"C:\Users\Old Snake\Desktop\PS1\PSX logo.jpg")));
             nativeWindowSettings.Icon = windowIcon;
@@ -83,7 +83,7 @@ namespace PS1_Emulator {
         private int display_areay_Y_Loc;
         private int display_area_X_Offset_Loc;
         private int display_area_Y_Offset_Loc;
-        private int fbo;
+        private int frameBuffer;
 
         public bool isUsingMouse = false;
         public bool showTextures = false;
@@ -125,6 +125,7 @@ namespace PS1_Emulator {
             BIOS bios = new BIOS(@"C:\Users\Old Snake\Desktop\PS1\BIOS\PSX - SCPH1001.BIN");
             Interconnect i = new Interconnect(bios, this);
             cpu = new CPU(i);
+            this.Title += bios.ID.Contains("1001") ? (" - BIOS: " + bios.ID) : "";
 
         }
         protected override void OnLoad() {
@@ -184,13 +185,13 @@ namespace PS1_Emulator {
 
 
 
-            fbo = GL.GenFramebuffer();
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo);
+            frameBuffer = GL.GenFramebuffer();
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, frameBuffer);
             GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, vram_texture, 0);
 
             if (GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != FramebufferErrorCode.FramebufferComplete) {
 
-                Debug.WriteLine("Uncompleted Frame Buffer !");
+                Console.WriteLine("[OpenGL] Uncompleted Frame Buffer !");
 
             }
 
@@ -227,7 +228,7 @@ namespace PS1_Emulator {
             scissorBox_w = width;
             scissorBox_h = height;
 
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, frameBuffer);
            // GL.Enable(EnableCap.ScissorTest);
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
 
@@ -271,7 +272,7 @@ namespace PS1_Emulator {
       
         public void readBackTexture(UInt16 x, UInt16 y, UInt16 width, UInt16 height, ref UInt16[] texData) {
 
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fbo);
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, frameBuffer);
             GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, texData);
 
         }
@@ -285,20 +286,18 @@ namespace PS1_Emulator {
             GL.Viewport(0, 0, this.Size.X, this.Size.Y);
             GL.Enable(EnableCap.Texture2D);
             GL.BindTexture(TextureTarget.Texture2D, vram_texture);
-
+            
             GL.Uniform1(FullVram, 1);
 
             GL.DisableVertexAttribArray(1);
             GL.DisableVertexAttribArray(2);
-
-
 
             ModifyAspectRatio();
 
             GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
             //Enable ScissorTest and bind FBO for next draws 
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, frameBuffer);
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.Enable(EnableCap.ScissorTest);
 
@@ -312,7 +311,7 @@ namespace PS1_Emulator {
         public void fill(float r,float g,float b, int x, int y, int width, int height) {
             GL.Viewport(0, 0, 1024, 512);
 
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, frameBuffer);
             GL.ClearColor(r, g, b, 1.0f);       //Fill by clear needs Scissor box
             GL.Scissor(x,y,width,height);
             GL.Clear(ClearBufferMask.ColorBufferBit);
@@ -332,7 +331,7 @@ namespace PS1_Emulator {
             GL.TexSubImage2D(TextureTarget.Texture2D,0,x,y,width,height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
             
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, frameBuffer);
             GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, 1024, 512);
 
          
@@ -350,7 +349,7 @@ namespace PS1_Emulator {
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0); 
             GL.CopyImageSubData(sample_texture,ImageTarget.Texture2D,0,x0_src,y0_src,0,vram_texture,ImageTarget.Texture2D,0,x0_dest,y0_dest,0,width,height,0);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, frameBuffer);
             GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, 1024, 512);
 
             //throw new Exception("VramToVramCopy");
@@ -499,6 +498,7 @@ namespace PS1_Emulator {
             else if (KeyboardState.IsKeyDown(Keys.F)) {
                 isFullScreen = !isFullScreen;
                 this.WindowState = isFullScreen ? WindowState.Fullscreen : WindowState.Normal;
+                this.CursorState = isFullScreen ? CursorState.Hidden : CursorState.Normal;
                 Thread.Sleep(100);
 
             }
@@ -521,7 +521,7 @@ namespace PS1_Emulator {
             GL.DeleteBuffer(colorsBuffer);
             GL.DeleteBuffer(texCoords);
             GL.DeleteVertexArray(vertexArrayObject);
-            GL.DeleteFramebuffer(fbo);
+            GL.DeleteFramebuffer(frameBuffer);
             GL.DeleteTexture(vram_texture);
             GL.DeleteTexture(sample_texture);
             GL.DeleteProgram(shader.Handle);
