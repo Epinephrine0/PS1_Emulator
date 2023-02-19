@@ -564,7 +564,17 @@ namespace PS1_Emulator {
                     }
 
                     break;
+                //Undocumented/Nonsense
+                case 0x21:
+                case 0x23:
+                case 0x29:
+                case 0x2B:
+                case 0x31:
+                case 0x33:
+                case 0x39:
+                case 0x3B:
 
+                    break;
 
                 default:
 
@@ -1251,7 +1261,7 @@ namespace PS1_Emulator {
                     width = height = 1;
                     break;
                 case 0x60:
-                case 0x62:
+                case 0x62:  //0x62 causes problem in ridge racer
                 case 0x02:
 
                     width = (ushort)(currentCommand.buffer[2] & 0x3FF);

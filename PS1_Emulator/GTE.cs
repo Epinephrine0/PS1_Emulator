@@ -1629,8 +1629,8 @@ namespace PS1_Emulator {
 
             long n;
 
-            if (H < SZ3_Saturated * 2) {
-                int z = (int)(countSignBit(SZ3_Saturated) - 16);  //?
+            if (H < (SZ3_Saturated << 1)) {
+                int z = (int)(countSignBit(SZ3_Saturated) - 16);
                 n = H << z;
                 uint d = (SZ3_Saturated << z);
                 uint u = (uint)(unr_table[(d - 0x7FC0) >> 7] + 0x101);

@@ -1,4 +1,5 @@
 ﻿using NAudio.Wave;
+using OpenTK.Audio.OpenAL;
 using OpenTK.Graphics.OpenGL;
 using System;
 using System.Buffers.Text;
@@ -7,23 +8,25 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using static OpenTK.Graphics.OpenGL.GL;
 
 namespace PS1_Emulator {
-    public class CPU {
+    public unsafe class CPU {
         private UInt32 pc;                //32-bit program counter
         private UInt32 next_pc;
         private UInt32 current_pc;
-        public Interconnect bus;
+        public  Interconnect bus;
         private UInt32[] regs;
         private UInt32[] outRegs;
-        Instruction current;
+        private Instruction current;
         private UInt32 SR;           //cop0 reg12 , the status register 
         private UInt32 cause;        //cop0 reg13 , the cause register 
         private UInt32 epc;          //cop0 reg14, epc
 
-        (UInt32, UInt32) pendingload; //to emulate the load delay
+        private (UInt32, UInt32) pendingload; //to emulate the load delay
 
         private UInt32 HI;           //Remainder of devision
         private UInt32 LO;           //Quotient of devision
@@ -45,14 +48,59 @@ namespace PS1_Emulator {
         private const UInt32 IllegalInstruction = 0xa;
         private const UInt32 CoprocessorError = 0xb;
         private const UInt32 Overflow = 0xc;
-        byte[] testRom;
+        private byte[] testRom;
 
         bool fastBoot = false;
 
-        Action<Instruction>[] lookUpTable;      //TODO
+        /* Main Opcodes:
+           00h=SPECIAL 08h=ADDI  10h=COP0 18h=N/A   20h=LB   28h=SB   30h=LWC0 38h=SWC0
+           01h=BcondZ  09h=ADDIU 11h=COP1 19h=N/A   21h=LH   29h=SH   31h=LWC1 39h=SWC1
+           02h=J       0Ah=SLTI  12h=COP2 1Ah=N/A   22h=LWL  2Ah=SWL  32h=LWC2 3Ah=SWC2
+           03h=JAL     0Bh=SLTIU 13h=COP3 1Bh=N/A   23h=LW   2Bh=SW   33h=LWC3 3Bh=SWC3
+           04h=BEQ     0Ch=ANDI  14h=N/A  1Ch=N/A   24h=LBU  2Ch=N/A  34h=N/A  3Ch=N/A
+           05h=BNE     0Dh=ORI   15h=N/A  1Dh=N/A   25h=LHU  2Dh=N/A  35h=N/A  3Dh=N/A
+           06h=BLEZ    0Eh=XORI  16h=N/A  1Eh=N/A   26h=LWR  2Eh=SWR  36h=N/A  3Eh=N/A
+           07h=BGTZ    0Fh=LUI   17h=N/A  1Fh=N/A   27h=N/A  2Fh=N/A  37h=N/A  3Fh=N/A
+
+       */
+
+        private static readonly delegate*<CPU,Instruction, void>[] mainLookUpTable = new delegate*<CPU, Instruction, void>[] {
+                &special,   &bxx,       &jump,      &jal,       &beq,        &bne,       &blez,      &bgtz,
+                &addi,      &addiu,     &slti,      &sltiu,     &andi,       &ori,       &xori,      &lui,
+                &cop0,      &cop1,      &cop2,      &cop3,      &illegal,    &illegal,   &illegal,   &illegal,
+                &illegal,   &illegal,   &illegal,   &illegal,   &illegal,    &illegal,   &illegal,   &illegal,
+                &lb,        &lh,        &lwl,       &lw,        &lbu,        &lhu,       &lwr,       &illegal,
+                &sb,        &sh,        &swl,       &sw,        &illegal,    &illegal,   &swr,       &illegal,
+                &lwc0,      &lwc1,      &lwc2,      &lwc3,      &illegal,    &illegal,   &illegal,   &illegal,
+                &swc0,      &swc1,      &swc2,      &swc3,      &illegal,    &illegal,   &illegal,   &illegal
+
+            };
 
 
+        /*
+            Special Opcodes:
+            00h=SLL   08h=JR      10h=MFHI 18h=MULT  20h=ADD  28h=N/A  30h=N/A  38h=N/A
+            01h=N/A   09h=JALR    11h=MTHI 19h=MULTU 21h=ADDU 29h=N/A  31h=N/A  39h=N/A
+            02h=SRL   0Ah=N/A     12h=MFLO 1Ah=DIV   22h=SUB  2Ah=SLT  32h=N/A  3Ah=N/A
+            03h=SRA   0Bh=N/A     13h=MTLO 1Bh=DIVU  23h=SUBU 2Bh=SLTU 33h=N/A  3Bh=N/A
+            04h=SLLV  0Ch=SYSCALL 14h=N/A  1Ch=N/A   24h=AND  2Ch=N/A  34h=N/A  3Ch=N/A
+            05h=N/A   0Dh=BREAK   15h=N/A  1Dh=N/A   25h=OR   2Dh=N/A  35h=N/A  3Dh=N/A
+            06h=SRLV  0Eh=N/A     16h=N/A  1Eh=N/A   26h=XOR  2Eh=N/A  36h=N/A  3Eh=N/A
+            07h=SRAV  0Fh=N/A     17h=N/A  1Fh=N/A   27h=NOR  2Fh=N/A  37h=N/A  3Fh=N/A
+        
+         */
 
+        private static readonly delegate*<CPU, Instruction, void>[] specialLookUpTable = new delegate*<CPU, Instruction, void>[] {
+                &sll,       &illegal,   &srl,       &sra,       &sllv,      &illegal,   &srlv,      &srav,
+                &jr,        &jalr,      &illegal,   &illegal,   &syscall,   &break_,    &illegal,   &illegal,
+                &mfhi,      &mthi,      &mflo,      &mtlo,      &illegal,   &illegal,   &illegal,   &illegal,
+                &mult,      &multu,     &div,       &divu,      &illegal,   &illegal,   &illegal,   &illegal,
+                &add,       &addu,      &sub,       &subu,      &and,       &or,        &xor,       &nor,
+                &illegal,   &illegal,   &slt,       &sltu,      &illegal,   &illegal,   &illegal,   &illegal,
+                &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,
+                &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal
+
+            };
         public CPU(Interconnect bus) {
             this.pc = 0xbfc00000;         
             this.next_pc = pc + 4;
@@ -73,27 +121,26 @@ namespace PS1_Emulator {
             Console.Title = "TTY Console";
         }
 
-       
         public void emu_cycle() {   
-         
-            this.current_pc = pc;   //Save current pc In case of an exception
+              
+            current_pc = pc;   //Save current pc In case of an exception
 
             //Should move these to J,Jal,Jr,Jalr instead of checking on every instruction
-            intercept(pc);
-            if (fastBoot) {       //Skip Sony logo, doesn't work 
+            //intercept(pc);
+            /*if (fastBoot) {       //Skip Sony logo, doesn't work 
                 if (pc == 0x80030000) {
                     pc = outRegs[31];
                     next_pc = pc+4;
                     fastBoot = false;
                 }
-            }
+            }*/
             //----------------------------------------------------------------------
 
-            this.bus.TIMER1_tick();   
+            bus.TIMER1_tick();   
 
             //PC must be 32 bit aligned 
-            if (this.current_pc % 4 !=0) {
-                exception(LoadAddressError);
+            if (current_pc % 4 !=0) {
+                exception(this,LoadAddressError);
                 return;
             }
 
@@ -116,22 +163,25 @@ namespace PS1_Emulator {
                 cause |= 1 << 10;
 
                 if (((SR & 1) != 0) && (((SR >> 10) & 1) != 0)) {
-                    exception(IRQ);
+                    exception(this,IRQ);
                     return;
                 }
 
 
             }
-            
-            decode_execute(current);
-           
-            outRegs[0] = 0;
+
+            //decode_execute(current);
+            executeInstruction(current);
+
+             outRegs[0] = 0;
 
             for (int i = 0; i < regs.Length; i++) {
                 regs[i] = outRegs[i];
             }
+        }
 
-
+        private void executeInstruction(Instruction instruction) {
+            mainLookUpTable[instruction.getOpcode()](this,instruction);
         }
 
         private void intercept(uint pc) {
@@ -428,7 +478,7 @@ namespace PS1_Emulator {
         }
         public void SPUtick() {
 
-            this.bus.SPU_Tick(sync);        //SPU Clock
+            bus.SPU_Tick(sync);        //SPU Clock
 
 
         }
@@ -451,289 +501,290 @@ namespace PS1_Emulator {
 
         }
        
-        public void decode_execute(Instruction instruction) {
-            //TODO: Use function pointers instead of the switch
+        /*public void decode_execute(Instruction instruction) {
 
-            switch (instruction.getType()) {
+            switch (instruction.getOpcode()) {
 
                 case 0b001111:
 
-                    op_lui(instruction);
+                    lui(instruction);
                     break;
 
                 case 0b001101:
 
-                    op_ori(instruction);
+                    ori(instruction);
                     break;
 
                 case 0b101011:
 
-                    op_sw(instruction);
+                    sw(instruction);
                     break;
 
                 case 0b000000:
 
-                    op_special(instruction);
+                    special(instruction);
                     break;
 
                 case 0b001001:
 
-                    op_addiu(instruction);
+                    addiu(instruction);
                     break;
 
                 case 0b000010:
 
-                    op_jump(instruction);
+                    jump(instruction);
                     break;
 
                 case 0b010000:
 
-                    op_cop0(instruction);
+                    cop0(instruction);
                     break;
 
                 case 0b000101:
 
-                    op_bne(instruction);
+                    bne(instruction);
                     break;
 
                 case 0b001000:
 
-                    op_addi(instruction);
+                    addi(instruction);
                     break;
 
                 case 0b100011:
 
-                    op_lw(instruction);
+                    lw(instruction);
                     break;
 
                 case 0b101001:
 
-                    op_sh(instruction);
+                    sh(instruction);
 
                     break;
 
                 case 0b000011:
 
-                    op_jal(instruction);
+                    jal(instruction);
                     break;
 
                 case 0b001100:
 
-                    op_andi(instruction);
+                    andi(instruction);
                     break;
 
                 case 0b101000:
 
-                    op_sb(instruction);
+                    sb(instruction);
                     break;
 
                 case 0b100000:
 
-                    op_lb(instruction);
+                    lb(instruction);
                     break;
 
 
                 case 0b000100:
 
-                    op_beq(instruction);
+                    beq(instruction);
                     break;
 
                 case 0b000111:
 
-                    op_bgtz(instruction);
+                    bgtz(instruction);
                     break;
 
                 case 0b000110:
 
-                    op_blez(instruction);
+                    blez(instruction);
 
                     break;
 
                 case 0b100100:
 
-                    op_lbu(instruction);
+                    lbu(instruction);
                     break;
 
                 case 0b000001:
 
-                    op_bxx(instruction);
+                    bxx(instruction);
                     break;
 
                 case 0b001010:
 
-                    op_slti(instruction);
+                    slti(instruction);
                     break;
 
                 case 0b001011:
 
-                    op_sltiu(instruction);
+                    sltiu(instruction);
                     break;
 
                 case 0b100101:
 
-                    op_lhu(instruction);
+                    lhu(instruction);
                     break;
 
                 case 0b100001:
 
-                    op_lh(instruction);
+                    lh(instruction);
                     break;
 
                 case 0xe:
 
-                    op_xori(instruction);
+                    xori(instruction);
                     break;
 
                 case 0x11:
 
-                    op_cop1(instruction);
+                    cop1(instruction);
                     break;
 
                 case 0x12:
 
-                    op_cop2(instruction);
+                    cop2(instruction);
                     break;
 
                 case 0x13:
 
-                    op_cop3(instruction);
+                    cop3(instruction);
                     break;
 
                 case 0x22:
 
-                    op_lwl(instruction);
+                    lwl(instruction);
                     break;
 
                 case 0x26:
 
-                    op_lwr(instruction);
+                    lwr(instruction);
                     break;
 
                 case 0x2a:
 
-                    op_swl(instruction);
+                    swl(instruction);
                     break;
 
                 case 0x2e:
 
-                    op_swr(instruction);
+                    swr(instruction);
                     break;
 
                 case 0x30:
 
-                    op_lwc0(instruction);
+                    lwc0(instruction);
                     break;
 
                 case 0x31:
 
-                    op_lwc1(instruction);
+                    lwc1(instruction);
                     break;
 
                 case 0x32:
                     
-                    op_lwc2(instruction);
+                    lwc2(instruction);
                     break;
 
                 case 0x33:
 
-                    op_lwc3(instruction);
+                    lwc3(instruction);
                     break;
 
                 case 0x38:
 
-                    op_swc0(instruction);
+                    swc0(instruction);
                     break;
 
                 case 0x39:
 
-                    op_swc1(instruction);
+                    swc1(instruction);
                     break;
 
             
                 case 0x41:
 
-                    op_swc3(instruction);
+                    swc3(instruction);
 
                     break;
 
                 case 0x3A:
 
-                    op_swc2(instruction);
+                    swc2(instruction);
                     break;
 
                 default:
 
-                    op_illegal(instruction);
+                    illegal(instruction);
                     break;
 
             }
 
 
-        }
+        }*/
 
 
-        private void op_special(Instruction instruction) {
-            switch (instruction.get_subfunction()) {
+        private static void special(CPU cpu, Instruction instruction) {
+            specialLookUpTable[instruction.get_subfunction()](cpu, instruction);
+
+            /*switch (instruction.get_subfunction()) {
 
                 case 0b000000:
 
-                    op_sll(instruction);
+                    sll(instruction);
 
                     break;
 
                 case 0b100101:
 
-                    op_OR(instruction);
+                    OR(instruction);
 
                     break;
 
                 case 0b100100:
 
-                    op_AND(instruction);
+                    AND(instruction);
 
                     break;
 
                 case 0b101011:
 
-                    op_stlu(instruction);
+                    stlu(instruction);
 
                     break;
 
                 case 0b100001:
 
-                    op_addu(instruction);
+                    addu(instruction);
                     break;
 
                 case 0b001000:
 
-                    op_jr(instruction);
+                    jr(instruction);
                     break;
 
                 case 0b100000:
 
-                    op_add(instruction);
+                    add(instruction);
                     break;
 
 
                 case 0b001001:
 
-                    op_jalr(instruction);
+                    jalr(instruction);
                     break;
 
                 case 0b100011:
 
-                    op_subu(instruction);
+                    subu(instruction);
                     break;
 
                 case 0b000011:
 
 
-                    op_sra(instruction);
+                    sra(instruction);
                     break;
 
                 case 0b011010:
 
-                    op_div(instruction);
+                    div(instruction);
                     break;
 
                 case 0b010010:
@@ -748,84 +799,84 @@ namespace PS1_Emulator {
 
                 case 0b011011:
 
-                    op_divu(instruction);
+                    divu(instruction);
                     break;
 
                 case 0b010000:
 
-                    op_mfhi(instruction);
+                    mfhi(instruction);
                     break;
 
                 case 0b101010:
 
-                    op_slt(instruction);
+                    slt(instruction);
                     break;
 
                 case 0b001100:
 
-                    op_syscall(instruction);
+                    syscall(instruction);
                     break;
 
                 case 0b010011:
 
-                    op_mtlo(instruction);
+                    mtlo(instruction);
 
                     break;
 
                 case 0b010001:
 
-                    op_mthi(instruction);
+                    mthi(instruction);
 
                     break;
 
                 case 0b000100:
 
-                    op_sllv(instruction);
+                    sllv(instruction);
                     break;
 
                 case 0b100111:
 
-                    op_nor(instruction);
+                    nor(instruction);
                     break;
 
                 case 0b000111:
 
-                    op_srav(instruction);
+                    srav(instruction);
                     break;
 
                 case 0b000110:
 
-                    op_srlv(instruction);
+                    srlv(instruction);
                     break;
 
                 case 0b011001:
 
-                    op_multu(instruction);
+                    multu(instruction);
                     break;
 
                 case 0b100110:
 
-                    op_xor(instruction);
+                    xor(instruction);
                     break;
 
                 case 0xd:
 
-                    op_break(instruction);
+                    break_(instruction);
                     break;
 
                 case 0x18:
 
-                    op_mult(instruction);
+                    mult(instruction);
                     break;
 
                 case 0x22:
 
-                    op_sub(instruction);
+                    sub(instruction);
 
                     break;
 
                 case 0x0E:
-                    op_illegal(instruction);
+                    illegal(instruction);
 
                     break;
 
@@ -834,29 +885,29 @@ namespace PS1_Emulator {
 
                     throw new Exception("Unhandeled special instruction [ " + instruction.getfull().ToString("X").PadLeft(8, '0') + " ] with subfunction: " + Convert.ToString(instruction.get_subfunction(), 2).PadLeft(6, '0'));
 
-            }
+            }*/
 
         }
-        private void op_cop0(Instruction instruction) {
+        private static void cop0(CPU cpu, Instruction instruction) {
 
             switch (instruction.get_rs()) {
 
                 case 0b00100:
 
-                    op_mtc0(instruction);
+                    mtc0(cpu, instruction);
 
                     break;
 
 
                 case 0b00000:
 
-                    op_mfc0(instruction);
+                    mfc0(cpu, instruction);
 
                     break;
 
                 case 0b10000:
 
-                    op_rfe(instruction);
+                    rfe(cpu, instruction);
 
 
                     break;
@@ -868,81 +919,81 @@ namespace PS1_Emulator {
 
 
         }
-        private void op_illegal(Instruction instruction) {
+        private static void illegal(CPU cpu, Instruction instruction) {
             Console.ForegroundColor = ConsoleColor.Red; 
-            Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') + " at PC: " + pc.ToString("x"));
+            Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') + " at PC: " + cpu.pc.ToString("x"));
             Console.ForegroundColor = ConsoleColor.Green;
 
-            //exception(IllegalInstruction);
+            //exception(cpu, IllegalInstruction);
 
         }
 
-        private void op_swc3(Instruction instruction) {
-            exception(CoprocessorError); //StoreWord is not supported in this cop
+        private static void swc3(CPU cpu, Instruction instruction) {
+            exception(cpu,CoprocessorError); //StoreWord is not supported in this cop
         }
-        private void op_swc2(Instruction instruction) {
+        private static void swc2(CPU cpu, Instruction instruction) {
 
-            uint address = regs[instruction.get_rs()] + instruction.signed_imm();
+            uint address = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
 
             if (address % 4 != 0) {
-                exception(LoadAddressError);
+                exception(cpu,LoadAddressError);
                 return;
             }
 
             uint rt = instruction.get_rt();
-            uint word = gte.read(rt);
-            bus.store32(address, word);
+            uint word = cpu.gte.read(rt);
+            cpu.bus.store32(address, word);
 
         }
 
        
 
-        private void op_swc1(Instruction instruction) {
-            exception(CoprocessorError); //StoreWord is not supported in this cop
+        private static void swc1(CPU cpu, Instruction instruction) {
+            exception(cpu,CoprocessorError); //StoreWord is not supported in this cop
         }
 
-        private void op_swc0(Instruction instruction) {
-            exception(CoprocessorError); //StoreWord is not supported in this cop
+        private static void swc0(CPU cpu, Instruction instruction) {
+            exception(cpu,CoprocessorError); //StoreWord is not supported in this cop
         }
 
-        private void op_lwc3(Instruction instruction) {
-            exception(CoprocessorError); //LoadWord is not supported in this cop
+        private static void lwc3(CPU cpu, Instruction instruction) {
+            exception(cpu,CoprocessorError); //LoadWord is not supported in this cop
         }
 
-        private void op_lwc2(Instruction instruction) {
+        private static void lwc2(CPU cpu, Instruction instruction) {
             //TODO add 2 instructions delay
 
-            uint address = regs[instruction.get_rs()] + instruction.signed_imm();
+            uint address = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
 
             if (address % 4 != 0) {
-                exception(LoadAddressError);
+                exception(cpu,LoadAddressError);
                 return;
             }
 
-            uint word = bus.load32(address);
+            uint word = cpu.bus.load32(address);
             uint rt = instruction.get_rt();
-            gte.write(rt, word);
+            cpu.gte.write(rt, word);
 
         }
 
-        private void op_lwc1(Instruction instruction) {
-            exception(CoprocessorError); //LoadWord is not supported in this cop
+        private static void lwc1(CPU cpu, Instruction instruction) {
+            exception(cpu,CoprocessorError); //LoadWord is not supported in this cop
         }
 
-        private void op_lwc0(Instruction instruction) {
-            exception(CoprocessorError); //LoadWord is not supported in this cop
+        private static void lwc0(CPU cpu, Instruction instruction) {
+            exception(cpu,CoprocessorError); //LoadWord is not supported in this cop
         }
 
-        private void op_swr(Instruction instruction) {
+        private static void swr(CPU cpu, Instruction instruction) {
             //TODO add 2 instructions delay
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
 
-            UInt32 value = regs[instruction.get_rt()];                           //Bypass load delay
-            UInt32 current_value = bus.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            UInt32 value = cpu.regs[instruction.get_rt()];                           //Bypass load delay
+            UInt32 current_value = cpu.bus.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -974,17 +1025,17 @@ namespace PS1_Emulator {
                     throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            bus.store32((UInt32)(final_address & (~3)), finalValue);
+            cpu.bus.store32((UInt32)(final_address & (~3)), finalValue);
         }
 
-        private void op_swl(Instruction instruction) {
+        private static void swl(CPU cpu, Instruction instruction) {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
 
-            UInt32 value = regs[instruction.get_rt()];                           //Bypass load delay
-            UInt32 current_value = bus.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            UInt32 value = cpu.regs[instruction.get_rt()];                           //Bypass load delay
+            UInt32 current_value = cpu.bus.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -1016,20 +1067,20 @@ namespace PS1_Emulator {
                     throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            bus.store32((UInt32)(final_address & (~3)), finalValue);
+            cpu.bus.store32((UInt32)(final_address & (~3)), finalValue);
 
 
         }
 
-        private void op_lwr(Instruction instruction) {
+        private static void lwr(CPU cpu, Instruction instruction) {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
 
-            UInt32 current_value = outRegs[instruction.get_rt()];       //Bypass load delay
-            UInt32 word = bus.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            UInt32 current_value = cpu.outRegs[instruction.get_rt()];       //Bypass load delay
+            UInt32 word = cpu.bus.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -1061,24 +1112,24 @@ namespace PS1_Emulator {
                     throw new Exception("lwr instruction error, pos:" + pos);
             }
             //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
+                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
             }
 
-            pendingload.Item1 = instruction.get_rt();  //Position
-            pendingload.Item2 = finalValue;           //Value
+            cpu.pendingload.Item1 = instruction.get_rt();  //Position
+            cpu.pendingload.Item2 = finalValue;           //Value
 
         }
 
-        private void op_lwl(Instruction instruction) {
+        private static void lwl(CPU cpu, Instruction instruction) {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
 
-            UInt32 current_value = outRegs[instruction.get_rt()];       //Bypass load delay
-            UInt32 word = bus.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            UInt32 current_value = cpu.outRegs[instruction.get_rt()];       //Bypass load delay
+            UInt32 word = cpu.bus.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -1111,16 +1162,16 @@ namespace PS1_Emulator {
             }
 
             //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
+                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
             }
 
-            pendingload.Item1 = instruction.get_rt();  //Position
-            pendingload.Item2 = finalValue;           //Value
+            cpu.pendingload.Item1 = instruction.get_rt();  //Position
+            cpu.pendingload.Item2 = finalValue;           //Value
 
         }
 
-        private void op_cop2(Instruction instruction) {
+        private static void cop2(CPU cpu, Instruction instruction) {
 
             if (((instruction.get_rs() >> 4) & 1) == 1) {    //COP2 imm25 command
                 /*if (gte.currentCommand == null) {
@@ -1132,7 +1183,7 @@ namespace PS1_Emulator {
                     stall();
                 }*/
 
-                gte.execute(instruction);
+                cpu.gte.execute(instruction);
 
                 return;
             }
@@ -1155,8 +1206,8 @@ namespace PS1_Emulator {
                         stall();
                     }*/
 
-                    pendingload.Item1 = instruction.get_rt();
-                    pendingload.Item2 = gte.read(instruction.get_rd());
+                    cpu.pendingload.Item1 = instruction.get_rt();
+                    cpu.pendingload.Item2 = cpu.gte.read(instruction.get_rd());
                     break;
 
                 case 0b00010:   //CFC
@@ -1174,23 +1225,23 @@ namespace PS1_Emulator {
                         stall();
                     }*/
 
-                    pendingload.Item1 = instruction.get_rt();
-                    pendingload.Item2 = gte.read(instruction.get_rd() + 32);
+                    cpu.pendingload.Item1 = instruction.get_rt();
+                    cpu.pendingload.Item2 = cpu.gte.read(instruction.get_rd() + 32);
                     break;
 
                 case 0b00110:  //CTC 
 
                     uint rd = instruction.get_rd();
-                    uint value = regs[instruction.get_rt()];
-                    gte.write(rd + 32,value);
+                    uint value = cpu.regs[instruction.get_rt()];
+                    cpu.gte.write(rd + 32,value);
 
                     break;
 
                 case 0b00100:  //MTC 
 
                     rd = instruction.get_rd();
-                    value = regs[instruction.get_rt()];
-                    gte.write(rd, value);   //Same as CTC but without adding 32 to the position
+                    value = cpu.regs[instruction.get_rt()];
+                    cpu.gte.write(rd, value);   //Same as CTC but without adding 32 to the position
 
                     break;
 
@@ -1201,92 +1252,87 @@ namespace PS1_Emulator {
             }
         }
 
-        private void stall() {
-            pc -= 4;        //Stalling the CPU on the same instruction
-            next_pc -= 4;
+
+        private static void cop3(CPU cpu, Instruction instruction) {
+
+            exception(cpu,CoprocessorError);
 
         }
 
-        private void op_cop3(Instruction instruction) {
+        private static void cop1(CPU cpu, Instruction instruction) {
 
-            exception(CoprocessorError);
-
-        }
-
-        private void op_cop1(Instruction instruction) {
-
-            exception(CoprocessorError);
+            exception(cpu,CoprocessorError);
 
         }
 
-        private void op_xori(Instruction instruction) {
+        private static void xori(CPU cpu, Instruction instruction) {
             UInt32 targetReg = instruction.get_rt();
             UInt32 value = instruction.getImmediateValue();
             UInt32 rs = instruction.get_rs();
 
-            outRegs[targetReg] = regs[rs] ^ value;
+            cpu.outRegs[targetReg] = cpu.regs[rs] ^ value;
         }
 
-        private void op_lh(Instruction instruction) {
+        private static void lh(CPU cpu, Instruction instruction) {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
             //aligned?
-            Int16 hw = (Int16)bus.load16(final_address);
+            Int16 hw = (Int16)cpu.bus.load16(final_address);
             if (final_address % 2 == 0) {
 
                 //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-                if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                    outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+                if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
+                    cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
                 }
 
-                pendingload.Item1 = instruction.get_rt();  //Position
-                pendingload.Item2 = (UInt32)(hw);           //Value
+                cpu.pendingload.Item1 = instruction.get_rt();  //Position
+                cpu.pendingload.Item2 = (UInt32)(hw);           //Value
 
             }
             else {
-                exception(LoadAddressError);
+                exception(cpu,LoadAddressError);
             }
 
 
         }
 
-        private void op_lhu(Instruction instruction) {
+        private static void lhu(CPU cpu, Instruction instruction) {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
             if (final_address % 2 == 0) {
-                UInt32 hw = (UInt32) bus.load16(final_address);
+                UInt32 hw = (UInt32)cpu.bus.load16(final_address);
 
                 //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-                if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                    outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+                if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
+                    cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
                 }
 
-                pendingload.Item1 = instruction.get_rt();  //Position
-                pendingload.Item2 = hw;                    //Value
+                cpu.pendingload.Item1 = instruction.get_rt();  //Position
+                cpu.pendingload.Item2 = hw;                    //Value
 
             }
 
             else {
-                exception(LoadAddressError);
+                exception(cpu,LoadAddressError);
             }
 
 
         }
 
-        private void op_sltiu(Instruction instruction) {
+        private static void sltiu(CPU cpu, Instruction instruction) {
 
-            if (this.regs[instruction.get_rs()] < instruction.signed_imm()) {
+            if (cpu.regs[instruction.get_rs()] < instruction.signed_imm()) {
 
-                this.outRegs[instruction.get_rt()] = 1;
+                cpu.outRegs[instruction.get_rt()] = 1;
             }
             else {
 
-                this.outRegs[instruction.get_rt()] = 0;
+                cpu.outRegs[instruction.get_rt()] = 0;
 
             }
 
@@ -1295,19 +1341,19 @@ namespace PS1_Emulator {
 
       
 
-        private void op_sub(Instruction instruction) {
+        private static void sub(CPU cpu, Instruction instruction) {
 
-            Int32 reg1 = (Int32)regs[instruction.get_rs()];
-            Int32 reg2 = (Int32)regs[instruction.get_rt()];
+            Int32 reg1 = (Int32)cpu.regs[instruction.get_rs()];
+            Int32 reg2 = (Int32)cpu.regs[instruction.get_rt()];
 
             try {
                 Int32 value = checked(reg1 - reg2);        //Check for signed integer overflow 
 
-                outRegs[instruction.get_rd()] = (UInt32)value;
+                cpu.outRegs[instruction.get_rd()] = (UInt32)value;
 
             }
             catch (OverflowException) {
-                exception(Overflow);
+                exception(cpu,Overflow);
 
             }
 
@@ -1315,97 +1361,97 @@ namespace PS1_Emulator {
 
         }
 
-        private void op_mult(Instruction instruction) {
+        private static void mult(CPU cpu, Instruction instruction) {
             //Sign extend
-            Int64 a = (Int64) ((Int32)regs[instruction.get_rs()]);
-            Int64 b = (Int64) ((Int32)regs[instruction.get_rt()]);
+            Int64 a = (Int64) ((Int32)cpu.regs[instruction.get_rs()]);
+            Int64 b = (Int64) ((Int32)cpu.regs[instruction.get_rt()]);
 
 
             UInt64 v = (UInt64)(a * b);
 
-            this.HI = (UInt32)(v >> 32);
-            this.LO = (UInt32)(v);
+            cpu.HI = (UInt32)(v >> 32);
+            cpu.LO = (UInt32)(v);
 
         }
 
-        private void op_break(Instruction instruction) {
+        private static void break_(CPU cpu, Instruction instruction) {
 
-            exception(Break);
-
-        }
-
-        private void op_xor(Instruction instruction) {
-
-            outRegs[instruction.get_rd()] = regs[instruction.get_rs()] ^ regs[instruction.get_rt()];
-
+            exception(cpu,Break);
 
         }
 
-        private void op_multu(Instruction instruction) {
+        private static void xor(CPU cpu, Instruction instruction) {
 
-            UInt64 a = (UInt64)regs[instruction.get_rs()];
-            UInt64 b = (UInt64)regs[instruction.get_rt()];
+            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] ^ cpu.regs[instruction.get_rt()];
+
+
+        }
+
+        private static void multu(CPU cpu, Instruction instruction) {
+
+            UInt64 a = (UInt64)cpu.regs[instruction.get_rs()];
+            UInt64 b = (UInt64)cpu.regs[instruction.get_rt()];
 
 
             UInt64 v = a * b;
 
-            this.HI = (UInt32)(v >> 32);
-            this.LO = (UInt32)(v);
+            cpu.HI = (UInt32)(v >> 32);
+            cpu.LO = (UInt32)(v);
 
 
         }
 
-        private void op_srlv(Instruction instruction) {
+        private static void srlv(CPU cpu, Instruction instruction) {
 
-         outRegs[instruction.get_rd()] = regs[instruction.get_rt()] >> ((Int32)(regs[instruction.get_rs()] & 0x1f));
-
-        }
-
-        private void op_srav(Instruction instruction) {
-
-            Int32 val = ((Int32)regs[instruction.get_rt()]) >> ((Int32)(regs[instruction.get_rs()] & 0x1f));
-
-            outRegs[instruction.get_rd()] = (UInt32)val;
-
+            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rt()] >> ((Int32)(cpu.regs[instruction.get_rs()] & 0x1f));
 
         }
 
-        private void op_nor(Instruction instruction) {
+        private static void srav(CPU cpu, Instruction instruction) {
 
-            outRegs[instruction.get_rd()] = ~(regs[instruction.get_rs()] | regs[instruction.get_rt()]);
+            Int32 val = ((Int32)cpu.regs[instruction.get_rt()]) >> ((Int32)(cpu.regs[instruction.get_rs()] & 0x1f));
+
+            cpu.outRegs[instruction.get_rd()] = (UInt32)val;
 
 
         }
 
-        private void op_sllv(Instruction instruction) {                             //take 5 bits from register rs
+        private static void nor(CPU cpu, Instruction instruction) {
 
-            outRegs[instruction.get_rd()] = regs[instruction.get_rt()] << ((Int32)(regs[instruction.get_rs()] & 0x1f));
+            cpu.outRegs[instruction.get_rd()] = ~(cpu.regs[instruction.get_rs()] | cpu.regs[instruction.get_rt()]);
 
-        }
-
-        private void op_mthi(Instruction instruction) {
-
-            this.HI = regs[instruction.get_rs()];
 
         }
 
-        private void op_mtlo(Instruction instruction) {
+        private static void sllv(CPU cpu, Instruction instruction) {                             //take 5 bits from register rs
 
-            this.LO = regs[instruction.get_rs()];
+            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rt()] << ((Int32)(cpu.regs[instruction.get_rs()] & 0x1f));
 
         }
 
-        private void op_syscall(Instruction instruction) {
-            exception(SysCall);
+        private static void mthi(CPU cpu, Instruction instruction) {
+
+            cpu.HI = cpu.regs[instruction.get_rs()];
+
         }
 
-        private void exception(UInt32 cause){
+        private static void mtlo(CPU cpu, Instruction instruction) {
+
+            cpu.LO = cpu.regs[instruction.get_rs()];
+
+        }
+
+        private static void syscall(CPU cpu,Instruction instruction) {
+            exception(cpu, SysCall);
+        }
+
+        private static void exception(CPU cpu, UInt32 exceptionCause){
 
            // if ((bus.load32(pc) >> 26) == 0x12) { return; }
 
             UInt32 handler;                                         //Get the handler
 
-            if ((this.SR & (1 << 22)) != 0) {
+            if ((cpu.SR & (1 << 22)) != 0) {
                 handler = 0xbfc00180;
 
             }
@@ -1414,166 +1460,164 @@ namespace PS1_Emulator {
             }
   
 
-            UInt32 mode = this.SR & 0x3f;                          //Disable interrupts 
+            UInt32 mode = cpu.SR & 0x3f;                          //Disable interrupts 
 
-            this.SR = (UInt32)(this.SR & ~0x3f);
+            cpu.SR = (UInt32)(cpu.SR & ~0x3f);
 
-            this.SR = this.SR | ((mode << 2) & 0x3f);
+            cpu.SR = cpu.SR | ((mode << 2) & 0x3f);
 
-            
-            this.cause = cause << 2;                    //Update cause register
 
-            this.epc = this.current_pc;                 //Save the current PC in register EPC
+            cpu.cause = exceptionCause << 2;                    //Update cause register
 
-            if (delay_slot) {                   //in case an exception occurs in a delay slot
-                this.epc = this.epc - 4;
-                this.cause = (UInt32)(this.cause | (1 << 31));
+            cpu.epc = cpu.current_pc;                 //Save the current PC in register EPC
+
+            if (cpu.delay_slot) {                   //in case an exception occurs in a delay slot
+                cpu.epc = cpu.epc - 4;
+                cpu.cause = (UInt32)(cpu.cause | (1 << 31));
             }
 
-            this.pc = handler;                          //Jump to the handler address (no delay)
-            this.next_pc = pc + 4;
+            cpu.pc = handler;                          //Jump to the handler address (no delay)
+            cpu.next_pc = cpu.pc + 4;
 
         }
 
-        private void op_slt(Instruction instruction) {
+        private static void slt(CPU cpu, Instruction instruction) {
          
 
-                if (((Int32)regs[instruction.get_rs()]) < ((Int32)regs[instruction.get_rt()])) {
+                if (((Int32)cpu.regs[instruction.get_rs()]) < ((Int32)cpu.regs[instruction.get_rt()])) {
 
-                    outRegs[instruction.get_rd()] = 1;
+                    cpu.outRegs[instruction.get_rd()] = 1;
 
                 }
                 else {
-                    outRegs[instruction.get_rd()] = 0;
+                    cpu.outRegs[instruction.get_rd()] = 0;
 
                 }
 
             }
 
 
-        private void op_divu(Instruction instruction) {
+        private static void divu(CPU cpu, Instruction instruction) {
 
-            UInt32 numerator = this.regs[instruction.get_rs()];
-            UInt32 denominator = this.regs[instruction.get_rt()];
+            UInt32 numerator = cpu.regs[instruction.get_rs()];
+            UInt32 denominator = cpu.regs[instruction.get_rt()];
 
             if (denominator == 0) {
-                this.LO = 0xffffffff;
-                this.HI = (UInt32)numerator;
+                cpu.LO = 0xffffffff;
+                cpu.HI = (UInt32)numerator;
                 return;
             }
-            
-            this.LO = (UInt32)(numerator / denominator);
-            this.HI = (UInt32)(numerator % denominator);
+
+            cpu.LO = (UInt32)(numerator / denominator);
+            cpu.HI = (UInt32)(numerator % denominator);
 
 
         }
 
-        private void srl(Instruction instruction) {
+        private static void srl(CPU cpu, Instruction instruction) {
 
 
             //Right Shift (Logical)
 
-            UInt32 val = this.regs[instruction.get_rt()];
+            UInt32 val = cpu.regs[instruction.get_rt()];
             UInt32 shift = instruction.get_sa();
 
-            this.outRegs[instruction.get_rd()] = (val >> (Int32)shift);
+            cpu.outRegs[instruction.get_rd()] = (val >> (Int32)shift);
 
         }
 
-        private void mflo(Instruction instruction) { //LO -> GPR[rd]
+        private static void mflo(CPU cpu, Instruction instruction) { //LO -> GPR[rd]
 
-            this.outRegs[instruction.get_rd()] = this.LO;
+            cpu.outRegs[instruction.get_rd()] = cpu.LO;
 
         }
-        private void op_mfhi(Instruction instruction) {        //HI -> GPR[rd]
-            this.outRegs[instruction.get_rd()] = this.HI;
+        private static void mfhi(CPU cpu, Instruction instruction) {        //HI -> GPR[rd]
+            cpu.outRegs[instruction.get_rd()] = cpu.HI;
         }
 
-        private void op_div(Instruction instruction) { // GPR[rs] / GPR[rt] -> (HI, LO) 
+        private static void div(CPU cpu, Instruction instruction) { // GPR[rs] / GPR[rt] -> (HI, LO) 
 
-            Int32 numerator = (Int32)this.regs[instruction.get_rs()];
-            Int32 denominator = (Int32)this.regs[instruction.get_rt()];
+            Int32 numerator = (Int32)cpu.regs[instruction.get_rs()];
+            Int32 denominator = (Int32)cpu.regs[instruction.get_rt()];
 
             if (numerator >= 0 && denominator == 0) {
-                this.LO = 0xffffffff;
-                this.HI = (UInt32)numerator;
+                cpu.LO = 0xffffffff;
+                cpu.HI = (UInt32)numerator;
                 return;
             }
             else if (numerator < 0 && denominator == 0) {
-                this.LO = 1;
-                this.HI = (UInt32)numerator;
+                cpu.LO = 1;
+                cpu.HI = (UInt32)numerator;
                 return;
             }
             else if ((uint)numerator == 0x80000000 && (uint)denominator == 0xffffffff) {
-            
-                this.LO = 0x80000000;
-                this.HI = 0;
+
+                cpu.LO = 0x80000000;
+                cpu.HI = 0;
 
                 return;
             }
 
-     
-            this.LO = (UInt32)unchecked(numerator / denominator);
-            this.HI = (UInt32)unchecked(numerator % denominator);
-            
-           
 
+            cpu.LO = (UInt32)unchecked(numerator / denominator);
+            cpu.HI = (UInt32)unchecked(numerator % denominator);
+            
 
         }
 
-        private void op_sra(Instruction instruction) {
+        private static void sra(CPU cpu, Instruction instruction) {
 
             //Right Shift (Arithmetic)
 
 
-            Int32 val = (Int32)this.regs[instruction.get_rt()];
+            Int32 val = (Int32)cpu.regs[instruction.get_rt()];
             Int32 shift = (Int32)instruction.get_sa();
 
-            this.outRegs[instruction.get_rd()] = ((UInt32)(val >> shift)); 
+            cpu.outRegs[instruction.get_rd()] = ((UInt32)(val >> shift)); 
 
 
         }
 
-        private void op_slti(Instruction instruction) {
+        private static void slti(CPU cpu, Instruction instruction) {
 
             Int32 si = (Int32)instruction.signed_imm();
-            Int32 rg = (Int32)this.regs[instruction.get_rs()];
+            Int32 rg = (Int32)cpu.regs[instruction.get_rs()];
           
                 if (rg<si) {
 
-                this.outRegs[instruction.get_rt()] = 1;
+                cpu.outRegs[instruction.get_rt()] = 1;
               
                  }
             else {
 
-                this.outRegs[instruction.get_rt()] = 0;
+                cpu.outRegs[instruction.get_rt()] = 0;
               
 
             }
         }
 
-        private void op_bxx(Instruction instruction) {         //*
+        private static void bxx(CPU cpu,Instruction instruction) {         //*
             uint value = (uint)instruction.getfull();
             
             if (((value >> 17) & 0xF) == 0x8) {
 
-                this.outRegs[31] = this.next_pc;         //Store return address if the value of bits [20:17] == 0x80
+                cpu.outRegs[31] = cpu.next_pc;         //Store return address if the value of bits [20:17] == 0x80
             }
 
 
             if (((value >> 16) & 1) == 1) {
                 //BGEZ
 
-                if ((Int32)regs[instruction.get_rs()] >= 0) {
-                    branch(instruction.signed_imm());
+                if ((Int32)cpu.regs[instruction.get_rs()] >= 0) {
+                    branch(cpu,instruction.signed_imm());
                 }
 
             }
             else {
                 //BLTZ
 
-                if ((Int32)regs[instruction.get_rs()] < 0) {
-                    branch(instruction.signed_imm());
+                if ((Int32)cpu.regs[instruction.get_rs()] < 0) {
+                    branch(cpu,instruction.signed_imm());
                 }
 
             }
@@ -1581,43 +1625,43 @@ namespace PS1_Emulator {
 
         }
 
-        private void op_lbu(Instruction instruction) {
+        private static void lbu(CPU cpu, Instruction instruction) {
            
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
-            byte b = bus.load8(regs[base_] + addressRegPos);
+            byte b = cpu.bus.load8(cpu.regs[base_] + addressRegPos);
 
             //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
+                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
             }
 
-            pendingload.Item1 = instruction.get_rt();  //Position
-            pendingload.Item2 = (UInt32)b;    //Value
+            cpu.pendingload.Item1 = instruction.get_rt();  //Position
+            cpu.pendingload.Item2 = (UInt32)b;    //Value
 
         }
 
-        private void op_blez(Instruction instruction) {
+        private static void blez(CPU cpu, Instruction instruction) {
 
-            Int32 signedValue = (Int32)regs[instruction.get_rs()];
+            Int32 signedValue = (Int32)cpu.regs[instruction.get_rs()];
 
             if (signedValue <= 0) {
 
-                branch(instruction.signed_imm());
+                branch(cpu,instruction.signed_imm());
 
             }
 
 
         }
 
-        private void op_bgtz(Instruction instruction) {     //Branch if > 0
+        private static void bgtz(CPU cpu, Instruction instruction) {     //Branch if > 0
 
-            Int32 signedValue = (Int32)regs[instruction.get_rs()];      
+            Int32 signedValue = (Int32)cpu.regs[instruction.get_rs()];      
 
             if (signedValue > 0) {
 
-                branch(instruction.signed_imm());
+                branch(cpu,instruction.signed_imm());
 
             }
 
@@ -1625,33 +1669,33 @@ namespace PS1_Emulator {
         }
 
 
-        private void op_subu(Instruction instruction) {
+        private static void subu(CPU cpu, Instruction instruction) {
 
-            this.outRegs[instruction.get_rd()] = regs[instruction.get_rs()] - regs[instruction.get_rt()];
+            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] - cpu.regs[instruction.get_rt()];
         }
 
-        private void op_jalr(Instruction instruction) {
-            
+        private static void jalr(CPU cpu, Instruction instruction) {
+
             // Store return address in reg rd
-            outRegs[instruction.get_rd()] = this.next_pc;
+            cpu.outRegs[instruction.get_rd()] = cpu.next_pc;
 
             // Jump to address in reg rs
-            this.next_pc = regs[instruction.get_rs()];
-            this._branch = true;
+            cpu.next_pc = cpu.regs[instruction.get_rs()];
+            cpu._branch = true;
         }
 
-        private void op_beq(Instruction instruction) {
+        private static void beq(CPU cpu, Instruction instruction) {
           
-            if (regs[instruction.get_rs()].Equals(regs[instruction.get_rt()])) {
-                branch(instruction.signed_imm());
+            if (cpu.regs[instruction.get_rs()].Equals(cpu.regs[instruction.get_rt()])) {
+                branch(cpu,instruction.signed_imm());
                
             }
             
         }
 
-        private void op_lb(Instruction instruction) {
+        private static void lb(CPU cpu, Instruction instruction) {
 
-            if ((this.SR & 0x10000) != 0) {
+            if ((cpu.SR & 0x10000) != 0) {
 
                // Debug.WriteLine("loading from memory ignored, cache is isolated");
                 return;
@@ -1660,21 +1704,21 @@ namespace PS1_Emulator {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
-            sbyte sb = (sbyte)bus.load8(regs[base_] + addressRegPos);
+            sbyte sb = (sbyte)cpu.bus.load8(cpu.regs[base_] + addressRegPos);
 
             //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
+                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
             }
 
-            pendingload.Item1 = instruction.get_rt();  //Position
-            pendingload.Item2 = (UInt32)sb;           //Value
+            cpu.pendingload.Item1 = instruction.get_rt();  //Position
+            cpu.pendingload.Item2 = (UInt32)sb;           //Value
 
         }
 
-        private void op_sb(Instruction instruction) {
+        private static void sb(CPU cpu, Instruction instruction) {
 
-            if ((this.SR & 0x10000) != 0) {
+            if ((cpu.SR & 0x10000) != 0) {
 
                // Debug.WriteLine("store ignored, cache is isolated");      //Ignore write when cache is isolated 
                 return;
@@ -1685,32 +1729,32 @@ namespace PS1_Emulator {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
-            bus.store8(regs[base_] + addressRegPos, (byte)regs[targetReg]);
+            cpu.bus.store8(cpu.regs[base_] + addressRegPos, (byte)cpu.regs[targetReg]);
 
 
 
         }
 
-        private void op_andi(Instruction instruction) {
+        private static void andi(CPU cpu,Instruction instruction) {
             UInt32 targetReg = instruction.get_rt();
             UInt32 value = instruction.getImmediateValue();
             UInt32 rs = instruction.get_rs();
 
 
-            outRegs[targetReg] = regs[rs] & value;
+            cpu.outRegs[targetReg] = cpu.regs[rs] & value;
             
         }
 
-        private void op_jal(Instruction instruction) {
+        private static void jal(CPU cpu, Instruction instruction) {
 
-            this.outRegs[31] = this.next_pc;             //Jump and link, store the PC to return to it later
+            cpu.outRegs[31] = cpu.next_pc;             //Jump and link, store the PC to return to it later
 
-            op_jump(instruction);
+            jump(cpu,instruction);
         }
 
-        private void op_sh(Instruction instruction) {
+        private static void sh(CPU cpu, Instruction instruction) {
 
-            if ((this.SR & 0x10000) != 0) {
+            if ((cpu.SR & 0x10000) != 0) {
 
                // Debug.WriteLine("store ignored, cache is isolated");      //Ignore write, the writing should be on the cache 
                 return;
@@ -1720,64 +1764,64 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
             //Address must be 16 bit aligned
             if (final_address % 2 == 0) {
-                bus.store16(final_address, (UInt16)regs[targetReg]);
+                cpu.bus.store16(final_address, (UInt16)cpu.regs[targetReg]);
             }
             else {
-                exception(StoreAddressError);
+                exception(cpu,StoreAddressError);
             }
 
         }
 
-        private void op_addi(Instruction instruction) {
+        private static void addi(CPU cpu, Instruction instruction) {
 
             Int32 imm = (Int32)(instruction.signed_imm());
-            Int32 s = (Int32)(regs[instruction.get_rs()]);
+            Int32 s = (Int32)(cpu.regs[instruction.get_rs()]);
             try {
                 Int32 value = checked(imm + s);        //Check for signed integer overflow 
 
-                outRegs[instruction.get_rt()] = (UInt32)value;
+                cpu.outRegs[instruction.get_rt()] = (UInt32)value;
             }
             catch (OverflowException) {
-                exception(Overflow);
+                exception(cpu, Overflow);
             }
 
         }
 
-        public void op_lui(Instruction instruction) {
+        public static void lui(CPU cpu, Instruction instruction) {
             UInt32 targetReg = instruction.get_rt();
             UInt32 value = instruction.getImmediateValue();
 
 
-            outRegs[targetReg] = value << 16;
+            cpu.outRegs[targetReg] = value << 16;
          
         }
 
-        public void op_ori(Instruction instruction) {
+        public static void ori(CPU cpu, Instruction instruction) {
             UInt32 targetReg = instruction.get_rt();
             UInt32 value = instruction.getImmediateValue();
             UInt32 rs = instruction.get_rs();
 
-            outRegs[targetReg] = regs[rs] | value;
+            cpu.outRegs[targetReg] = cpu.regs[rs] | value;
            
 
         }
-        public void op_OR(Instruction instruction) {
+        public static void or(CPU cpu, Instruction instruction) {
 
-            outRegs[instruction.get_rd()] = regs[instruction.get_rs()] | regs[instruction.get_rt()];
+            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] | cpu.regs[instruction.get_rt()];
            
 
         }
-        private void op_AND(Instruction instruction) {
-            outRegs[instruction.get_rd()] = regs[instruction.get_rs()] & regs[instruction.get_rt()];
+        private static void and(CPU cpu, Instruction instruction) {
+            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] & cpu.regs[instruction.get_rt()];
            
         }
-        public void op_sw(Instruction instruction) {
+        public static void sw(CPU cpu, Instruction instruction) {
            
-            if ((this.SR & 0x10000) != 0) {
+            if ((cpu.SR & 0x10000) != 0) {
 
                // Debug.WriteLine("store ignored, cache is isolated");      //Ignore write, the writing should be on the cache 
                 return; 
@@ -1787,23 +1831,23 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
             //Address must be 32 bit aligned
             if (final_address % 4 == 0) {
 
                 //if (final_address == 0x80083C58) {Debug.WriteLine("loaded " + regs[targetReg].ToString("x") + " from reg: " + targetReg); }
 
-                bus.store32(final_address, regs[targetReg]);
+                cpu.bus.store32(final_address, cpu.regs[targetReg]);
             }
             else {
-                exception(StoreAddressError);
+                exception(cpu,StoreAddressError);
             }
 
         }
-        public void op_lw(Instruction instruction) {
+        public static void lw(CPU cpu, Instruction instruction) {
             
-            if ((this.SR & 0x10000) != 0) {     //Can be removed?
+            if ((cpu.SR & 0x10000) != 0) {     //Can be removed?
 
                 //Debug.WriteLine("loading from memory ignored, cache is isolated");      
                 return;
@@ -1811,132 +1855,132 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
 
             //Address must be 32 bit aligned
             if (final_address % 4 == 0) {
 
                 //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-                if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                    outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+                if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
+                    cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
                 }
 
-                pendingload.Item1 = instruction.get_rt();          //Position
-                pendingload.Item2 = bus.load32(final_address);    //Value
+                cpu.pendingload.Item1 = instruction.get_rt();          //Position
+                cpu.pendingload.Item2 = cpu.bus.load32(final_address);    //Value
 
               
             }
             else {
-                exception(LoadAddressError);
+                exception(cpu,LoadAddressError);
             }
            
         }
         
-        private void op_add(Instruction instruction) {
+        private static void add(CPU cpu, Instruction instruction) {
 
-            Int32 reg1 = (Int32)regs[instruction.get_rs()];       
-            Int32 reg2 = (Int32)regs[instruction.get_rt()];
+            Int32 reg1 = (Int32)cpu.regs[instruction.get_rs()];       
+            Int32 reg2 = (Int32)cpu.regs[instruction.get_rt()];
 
             try {
                 Int32 value = checked(reg1 + reg2);        //Check for signed integer overflow 
 
-                outRegs[instruction.get_rd()] = (UInt32)value;
+                cpu.outRegs[instruction.get_rd()] = (UInt32)value;
 
             }
             catch (OverflowException) {
-                exception(Overflow);    
+                exception(cpu,Overflow);    
             
             }
 
           
         }
 
-        private void op_jr(Instruction instruction) {
+        private static void jr(CPU cpu, Instruction instruction) {
 
-            this.next_pc = regs[instruction.get_rs()];      //Return or Jump to address in register 
-            this._branch = true;
+            cpu.next_pc = cpu.regs[instruction.get_rs()];      //Return or Jump to address in register 
+            cpu._branch = true;
            
         }
 
-        private void op_addu(Instruction instruction) {
+        private static void addu(CPU cpu, Instruction instruction) {
 
 
-            outRegs[instruction.get_rd()] = regs[instruction.get_rs()] + regs[instruction.get_rt()];
+            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] + cpu.regs[instruction.get_rt()];
           
         }
 
-        private void op_stlu(Instruction instruction) {
-            if (regs[instruction.get_rs()] < regs[instruction.get_rt()]) { //Int32 ?
+        private static void sltu(CPU cpu, Instruction instruction) {
+            if (cpu.regs[instruction.get_rs()] < cpu.regs[instruction.get_rt()]) { //Int32 ?
 
-                outRegs[instruction.get_rd()] = (UInt32) 1;
+                cpu.outRegs[instruction.get_rd()] = (UInt32) 1;
 
             }
             else {
-                outRegs[instruction.get_rd()] = (UInt32) 0;
+                cpu.outRegs[instruction.get_rd()] = (UInt32) 0;
 
             }
 
           
         }
 
-        public void op_sll(Instruction instruction) {
+        public static void sll(CPU cpu,Instruction instruction) {
 
-            outRegs[instruction.get_rd()] = regs[instruction.get_rt()] << (Int32)instruction.get_sa();
+            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rt()] << (Int32)instruction.get_sa();
            
         }
-        private void op_addiu(Instruction instruction) {
+        private static void addiu(CPU cpu, Instruction instruction) {
 
-            outRegs[instruction.get_rt()] = regs[instruction.get_rs()] + instruction.signed_imm();
+            cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
             
 
         }
 
-        private void op_jump(Instruction instruction) {
+        private static void jump(CPU cpu, Instruction instruction) {
 
-            next_pc = (next_pc & 0xf0000000) | (instruction.imm_jump() << 2);
-            this._branch = true;
+            cpu.next_pc = (cpu.next_pc & 0xf0000000) | (instruction.imm_jump() << 2);
+            cpu._branch = true;
 
 
         }
 
 
-        private void op_rfe(Instruction instruction) {
+        private static void rfe(CPU cpu, Instruction instruction) {
             if (instruction.get_subfunction() != 0b010000) {    //Check bits [5:0]
                 throw new Exception("Invalid cop0 instruction: " + instruction.getfull().ToString("X"));
             }
 
-            UInt32 mode = this.SR & 0x3f;                   //Enable interrupts
-            this.SR = (uint)(this.SR & ~0x3f);
-            this.SR = this.SR | (mode >> 2);
+            UInt32 mode = cpu.SR & 0x3f;                   //Enable interrupts
+            cpu.SR = (uint)(cpu.SR & ~0x3f);
+            cpu.SR = cpu.SR | (mode >> 2);
         }
 
-        private void op_mfc0(Instruction instruction) {
+        private static void mfc0(CPU cpu, Instruction instruction) {
             //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
+            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
+                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
             }
 
-            pendingload.Item1 = instruction.get_rt();
+            cpu.pendingload.Item1 = instruction.get_rt();
 
             switch (instruction.get_rd()) {
                 //MFC has load delay
 
                 case 12:
-                    
-                    pendingload.Item2 = this.SR;
+
+                    cpu.pendingload.Item2 = cpu.SR;
 
                     break;
 
                 case 13:
 
-                    pendingload.Item2 = this.cause;
+                    cpu.pendingload.Item2 = cpu.cause;
 
                     break;
 
                 case 14:
 
-                    pendingload.Item2 = this.epc;
+                    cpu.pendingload.Item2 = cpu.epc;
 
                     break;
 
@@ -1949,7 +1993,7 @@ namespace PS1_Emulator {
 
         }
 
-        private void op_mtc0(Instruction instruction) {
+        private static void mtc0(CPU cpu, Instruction instruction) {
 
             switch (instruction.get_rd()) {
 
@@ -1960,7 +2004,7 @@ namespace PS1_Emulator {
                 case 9:
                 case 11:
 
-                    if (regs[instruction.get_rt()] != 0) {
+                    if (cpu.regs[instruction.get_rt()] != 0) {
 
                         throw new Exception("Unhandled write to cop0 register: " + instruction.get_rd());
 
@@ -1970,14 +2014,14 @@ namespace PS1_Emulator {
 
                 case 12:
 
-                    this.SR = regs[instruction.get_rt()];            //Setting the status register's 16th bit
+                    cpu.SR = cpu.regs[instruction.get_rt()];            //Setting the status register's 16th bit
 
                     break;
 
                 case 13:
                     //cause register, mostly read-only data describing the
                     //cause of an exception. Apparently only bits[9:8] are writable
-                    if (regs[instruction.get_rt()] != 0) { 
+                    if (cpu.regs[instruction.get_rt()] != 0) { 
 
                         throw new Exception("Unhandled write to CAUSE register: " + instruction.get_rd());
 
@@ -1994,20 +2038,20 @@ namespace PS1_Emulator {
 
 
         }
-        private void op_bne(Instruction instruction) {
+        private static void bne(CPU cpu, Instruction instruction) {
 
-            if (!regs[instruction.get_rs()].Equals(regs[instruction.get_rt()])) {
-                branch(instruction.signed_imm());
+            if (!cpu.regs[instruction.get_rs()].Equals(cpu.regs[instruction.get_rt()])) {
+                branch(cpu,instruction.signed_imm());
             }
 
 
         }
 
-        private void branch(UInt32 offset) {
+        private static void branch(CPU cpu, UInt32 offset) {
             offset = offset << 2;
-            this.next_pc = this.next_pc + offset;
-            this.next_pc = this.next_pc - 4;        //Cancel the +4 from the emu cycle 
-            this._branch = true;
+            cpu.next_pc = cpu.next_pc + offset;
+            cpu.next_pc = cpu.next_pc - 4;        //Cancel the +4 from the emu cycle 
+            cpu._branch = true;
                     
             
         }

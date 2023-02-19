@@ -368,6 +368,7 @@ namespace PS1_Emulator {
 
 
             if (!showTextures) {
+
                 GL.Uniform1(display_areay_X_Loc, disp_x);
                 GL.Uniform1(display_areay_Y_Loc, disp_y);
 
@@ -425,14 +426,14 @@ namespace PS1_Emulator {
             for (int i=0; i < CYCLES_PER_FRAME; i++) {        //Timings are nowhere near accurate 
                 if (!paused) {
 
-                    /*try {
+                    try {
                         cpu.emu_cycle();
 
                     }catch(Exception ex) {
                          File.WriteAllTextAsync("Crash.log", ex.ToString());
                          Close();
-                    }*/
-                    cpu.emu_cycle();
+                    }
+                    //cpu.emu_cycle();
 
 
                     CPU.incrementSynchronizer();
