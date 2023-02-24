@@ -15,22 +15,22 @@ namespace PS1_Emulator {
 
     public class Interconnect {
         UInt32 offset;
-        BIOS bios;
-        MemoryControl memoryControl;
-        RAM_SIZE ram_size;
-        CACHECONTROL cacheControl;
-        RAM ram;
-        SPU spu;
-        EXPANSION1 expansion1;
-        EXPANSION2 expansion2;
-        DMA DMA;
+        public BIOS bios;
+        public MemoryControl memoryControl;
+        public RAM_SIZE ram_size;
+        public CACHECONTROL cacheControl;
+        public RAM ram;
+        public SPU spu;
+        public EXPANSION1 expansion1;
+        public EXPANSION2 expansion2;
+        public DMA DMA;
         public GPU GPU;
         public CD_ROM CD_ROM;   //for hacky stuff on the cpu side 
-        TIMER1 TIMER1;
-        TIMER2 TIMER2;
+        public TIMER1 TIMER1;
+        public TIMER2 TIMER2;
         public IO_PORTS IO_PORTS;
-        Scratchpad scratchpad;
-        MDEC MDEC;
+        public Scratchpad scratchpad;
+        public MDEC MDEC;
 
         UInt32[] Region_Mask = { 
         
@@ -76,15 +76,8 @@ namespace PS1_Emulator {
             }
 
         }
-        public void TIMER2_tick(int cycles) {
-            this.TIMER2.tick(cycles);
-        }
-        public void SPU_Tick(int cycles) {
-            this.spu.SPU_Tick(cycles);
-        }
-        public void IOports_tick(int cycles) {
-            this.IO_PORTS.tick(cycles);
-        }
+       
+       
 
         public UInt32 load32(UInt32 address) {
             
@@ -351,10 +344,10 @@ namespace PS1_Emulator {
             }else if (this.CD_ROM.range.contains(mask(address)) != null) {
                 offset = (UInt32)CD_ROM.range.contains(mask(address));
 
-                if (CDROM_delay_read > 0) {
+                /*if (CDROM_delay_read > 0) {
                     //return 0;
                     
-                }
+                }*/
                 return this.CD_ROM.load8(offset);
 
             }
@@ -529,14 +522,16 @@ namespace PS1_Emulator {
             }else if (this.CD_ROM.range.contains(mask(address)) != null) {
                 offset = (UInt32)CD_ROM.range.contains(mask(address));
 
-                if (CDROM_delay_write > 0) {
+                /*if (CDROM_delay_write > 0) {
                  //   return;
 
                 }
                 else {
                     this.CD_ROM.store8(offset, value);
 
-                }
+                }*/
+                this.CD_ROM.store8(offset, value);
+
                 return;
 
             }
@@ -629,11 +624,6 @@ namespace PS1_Emulator {
             if (transfer_size == null) {
                 throw new Exception("transfer size is null, LinkedList mode?");
 
-            }
-
-            // I asuume a word trasfer from CDROM
-            if (transfer_size != 512 && ch.get_portnum() == 3) {
-                Debug.WriteLine("CDROM DMA transfer size: " + transfer_size);
             }
 
             while (transfer_size > 0) {
@@ -741,12 +731,9 @@ namespace PS1_Emulator {
 
         }
 
-        internal void GPU_tick(int cycles) {
+       
 
-            this.GPU.tick(cycles);
-        }
-
-        internal void CDROM_tick(int cycles) {
+        public void CDROM_tick(int cycles) {
             
             this.CD_ROM.tick(cycles);
             CDROM_delay_read -= cycles;

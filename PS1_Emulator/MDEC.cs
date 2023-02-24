@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    internal class MDEC {
+    public class MDEC {
         public Range range = new Range(0x1F801820,5);
         UInt32 cotrol;
 

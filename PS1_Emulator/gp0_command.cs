@@ -17,6 +17,13 @@ namespace PS1_Emulator {
             this.buffer = new uint[num_of_paramerters];
 
         }
+        public GP0_Command(List<uint> bufferList) {
+
+            this.num_of_parameters = bufferList.Count;
+            this.opcode = bufferList[0] >> 24 & 0xff;
+            this.buffer = bufferList.ToArray();
+
+        }
         public void add_parameter(uint parameter) {
             buffer[parameters_ptr++] = parameter;
         }

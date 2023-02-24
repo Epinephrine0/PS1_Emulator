@@ -26,6 +26,7 @@ namespace PS1_Emulator {
 
 
         public UInt16[] TexData;    //Array of texture content for VRAM -> CPU transfer
+        public List<uint> tmp = new List<uint>();   //N number of vertices for lines
 
         UInt16 vram_x;              
         UInt16 vram_y;
@@ -122,11 +123,6 @@ namespace PS1_Emulator {
         public UInt16 display_line_end;
 
 
-        UInt32 evenodd;
-
-        private int vblank = 0;
-        private int hblank = 0;
-
         TIMER1 TIMER1;
 
         public GPU(Window w, ref TIMER1 t1) {
@@ -148,7 +144,6 @@ namespace PS1_Emulator {
             this.display_disabled = true;
             this.interrupt = false;
             this.dma_direction = DmaDirection["Off"];
-            this.evenodd = 0;
             this.window = w;
             this.TIMER1 = t1;
 
@@ -223,43 +218,49 @@ namespace PS1_Emulator {
 
         }
 
-        int vblank_counter = 0;
-        int hblank_counter = 0;
+        double scanlines = 0;
+        double scanlines_per_frame = 0;
+        double video_cycles = 0;
+        double video_cycles_per_scanline = 0;
+
         public void tick(int cycles) {
-            vblank_counter += cycles;
-            hblank_counter += cycles;
-            
-            if (vblank_counter >= vblank && vblank > 0) {
-                vblank_counter = 0;
+            video_cycles += cycles;
+            //Console.WriteLine("GPU: " + cycles);
 
-                if (!display_disabled) {
-                    window.display();
+            if (video_cycles >= video_cycles_per_scanline && video_cycles_per_scanline > 0) {
+                video_cycles -= video_cycles_per_scanline;
+                scanlines++;
+
+                if (scanlines >= scanlines_per_frame && scanlines_per_frame > 0) {
+                    scanlines -= scanlines_per_frame;
+
+                    if (!display_disabled) {
+                        window.display();
+                    }
+
+                    IRQ_CONTROL.IRQsignal(0);     //VBLANK
+                    //IRQ_CONTROL.IRQsignal(9);   //Fake SPU IRQ
+
+                    this.TIMER1.GPUinVblank = true;
                 }
 
-                IRQ_CONTROL.IRQsignal(0);
-                IRQ_CONTROL.IRQsignal(9);   //Fake
-
-                this.TIMER1.GPUinVblank = true;
-
-            }
-
-            if (hblank_counter >= hblank && hblank > 0) {
-                hblank_counter = 0;
                 if (this.TIMER1.isUsingHblank()) {
-                     this.TIMER1.tick();
+                    this.TIMER1.tick();
                 }
 
             }
+
 
         }
 
         public void write_GP0(UInt32 value) {
 
             UInt32 opcode = (value >> 24) & 0xff;
-
             if (currentCommand != null) {
                 opcode = currentCommand.opcode;
 
+            } else if (tmp.Count > 0) {
+                opcode = (tmp[0] >> 24) & 0xff; //Lines
             }
             
 
@@ -564,6 +565,71 @@ namespace PS1_Emulator {
                     }
 
                     break;
+
+                case 0x40: //opaque
+                case 0x42: //semi-transparent
+
+                    if (currentCommand == null) {
+                        currentCommand = new GP0_Command(opcode, 3);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_mono_line(currentCommand);
+                        tmp.Clear();
+                        currentCommand = null;
+                        
+                        return;
+                    }
+
+                    break;
+
+                case 0x48:  //opaque
+                case 0x4A: //semi-transparent
+                    if (value == 0x55555555) {
+
+                        currentCommand = new GP0_Command(tmp);
+                        gp0_mono_line(currentCommand);
+                        tmp.Clear();
+                        currentCommand = null;
+                        return;
+                    }
+                    tmp.Add(value);
+
+                    break;
+
+                case 0x50: //opaque
+                case 0x52: //semi-transparent
+                    if (currentCommand == null) {
+                        currentCommand = new GP0_Command(opcode, 4);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_shaded_line(currentCommand);
+                        currentCommand = null;
+                        return;
+                    }
+
+                    break;
+
+                case 0x58:  //opaque
+                case 0x5A: //semi-transparent
+                    if (value == 0x55555555) {
+
+                        currentCommand = new GP0_Command(tmp);
+                        gp0_shaded_line(currentCommand);
+                        tmp.Clear();
+                        currentCommand = null;
+                        return;
+                    }
+                    tmp.Add(value);
+                    break;
+
                 //Undocumented/Nonsense
                 case 0x21:
                 case 0x23:
@@ -582,6 +648,57 @@ namespace PS1_Emulator {
             
             }
 
+
+        }
+
+        private void gp0_mono_line(GP0_Command currentCommand) {
+
+            Int16[] vertices = new Int16[(currentCommand.num_of_parameters - 1) * 3];   //X,Y,Z
+            byte[] colors = new byte[(currentCommand.num_of_parameters - 1) * 3];       //R,G,B
+            
+
+            for (int i = 0; i < colors.Length; i += 3) {
+                colors[i] = (byte)currentCommand.buffer[0];
+                colors[i+1] = (byte)(currentCommand.buffer[0] >> 8);
+                colors[i+2] = (byte)(currentCommand.buffer[0] >> 16);
+
+            }
+
+            int j = 0;
+            for (int i = 1; i < currentCommand.num_of_parameters; i++) {
+                    vertices[j++] = (Int16)currentCommand.buffer[i];
+                    vertices[j++] = (Int16)(currentCommand.buffer[i] >> 16);
+                    vertices[j++] = 0;
+
+            }
+            
+            
+            window.drawLines(ref vertices, ref colors);
+
+        }
+
+        private void gp0_shaded_line(GP0_Command currentCommand) {
+            Int16[] vertices = new Int16[(currentCommand.num_of_parameters / 2) * 3];   //X,Y,Z
+            byte[] colors = new byte[(currentCommand.num_of_parameters / 2) * 3];       //R,G,B
+            int j = 0;
+
+            for (int i = 0; i < currentCommand.num_of_parameters; i+=2) {
+                colors[j++] = (byte)currentCommand.buffer[i];
+                colors[j++] = (byte)(currentCommand.buffer[i] >> 8);
+                colors[j++] = (byte)(currentCommand.buffer[i] >> 16);
+
+            }
+
+            j = 0;
+
+            for (int i = 1; i < currentCommand.num_of_parameters; i += 2) {
+                vertices[j++] = (Int16)currentCommand.buffer[i];
+                vertices[j++] = (Int16)(currentCommand.buffer[i] >> 16);
+                vertices[j++] = 0;
+
+            }
+            
+            window.drawLines(ref vertices,ref colors);
 
         }
 
@@ -881,6 +998,7 @@ namespace PS1_Emulator {
 
 
             window.ScissorBox(drawing_area_left, drawing_area_top, drawing_area_right-drawing_area_left, drawing_area_bottom-drawing_area_top);
+       
 
         }
 
@@ -1049,21 +1167,17 @@ namespace PS1_Emulator {
                 case true:
 
                     this.vmode = VMode["Pal"];
-                    vblank = (int)(3406 * 314);
-                    hblank = 3406;
-
+                    scanlines_per_frame = 314;
+                    video_cycles_per_scanline = 3406.1;
 
                     break;
 
                 case false:
 
                     this.vmode = VMode["Ntsc"];
-                    vblank = (int)(3413 * 263);
-                    hblank = 3413;
-
-
-
-
+                    scanlines_per_frame = 263;
+                    video_cycles_per_scanline = 3413.6;
+                    
                     break;
             }
 
@@ -1247,11 +1361,16 @@ namespace PS1_Emulator {
         private void gp0_fill_rectangle() {
             uint color = (uint)currentCommand.buffer[0];             //First command contains color
 
-            Int16 x = (Int16)(currentCommand.buffer[1] & 0x3ff);
-            Int16 y = (Int16)((currentCommand.buffer[1] >> 16) & 0x3ff);
+            ushort x = (ushort)(currentCommand.buffer[1] & 0x3FF);
+            ushort y = (ushort)((currentCommand.buffer[1] >> 16) & 0x1FF);
 
+            //only vram fill?
             //int width = (int)(((currentCommand.buffer[2] & 0x3FF) + 0x0F) & (~0x0F));
             //int height = (int)((currentCommand.buffer[2] >> 16) & 0x1FF);
+
+            float r = ((float)(color & 0xff)) / 255.0f;                  //Scale to float of range [0,1]
+            float g = ((float)((color >> 8) & 0xff)) / 255.0f;           //because it is going to be passed 
+            float b = ((float)((color >> 16) & 0xff)) / 255.0f;          //directly to GL.clear()
 
             ushort width;
             ushort height;
@@ -1259,26 +1378,33 @@ namespace PS1_Emulator {
             switch (currentCommand.opcode) {
                 case 0x68:
                     width = height = 1;
-                    break;
-                case 0x60:
-                case 0x62:  //0x62 causes problem in ridge racer
+
+                    window.rectFill(r, g, b, x, y, width, height);
+                    return;
+
+                
+                case 0x60:  //0x60 causes problem in ridge racer
+                case 0x62:
+                    width = (ushort)(currentCommand.buffer[2] & 0x3FF);
+                    height = (ushort)((currentCommand.buffer[2] >> 16) & 0x1FF);
+                    window.rectFill(r, g, b, x, y, width, height);
+                    return;
+
                 case 0x02:
 
                     width = (ushort)(currentCommand.buffer[2] & 0x3FF);
                     height = (ushort)((currentCommand.buffer[2] >> 16) & 0x1FF);
+                    window.vramFill(r, g, b, x, y, width, height);
 
                     break;
 
                 default:
                     throw new Exception("GP0 opcode: " + currentCommand.opcode.ToString("x"));
             }
+         
 
+           
 
-            float r = (float)((color & 0xff) / 255.0);                  //Scale to float of range [0,1]
-            float g = (float)(((color >> 8) & 0xff) / 255.0);           //because it is going to be passed 
-            float b = (float)(((color >> 16) & 0xff) / 255.0);          //directly to GL.clear()
-
-            window.fill(r,g,b,x,y,width,height);
         }
 
         private void gp0_quad_texture_opaque() {

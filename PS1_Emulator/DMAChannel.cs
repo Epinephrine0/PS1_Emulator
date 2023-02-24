@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    internal class DMAChannel {
+    public class DMAChannel {
          UInt32 portnum;
 
         //Control register

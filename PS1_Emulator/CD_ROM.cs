@@ -57,10 +57,6 @@ namespace PS1_Emulator {
         byte IRQ_flag;  //0-7
 
         byte requestRegister;
-
-        int number_of_Responses = 0;
-        int responseLength = 0;
-
         byte stat = 0b00000010;
 
         //Mode from Setmode
@@ -68,6 +64,10 @@ namespace PS1_Emulator {
         uint lastSize;
         bool autoPause;
         bool report;
+
+        uint m; //Minutes
+        uint s; //Seconds
+        uint f; //Sectors
 
         public enum Command {
             GetStat,
@@ -96,6 +96,7 @@ namespace PS1_Emulator {
         State CDROM_State;
         Command command;
 
+        public byte padding;
 
         bool gamePresent = true;
         bool ledOpen = false;
@@ -103,7 +104,7 @@ namespace PS1_Emulator {
         byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Crash Bandicoot\Crash Bandicoot.bin");
 
         private byte CDROM_Status() {
-            DRQSTS = (byte)((currentSector.Count > 0)? 1 : 0);
+            DRQSTS = (byte)((currentSector.Count > 0) ? 1 : 0);
             RSLRRDY = (byte)((responseBuffer.Count > 0) ? 1 : 0);
             byte status = (byte)((BUSYSTS << 7) | (DRQSTS << 6) | (RSLRRDY << 5) | (PRMWRDY << 4) | (PRMEMPT << 3) | (ADPBUSY << 2) | Index);
             //Console.WriteLine("[CDROM] Reading Status: " + status.ToString("x"));
@@ -254,7 +255,6 @@ namespace PS1_Emulator {
 
 
         }
-        public byte padding;
 
         public byte load8(UInt32 offset) {
 
@@ -305,7 +305,6 @@ namespace PS1_Emulator {
             }
 
         }
-        int busyDelay;
         public void controller(byte command) {
 
             //BUSYSTS = 1;    //Command busy flag
@@ -664,10 +663,7 @@ namespace PS1_Emulator {
 
         }
 
-        uint m; //Minutes
-        uint s; //Seconds
-        uint f; //Sectors
-
+    
         private void setloc() {
             CDROM_State = State.RespondingToCommand;
             command = Command.Other;

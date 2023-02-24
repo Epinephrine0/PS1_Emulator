@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    internal class RAM_SIZE {      //Configured by bios
+    public class RAM_SIZE {      //Configured by bios
 
         public Range range = new Range(0x1f801060, 4);
         UInt32[] data = new UInt32[4];

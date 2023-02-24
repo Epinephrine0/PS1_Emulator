@@ -1,17 +1,6 @@
-﻿using NAudio.Wave;
-using OpenTK.Audio.OpenAL;
-using OpenTK.Graphics.OpenGL;
-using System;
-using System.Buffers.Text;
-using System.Collections.Generic;
-using System.Diagnostics;
+﻿using System;
 using System.IO;
-using System.Linq;
-using System.Net;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
-using static OpenTK.Graphics.OpenGL.GL;
+using System.Runtime.CompilerServices;
 
 namespace PS1_Emulator {
     public unsafe class CPU {
@@ -37,7 +26,7 @@ namespace PS1_Emulator {
         //Geometry Transformation Engine - Coprocessor 2
         GTE gte = new GTE();
 
-        public static int sync = 0;
+        public static int cycles = 0;
 
         //Exception codes
         private const UInt32 IRQ = 0x0;
@@ -126,7 +115,7 @@ namespace PS1_Emulator {
             current_pc = pc;   //Save current pc In case of an exception
 
             //Should move these to J,Jal,Jr,Jalr instead of checking on every instruction
-            //intercept(pc);
+            intercept(pc);
             /*if (fastBoot) {       //Skip Sony logo, doesn't work 
                 if (pc == 0x80030000) {
                     pc = outRegs[31];
@@ -136,11 +125,10 @@ namespace PS1_Emulator {
             }*/
             //----------------------------------------------------------------------
 
-            bus.TIMER1_tick();   
 
             //PC must be 32 bit aligned 
-            if (current_pc % 4 !=0) {
-                exception(this,LoadAddressError);
+            if (current_pc % 4 != 0) {
+                exception(this, LoadAddressError);
                 return;
             }
 
@@ -159,7 +147,7 @@ namespace PS1_Emulator {
             outRegs[0] = 0;
 
 
-            if (IRQ_CONTROL.isRequestingIRQ()) {                          //Interrupt check 
+            if (IRQ_CONTROL.isRequestingIRQ()) {  //Interrupt check 
                 cause |= 1 << 10;
 
                 if (((SR & 1) != 0) && (((SR >> 10) & 1) != 0)) {
@@ -167,10 +155,8 @@ namespace PS1_Emulator {
                     return;
                 }
 
-
             }
 
-            //decode_execute(current);
             executeInstruction(current);
 
              outRegs[0] = 0;
@@ -178,6 +164,7 @@ namespace PS1_Emulator {
             for (int i = 0; i < regs.Length; i++) {
                 regs[i] = outRegs[i];
             }
+
         }
 
         private void executeInstruction(Instruction instruction) {
@@ -188,7 +175,7 @@ namespace PS1_Emulator {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
-                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gte\test-all\test-all.exe");
+                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gpu\lines\lines.exe");
 
                     break;
 
@@ -476,30 +463,8 @@ namespace PS1_Emulator {
 
 
         }
-        public void SPUtick() {
-
-            bus.SPU_Tick(sync);        //SPU Clock
-
-
-        }
-        public void IOtick() {
-            bus.IOports_tick(sync);
-        }
-
-        public void GPUtick() {
-           double cycles = (double)sync * (double)11 / 7;
-            
-           bus.GPU_tick((int)cycles);
-        }
-        internal void CDROMtick() {
-            bus.CDROM_tick(sync);
-
-        }
-
-        public static void incrementSynchronizer() {
-            CPU.sync++;
-
-        }
+        
+       
        
         /*public void decode_execute(Instruction instruction) {
 
@@ -1447,7 +1412,18 @@ namespace PS1_Emulator {
 
         private static void exception(CPU cpu, UInt32 exceptionCause){
 
-           // if ((bus.load32(pc) >> 26) == 0x12) { return; }
+            //If an interrupt occurs "on" a GTE command (cop2cmd), then the GTE command is executed 
+            //ProjectPSX:
+            //if ((cpu.bus.load32(cpu.current_pc) >> 26) == 0x12) { return; }
+
+            /*
+                PSX-SPX:
+                if (cause AND 7Ch)=00h                      ;if excode=interrupt
+                     if ([epc] AND FE000000h)=4A000000h     ;and opcode=cop2cmd
+                         epc=epc+4                          ;then skip that opcode
+             */
+
+
 
             UInt32 handler;                                         //Get the handler
 
@@ -1472,13 +1448,18 @@ namespace PS1_Emulator {
             cpu.epc = cpu.current_pc;                 //Save the current PC in register EPC
 
             if (cpu.delay_slot) {                   //in case an exception occurs in a delay slot
-                cpu.epc = cpu.epc - 4;
+                cpu.epc -= 4;
                 cpu.cause = (UInt32)(cpu.cause | (1 << 31));
+            }
+
+            if (exceptionCause == IRQ && (cpu.epc & 0xFE000000) == 0x4A000000) {
+                cpu.epc += 4;
             }
 
             cpu.pc = handler;                          //Jump to the handler address (no delay)
             cpu.next_pc = cpu.pc + 4;
 
+            
         }
 
         private static void slt(CPU cpu, Instruction instruction) {

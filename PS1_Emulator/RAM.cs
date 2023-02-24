@@ -5,19 +5,20 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    internal class RAM {
+    public class RAM {
 
         public Range range = new Range(0x00000000, 2*1024*1024);
         byte[] data;
+
         public RAM() {
 
             this.data = new byte[2*1024*1024];
             
-        
         }
+
         public UInt32 read(UInt32 offset) {
 
-            CPU.incrementSynchronizer();
+            CPU.cycles++;   
 
             UInt32 b0 = data[offset + 0];
             UInt32 b1 = data[offset + 1];
@@ -27,7 +28,7 @@ namespace PS1_Emulator {
             return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
         }
         public void write(UInt32 offset, UInt32 value) {
-            CPU.incrementSynchronizer();
+            CPU.cycles++;
 
 
             byte b0 = (byte) value;
@@ -44,12 +45,12 @@ namespace PS1_Emulator {
         }
 
         internal void store8(UInt32 offset, byte value) {
-            CPU.incrementSynchronizer();
+            CPU.cycles++;
 
             data[offset] = value;
         }
         internal void store16(UInt32 offset, UInt16 value) {
-            CPU.incrementSynchronizer();
+            CPU.cycles++;
 
             byte b0 = (byte)value;
             byte b1 = (byte)(value >> 8);
@@ -59,7 +60,7 @@ namespace PS1_Emulator {
         }
         internal byte load8(UInt32 offset) {
 
-            CPU.incrementSynchronizer();
+            CPU.cycles++;
 
 
             return data[offset];
@@ -67,7 +68,7 @@ namespace PS1_Emulator {
 
         internal UInt16 load16(UInt32 offset) {
 
-            CPU.incrementSynchronizer();
+            CPU.cycles++;
 
             UInt16 b0 = data[offset + 0];
             UInt16 b1 = data[offset + 1];

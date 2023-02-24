@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace PS1_Emulator {
 
-    internal class MemoryControl {
+    public class MemoryControl {
         public Range range = new Range(0x1f801000, 36);
 
 

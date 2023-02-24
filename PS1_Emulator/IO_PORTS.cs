@@ -221,7 +221,6 @@ namespace PS1_Emulator {
 
                     }
 
-
                     if (!ACKLevel) {
                         controller.sequenceNum = 0;
                         memoryCard.reset();

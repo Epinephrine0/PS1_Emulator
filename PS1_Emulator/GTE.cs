@@ -726,6 +726,7 @@ namespace PS1_Emulator {
 
         }
         public void execute(Instruction currentCommand) {
+
             uint opcode = currentCommand.get_subfunction();        //0-5
             FLAG = 0;
 
@@ -739,11 +740,13 @@ namespace PS1_Emulator {
                 case 0x01:
 
                     RTPS(0, true);
+                    CPU.cycles += 15;
                     break;
 
                 case 0x10:
 
                     DPCS(false);
+                    CPU.cycles += 8;
                     break;
 
                 case 0x30:
@@ -751,34 +754,37 @@ namespace PS1_Emulator {
                     RTPS(0, false);
                     RTPS(1, false);
                     RTPS(2, true);
+                    CPU.cycles += 23;
                     break;
 
                 case 0x6:
 
                     NCLIP();
-
+                    CPU.cycles += 8;
                     break;
 
                 case 0x11:
 
                     INTPL();
+                    CPU.cycles += 8;
                     break;
 
                 case 0x12:
 
                     MVMVA(mx, vx, tx);
+                    CPU.cycles += 8;
                     break;
 
                 case 0x13:
 
                     NCDS(0);
-
+                    CPU.cycles += 19;
                     break;
 
                 case 0x14:
 
                     CDP();
-
+                    CPU.cycles += 13;
                     break;
 
                 case 0x16:
@@ -786,39 +792,44 @@ namespace PS1_Emulator {
                     NCDS(0);
                     NCDS(1);
                     NCDS(2);
-
+                    CPU.cycles += 44;
                     break;
 
                 case 0x2D:
 
                     AVSZ3();
+                    CPU.cycles += 5;
                     break;
 
                 case 0x2E:
 
                     AVSZ4();
+                    CPU.cycles += 6;
                     break;
 
 
                 case 0xC:
 
                     OP();
-
+                    CPU.cycles += 6;
                     break;
 
                 case 0x1B:
 
                     NCCS(0);
+                    CPU.cycles += 17;
                     break;
 
                 case 0x1C:
 
                     CC();
+                    CPU.cycles += 11;
                     break;
 
                 case 0x1E:
 
                     NCS(0);
+                    CPU.cycles += 14;
                     break;
 
                 case 0x20:
@@ -826,19 +837,19 @@ namespace PS1_Emulator {
                     NCS(0);
                     NCS(1);
                     NCS(2);
-
+                    CPU.cycles += 30;
                     break;
 
                 case 0x28:
 
                     SQR();
-
+                    CPU.cycles += 5;
                     break;
 
                 case 0x29:
 
                     DCPL();
-
+                    CPU.cycles += 8;
                     break;
 
                 case 0x2A:
@@ -846,19 +857,19 @@ namespace PS1_Emulator {
                     DPCS(true);
                     DPCS(true);
                     DPCS(true);
-
+                    CPU.cycles += 17;
                     break;
 
                 case 0x3D:
 
                     GPF();
-
+                    CPU.cycles += 5;
                     break;
 
                 case 0x3E:
 
                     GPL();
-
+                    CPU.cycles += 5;
                     break;
 
                 case 0x3F:
@@ -866,8 +877,9 @@ namespace PS1_Emulator {
                     NCCS(0);
                     NCCS(1);
                     NCCS(2);
-
+                    CPU.cycles += 39;
                     break;
+
                 default:
                     throw new Exception("Unimplemented GTE Opcode: " + opcode.ToString("x"));
 

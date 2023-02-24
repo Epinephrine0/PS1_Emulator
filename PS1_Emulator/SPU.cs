@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 using static PS1_Emulator.Voice.ADSR;
 
 namespace PS1_Emulator {
-    internal class SPU {                            //Thanks to BlueStorm 
+    public class SPU {                            //Thanks to BlueStorm 
         const uint baseAddress = 0x1f801c00;
         public Range range = new Range(baseAddress, 640);
 
@@ -59,7 +59,7 @@ namespace PS1_Emulator {
 
         private WaveOutEvent waveOutEvent = new WaveOutEvent();
         private BufferedWaveProvider bufferedWaveProvider = new BufferedWaveProvider(new WaveFormat());
-
+        private WaveFileWriter waveFileWriter = new WaveFileWriter("output.wav", new WaveFormat());     //For audio dumping
 
         public SPU() {
 
@@ -453,15 +453,14 @@ namespace PS1_Emulator {
 
         }
 
-        float delay = 0;
-
         private int clk_counter = 0;
-        public const int CYCLES_PER_SAMPLE = 0x300;
+        public const uint CYCLES_PER_SAMPLE = 0x300;
         byte[] outputBuffer = new byte[2048];
         int outputBufferPtr = 0;
         int sumLeft;
         int sumRight;
         public void SPU_Tick(int cycles) {        //SPU Clock
+            
             clk_counter += cycles;
 
             if (clk_counter < CYCLES_PER_SAMPLE) {
@@ -578,6 +577,7 @@ namespace PS1_Emulator {
 
 
             bufferedWaveProvider.AddSamples(samples, 0, samples.Length);
+           
 
             if (waveOutEvent.PlaybackState != PlaybackState.Playing) {
                 waveOutEvent.Volume = 1; 
