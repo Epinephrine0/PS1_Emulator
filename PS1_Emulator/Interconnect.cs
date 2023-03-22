@@ -133,7 +133,7 @@ namespace PS1_Emulator {
             }
 
 
-            else if (this.TIMER0.contains(mask(address)) != null) {  //Return 0, No idea if correct since the guide didn't mention timer reads (page 109) 
+            else if (this.TIMER0.contains(mask(address)) != null) { 
 
                 //Console.WriteLine("Unhandled read to TIMER0 register at address: " + address.ToString("X"));
                 return 0;  

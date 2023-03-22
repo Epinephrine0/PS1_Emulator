@@ -98,10 +98,10 @@ namespace PS1_Emulator {
 
         public byte padding;
 
-        bool gamePresent = true;
+        bool hasDisk = true;
         bool ledOpen = false;
 
-        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Crash Bandicoot\Crash Bandicoot.bin");
+        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 01).bin");
 
         private byte CDROM_Status() {
             DRQSTS = (byte)((currentSector.Count > 0) ? 1 : 0);
@@ -452,13 +452,13 @@ namespace PS1_Emulator {
             interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
         }
 
-        private void play() {
+        private void play() {   //Subbed
 
             CDROM_State = State.ReadingSectors;
             command = Command.Play;
 
-            //Console.WriteLine("[CDROM] Play");
-            currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
+            Console.WriteLine("[CDROM] Play");
+            //currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
 
             stat = 0x2; 
             stat |= (1 << 7);   //Play
@@ -467,12 +467,12 @@ namespace PS1_Emulator {
             responseBuffer.Enqueue(stat);
             interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
-            //Hardcoded as fuck
+            /*//Hardcoded as fuck
 
             if (parameterBuffer.Count > 0 && parameterBuffer.Dequeue() != 0) {
                 //disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 02).bin");
                 currentIndex = 0;
-            }
+            }*/
 
 
         }
@@ -697,7 +697,7 @@ namespace PS1_Emulator {
             interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
           
-            if (gamePresent) {
+            if (hasDisk) {
                 interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
 
                 responseBuffer.Enqueue(0x02);       //STAT
@@ -866,7 +866,8 @@ namespace PS1_Emulator {
                         lastReadSector.Clear();
 
                         if (report) {
-                            //interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
+                            responseBuffer.Enqueue(0xFF);   //Garbage Report 
+                            interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
                         }
                         if(autoPause && m == 74) {
                             responseBuffer.Enqueue(stat);

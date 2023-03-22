@@ -89,10 +89,10 @@ namespace PS1_Emulator {
 
                 }
 
-                if (!oneShot && finished) {
+                /*if (!oneShot && finished) {
                     IRQ_CONTROL.IRQsignal(5);
 
-                }
+                }*/
 
 
                 currentValue+=step;
@@ -171,9 +171,11 @@ namespace PS1_Emulator {
                 if (((mode >> 4) & 1) != 0) {
                     IRQ_CONTROL.IRQsignal(5);
 
+
                 }
                 else if (((mode >> 5) & 1) != 0 && currentValue == 0xffff) {
                     IRQ_CONTROL.IRQsignal(5);
+
                 }
 
 

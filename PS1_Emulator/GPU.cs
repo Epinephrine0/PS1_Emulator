@@ -16,6 +16,7 @@ namespace PS1_Emulator {
         public Range range = new Range(0x1f801810, 5);            //Assumption  
 
         GP0_Command? currentCommand = null;
+        private readonly int[] numberOfParameters = new int[0x3E];
 
         Window window;
 
@@ -148,6 +149,9 @@ namespace PS1_Emulator {
             this.TIMER1 = t1;
 
 
+           
+
+
         }
 
 
@@ -223,9 +227,8 @@ namespace PS1_Emulator {
         double video_cycles = 0;
         double video_cycles_per_scanline = 0;
 
-        public void tick(int cycles) {
+        public void tick(double cycles) {
             video_cycles += cycles;
-            //Console.WriteLine("GPU: " + cycles);
 
             if (video_cycles >= video_cycles_per_scanline && video_cycles_per_scanline > 0) {
                 video_cycles -= video_cycles_per_scanline;
@@ -283,7 +286,6 @@ namespace PS1_Emulator {
             }
             
             switch (opcode) {
-
                 case 0x00:
                     //NOP
                     break;
@@ -291,24 +293,72 @@ namespace PS1_Emulator {
                 case 0x01:
                     //Clear cache (ignored for now)
                     break;
-
-                case 0x2c:
-                case 0x2f:
-                case 0x2e:
-                case 0x2d:
-
+                case 0x24:
+                case 0x26:  //semi-transparent
                     if (currentCommand == null) {
-                        currentCommand = new GP0_Command(opcode, 9);
+                        currentCommand = new GP0_Command(opcode, 7);
                     }
-                    
+
                     currentCommand.add_parameter(value);
 
                     if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
 
-                        gp0_quad_texture_opaque();
+                        gp0_triangle_texture_blend();
                         currentCommand = null;
- 
+
                     }
+
+                    break;
+
+                case 0x25:
+                case 0x27:  //semi-transparent
+                    if (currentCommand == null) {
+                        currentCommand = new GP0_Command(opcode, 7);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_triangle_texture_raw();
+                        currentCommand = null;
+
+                    }
+
+                    break;
+
+                case 0x2c:
+                case 0x2e:
+                    if (currentCommand == null) {
+                        currentCommand = new GP0_Command(opcode, 9);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_quad_texture_blend();
+                        currentCommand = null;
+
+                    }
+                    break;
+
+                case 0x2d:
+                case 0x2f:
+
+                    if (currentCommand == null) {
+                        currentCommand = new GP0_Command(opcode, 9);
+                    }
+
+                    currentCommand.add_parameter(value);
+
+                    if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+
+                        gp0_quad_texture_raw();
+                        currentCommand = null;
+
+                    }
+
 
                     break;
 
@@ -387,7 +437,7 @@ namespace PS1_Emulator {
                     break;
 
 
-                case 0x20:  //PS logo (uses gte)?
+                case 0x20:
                 case 0x22:
                     if (currentCommand == null) {
                         currentCommand = new GP0_Command(opcode, 4);
@@ -461,6 +511,7 @@ namespace PS1_Emulator {
                     break;
 
                 case 0x30:
+                case 0x32: //semi-transparent
 
                     if (currentCommand == null) {
                         currentCommand = new GP0_Command(opcode, 6);
@@ -751,14 +802,6 @@ namespace PS1_Emulator {
 
             window.draw(ref vertices, ref colors, ref uv, clut, page, texmode);
 
-
-
-
-
-
-
-
-
         }
 
         private void gp0_quad_textured_shaded() { 
@@ -973,7 +1016,7 @@ namespace PS1_Emulator {
             this.texture_window_x_offset = ((value >> 10) & 0x1f) * 8;
             this.texture_window_y_offset = ((value >> 15) & 0x1f) * 8;
 
-            window.sewTextureWindow((ushort)~texture_window_x_mask, (ushort)~texture_window_y_mask, (ushort)(texture_window_x_offset & texture_window_x_mask), (ushort)(texture_window_y_offset & texture_window_y_mask));
+            window.setTextureWindow((ushort)~texture_window_x_mask, (ushort)~texture_window_y_mask, (ushort)(texture_window_x_offset & texture_window_x_mask), (ushort)(texture_window_y_offset & texture_window_y_mask));
 
         }
    
@@ -997,7 +1040,7 @@ namespace PS1_Emulator {
             this.drawing_area_right = (UInt16)(value & 0x3ff);
 
 
-            window.ScissorBox(drawing_area_left, drawing_area_top, drawing_area_right-drawing_area_left, drawing_area_bottom-drawing_area_top);
+            window.setScissorBox(drawing_area_left, drawing_area_top, drawing_area_right-drawing_area_left, drawing_area_bottom-drawing_area_top);
        
 
         }
@@ -1406,11 +1449,56 @@ namespace PS1_Emulator {
            
 
         }
-
-        private void gp0_quad_texture_opaque() {
-            //Puzzle bubble 2 background bugged here 
+        private void gp0_quad_texture_raw() {
             UInt32 opcode = currentCommand.opcode;
 
+            ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
+            ushort page = (ushort)((currentCommand.buffer[4] >> 16) & 0x3fff);
+            int texmode = (page >> 7) & 3;
+
+            ushort tx1 = (ushort)(currentCommand.buffer[2] & 0xff);
+            ushort ty1 = (ushort)((currentCommand.buffer[2] >> 8) & 0xff);
+
+            ushort tx2 = (ushort)(currentCommand.buffer[4] & 0xff);
+            ushort ty2 = (ushort)((currentCommand.buffer[4] >> 8) & 0xff);
+
+            ushort tx3 = (ushort)(currentCommand.buffer[6] & 0xff);
+            ushort ty3 = (ushort)((currentCommand.buffer[6] >> 8) & 0xff);
+
+            ushort tx4 = (ushort)(currentCommand.buffer[8] & 0xff);
+            ushort ty4 = (ushort)((currentCommand.buffer[8] >> 8) & 0xff);
+
+
+            ushort[] uv = {
+                tx1, ty1,        //First triangle
+                tx2, ty2,
+                tx3, ty3,
+
+                tx2, ty2,       //Second triangle
+                tx3, ty3,
+                tx4, ty4
+             };
+
+
+            Int16[] vertices = { //x,y,z
+
+                (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
+                (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+                (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0,
+
+                (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+                (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0,
+                (Int16)currentCommand.buffer[7], (Int16)(currentCommand.buffer[7] >> 16) , 0
+
+            };
+
+            byte[] colors = NoBlendColors;
+
+            window.draw(ref vertices, ref colors, ref uv, clut, page, texmode);
+
+        }
+
+        private void gp0_quad_texture_blend() {
             ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
             ushort page = (ushort)((currentCommand.buffer[4] >> 16) & 0x3fff);
             int texmode = (page >> 7) & 3;
@@ -1452,13 +1540,7 @@ namespace PS1_Emulator {
 
             };
 
-            byte[] colors;
-
-            switch (opcode) {
-                case 0x2c:
-                case 0x2e:
-                    //Bleding Color 
-                 colors = new[]  {         //r,g,b
+            byte[] colors = new[]  {         //r,g,b
 
                 (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
                 (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
@@ -1469,25 +1551,98 @@ namespace PS1_Emulator {
                 (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
                  };
-                    break;
 
-                case 0x2f:
-                case 0x2d:
-                    colors = NoBlendColors;
-                    break;
-
-                default:
-                    throw new Exception("opcode: " + opcode.ToString("x"));
-            }
 
             window.draw(ref vertices, ref colors, ref uv, clut, page, texmode);
-           
+
+        }
+        private void gp0_triangle_texture_raw() {
+
+            ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
+            ushort page = (ushort)((currentCommand.buffer[4] >> 16) & 0x3fff);
+            int texmode = (page >> 7) & 3;
+
+            ushort tx1 = (ushort)(currentCommand.buffer[2] & 0xff);
+            ushort ty1 = (ushort)((currentCommand.buffer[2] >> 8) & 0xff);
+
+            ushort tx2 = (ushort)(currentCommand.buffer[4] & 0xff);
+            ushort ty2 = (ushort)((currentCommand.buffer[4] >> 8) & 0xff);
+
+            ushort tx3 = (ushort)(currentCommand.buffer[6] & 0xff);
+            ushort ty3 = (ushort)((currentCommand.buffer[6] >> 8) & 0xff);
+
+         
+
+            ushort[] uv = {
+                tx1, ty1,        //First triangle
+                tx2, ty2,
+                tx3, ty3,
+
+             };
+
+
+            Int16[] vertices = { //x,y,z
+
+                (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
+                (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+                (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0,
+
+            };
+
+            byte[] colors = NoBlendColors; //has colors for 4 vertices but should work for 3
+            window.draw(ref vertices, ref colors, ref uv, clut, page, texmode);
+
+        }
+        private void gp0_triangle_texture_blend() {
+            ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
+            ushort page = (ushort)((currentCommand.buffer[4] >> 16) & 0x3fff);
+            int texmode = (page >> 7) & 3;
+
+            ushort tx1 = (ushort)(currentCommand.buffer[2] & 0xff);
+            ushort ty1 = (ushort)((currentCommand.buffer[2] >> 8) & 0xff);
+
+            ushort tx2 = (ushort)(currentCommand.buffer[4] & 0xff);
+            ushort ty2 = (ushort)((currentCommand.buffer[4] >> 8) & 0xff);
+
+            ushort tx3 = (ushort)(currentCommand.buffer[6] & 0xff);
+            ushort ty3 = (ushort)((currentCommand.buffer[6] >> 8) & 0xff);
+
+       
+
+
+            ushort[] uv = {
+                tx1, ty1,        //First triangle
+                tx2, ty2,
+                tx3, ty3,
+
+             };
+
+
+            Int16[] vertices = { //x,y,z
+
+                (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,
+                (Int16)currentCommand.buffer[3], (Int16)(currentCommand.buffer[3] >> 16) , 0,
+                (Int16)currentCommand.buffer[5], (Int16)(currentCommand.buffer[5] >> 16) , 0,
+
+
+
+            };
+
+            byte[] colors = new[]  {         //r,g,b
+
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+                (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
+
+                 };
+
+
+            window.draw(ref vertices, ref colors, ref uv, clut, page, texmode);
+
         }
 
-      
 
         private void gp0_triangle_shaded_opaque() {
-
 
             Int16[] vertices;
             byte[] colors;
@@ -1513,6 +1668,7 @@ namespace PS1_Emulator {
                     break;
 
                 case 0x30:
+                case 0x32:
                     vertices = new Int16[]{ //x,y,z
 
                     (Int16)currentCommand.buffer[1], (Int16)(currentCommand.buffer[1] >> 16) , 0,

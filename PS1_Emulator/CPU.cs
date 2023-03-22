@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
 namespace PS1_Emulator {
@@ -127,7 +128,7 @@ namespace PS1_Emulator {
 
 
             //PC must be 32 bit aligned 
-            if (current_pc % 4 != 0) {
+            if ((current_pc & 0x3) != 0) {
                 exception(this, LoadAddressError);
                 return;
             }
@@ -175,7 +176,7 @@ namespace PS1_Emulator {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
-                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gpu\lines\lines.exe");
+                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\psxtest_cpu\psxtest_cpu.exe");
 
                     break;
 
@@ -900,7 +901,7 @@ namespace PS1_Emulator {
 
             uint address = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
 
-            if (address % 4 != 0) {
+            if ((address & 0x3) != 0) {
                 exception(cpu,LoadAddressError);
                 return;
             }
@@ -930,7 +931,7 @@ namespace PS1_Emulator {
 
             uint address = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
 
-            if (address % 4 != 0) {
+            if ((address & 0x3) != 0) {
                 exception(cpu,LoadAddressError);
                 return;
             }
@@ -1139,15 +1140,7 @@ namespace PS1_Emulator {
         private static void cop2(CPU cpu, Instruction instruction) {
 
             if (((instruction.get_rs() >> 4) & 1) == 1) {    //COP2 imm25 command
-                /*if (gte.currentCommand == null) {
-
-                    gte.loadCommand(instruction);
-
-                }
-                else {
-                    stall();
-                }*/
-
+                
                 cpu.gte.execute(instruction);
 
                 return;
@@ -1158,38 +1151,13 @@ namespace PS1_Emulator {
             switch (instruction.get_rs()) {
                 
                 case 0b00000:   //MFC
-                    /*if (gte.currentCommand == null) {
-                        //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-                        if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                            outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
-                        }
-
-                        pendingload.Item1 = instruction.get_rt();
-                        pendingload.Item2 = gte.read(instruction.get_rd());
-                    }
-                    else {
-                        stall();
-                    }*/
-
+                    
                     cpu.pendingload.Item1 = instruction.get_rt();
                     cpu.pendingload.Item2 = cpu.gte.read(instruction.get_rd());
                     break;
 
                 case 0b00010:   //CFC
-                    /*if (gte.currentCommand == null) {
-
-                        //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-                        if (regs[instruction.get_rt()] != outRegs[instruction.get_rt()]) {
-                            outRegs[instruction.get_rt()] = regs[instruction.get_rt()];
-                        }
-
-                        pendingload.Item1 = instruction.get_rt();
-                        pendingload.Item2 = gte.read(instruction.get_rd() + 32);
-                    }
-                    else {
-                        stall();
-                    }*/
-
+                    
                     cpu.pendingload.Item1 = instruction.get_rt();
                     cpu.pendingload.Item2 = cpu.gte.read(instruction.get_rd() + 32);
                     break;
@@ -1245,7 +1213,7 @@ namespace PS1_Emulator {
 
             //aligned?
             Int16 hw = (Int16)cpu.bus.load16(final_address);
-            if (final_address % 2 == 0) {
+            if ((final_address & 0x1) == 0) {
 
                 //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
                 if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
@@ -1269,7 +1237,7 @@ namespace PS1_Emulator {
             UInt32 base_ = instruction.get_rs();
             UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
-            if (final_address % 2 == 0) {
+            if ((final_address & 0x1) == 0) {
                 UInt32 hw = (UInt32)cpu.bus.load16(final_address);
 
                 //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
@@ -1337,6 +1305,32 @@ namespace PS1_Emulator {
             cpu.HI = (UInt32)(v >> 32);
             cpu.LO = (UInt32)(v);
 
+
+            /*
+              __mult_execution_time_____________________________________________________
+              Fast  (6 cycles)   rs = 00000000h..000007FFh, or rs = FFFFF800h..FFFFFFFFh
+              Med   (9 cycles)   rs = 00000800h..000FFFFFh, or rs = FFF00000h..FFFFF801h
+              Slow  (13 cycles)  rs = 00100000h..7FFFFFFFh, or rs = 80000000h..FFF00001h
+
+            */
+
+            switch (a) {
+                case Int64 x when (a >= 0x00000000 && a <= 0x000007FF) || (a >= 0xFFFFF800 && a <= 0xFFFFFFFF):
+                    CPU.cycles += 6;
+                    break;
+
+                case Int64 x when (a >= 0x00000800 && a <= 0x000FFFFF) || (a >= 0xFFF00000 && a <= 0xFFFFF801):
+                    CPU.cycles += 9;
+                    break;
+
+                case Int64 x when (a >= 0x00100000 && a <= 0x7FFFFFFF) || (a >= 0x80000000 && a <= 0xFFF00001):
+                    CPU.cycles += 13;
+                    break;
+
+            }
+
+
+
         }
 
         private static void break_(CPU cpu, Instruction instruction) {
@@ -1362,6 +1356,30 @@ namespace PS1_Emulator {
 
             cpu.HI = (UInt32)(v >> 32);
             cpu.LO = (UInt32)(v);
+
+
+            /*
+             __multu_execution_time_____________________________________________________
+             Fast  (6 cycles)   rs = 00000000h..000007FFh
+             Med   (9 cycles)   rs = 00000800h..000FFFFFh
+             Slow  (13 cycles)  rs = 00100000h..FFFFFFFFh
+             
+            */
+
+            switch (a) {
+                case UInt64 x when a >= 0x00000000 && a <= 0x000007FF:
+                    CPU.cycles += 6;
+                    break;
+
+                case UInt64 x when a >= 0x00000800 && a <= 0x000FFFFF:
+                    CPU.cycles += 9;
+                    break;
+
+                case UInt64 x when a >= 0x00100000 && a <= 0xFFFFFFFF:
+                    CPU.cycles += 13;
+                    break;
+
+            }
 
 
         }
@@ -1492,7 +1510,13 @@ namespace PS1_Emulator {
             cpu.LO = (UInt32)(numerator / denominator);
             cpu.HI = (UInt32)(numerator % denominator);
 
+            /*
+              divu/div_execution_time
+              Fixed (36 cycles)  no matter of rs and rt values
 
+            */
+
+            CPU.cycles += 36;
         }
 
         private static void srl(CPU cpu, Instruction instruction) {
@@ -1542,7 +1566,15 @@ namespace PS1_Emulator {
 
             cpu.LO = (UInt32)unchecked(numerator / denominator);
             cpu.HI = (UInt32)unchecked(numerator % denominator);
-            
+
+
+            /*
+               divu/div_execution_time
+               Fixed (36 cycles)  no matter of rs and rt values
+
+             */
+
+            CPU.cycles += 36;
 
         }
 
@@ -1662,6 +1694,11 @@ namespace PS1_Emulator {
 
             // Jump to address in reg rs
             cpu.next_pc = cpu.regs[instruction.get_rs()];
+
+            if ((cpu.next_pc & 0x3) != 0) {
+                exception(cpu, LoadAddressError);
+            }
+
             cpu._branch = true;
         }
 
@@ -1840,7 +1877,7 @@ namespace PS1_Emulator {
 
 
             //Address must be 32 bit aligned
-            if (final_address % 4 == 0) {
+            if ((final_address & 0x3) == 0) {
 
                 //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
                 if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
@@ -1880,6 +1917,9 @@ namespace PS1_Emulator {
         private static void jr(CPU cpu, Instruction instruction) {
 
             cpu.next_pc = cpu.regs[instruction.get_rs()];      //Return or Jump to address in register 
+            if ((cpu.next_pc & 0x3) != 0) {
+                exception(cpu, LoadAddressError);
+            }
             cpu._branch = true;
            
         }

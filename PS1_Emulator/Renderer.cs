@@ -23,7 +23,7 @@ namespace PS1_Emulator {
         public Renderer() {
 
             var nativeWindowSettings = new NativeWindowSettings() {
-                Size = new Vector2i(1024, 512),
+                Size = new Vector2i(1280, 720),
                 Title = "PS1 Emulator",
                 // This is needed to run on macos
                 Flags = ContextFlags.ForwardCompatible,
@@ -44,9 +44,8 @@ namespace PS1_Emulator {
 
         }
 
-        public  byte[] ImageToByteArray(string Icon) {
+        public byte[] ImageToByteArray(string Icon) {
             var image = (Image<Rgba32>)SixLabors.ImageSharp.Image.Load(Configuration.Default, Icon);
-
             var pixels = new byte[4 * image.Width * image.Height];
             image.CopyPixelDataTo(pixels);
 
@@ -115,7 +114,6 @@ namespace PS1_Emulator {
 
             GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             GL.Clear(ClearBufferMask.ColorBufferBit);
-         
             SwapBuffers();
 
             //A shitty way, and a hardcoded path 
@@ -132,8 +130,9 @@ namespace PS1_Emulator {
             shader.Use();
 
             GL.Viewport(0, 0, this.Size.X, this.Size.Y);
-            GL.ClearColor(0, 0, 0, 1);
-            GL.Clear(ClearBufferMask.ColorBufferBit);
+            GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);      //This can be ignored as the PS1 BIOS will initially draw a black quad clearing the buffer anyway
+            GL.Clear(ClearBufferMask.ColorBufferBit);  
+            SwapBuffers();
 
             uniform_offset = GL.GetUniformLocation(shader.Handle, "offset");
             fullVram = GL.GetUniformLocation(shader.Handle, "fullVram");
@@ -147,56 +146,41 @@ namespace PS1_Emulator {
             display_area_X_Offset_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x_offset");
             display_area_Y_Offset_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y_offset");
 
-           
             vertexArrayObject = GL.GenVertexArray();
             vertexBufferObject = GL.GenBuffer();                 
             colorsBuffer = GL.GenBuffer();
             texCoords = GL.GenBuffer();
-
-            GL.BindVertexArray(vertexArrayObject);
-
-
             vram_texture = GL.GenTexture();
             sample_texture = GL.GenTexture();
+            vramFrameBuffer = GL.GenFramebuffer();
+
+            GL.BindVertexArray(vertexArrayObject);
 
             GL.Enable(EnableCap.Texture2D);
 
             GL.BindTexture(TextureTarget.Texture2D, vram_texture);
-
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba8, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
-
 
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
-
-
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba8, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
 
-
-
-            vramFrameBuffer = GL.GenFramebuffer();
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, vramFrameBuffer);
             GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, vram_texture, 0);
-
             if (GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != FramebufferErrorCode.FramebufferComplete) {
-
                 Console.WriteLine("[OpenGL] Uncompleted Frame Buffer !");
-
             }
 
 
             GL.PixelStore(PixelStoreParameter.UnpackAlignment, 2);
             GL.PixelStore(PixelStoreParameter.PackAlignment, 2);
-
-
             GL.Uniform1(GL.GetUniformLocation(shader.Handle, "u_vramTex"), 0);
 
         }
@@ -209,7 +193,7 @@ namespace PS1_Emulator {
             GL.Uniform3(uniform_offset, x, y, z);
 
         }
-        public void sewTextureWindow(ushort x, ushort y, ushort z, ushort w) {
+        public void setTextureWindow(ushort x, ushort y, ushort z, ushort w) {
 
             GL.Uniform4(texWindow, x, y, z, w);
         }
@@ -219,7 +203,7 @@ namespace PS1_Emulator {
         int scissorBox_w;
         int scissorBox_h;
 
-        public void ScissorBox(int x,int y,int width,int height) {
+        public void setScissorBox(int x,int y,int width,int height) {
 
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
 
@@ -314,7 +298,7 @@ namespace PS1_Emulator {
             GL.DisableVertexAttribArray(1);
             GL.DisableVertexAttribArray(2);
 
-            ModifyAspectRatio();
+            modifyAspectRatio();
 
             GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
@@ -391,15 +375,15 @@ namespace PS1_Emulator {
 
 
 
-            public void update_vram(int x, int y , int width, int height, ushort[] textureData) {
+        public void update_vram(int x, int y , int width, int height, ushort[] textureData) {
             if (width == 0) { width = VRAM_WIDTH; }
             if (height == 0) { height = VRAM_HEIGHT; }
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
             GL.BindTexture(TextureTarget.Texture2D, vram_texture);
             GL.TexSubImage2D(TextureTarget.Texture2D,0,x,y,width,height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
             
-            GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+            GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT);
 
          
@@ -430,7 +414,7 @@ namespace PS1_Emulator {
 
         }
 
-        public void ModifyAspectRatio() {
+        public void modifyAspectRatio() {
             float disp_x = cpu.bus.GPU.hrez.getHR();
             float disp_y = cpu.bus.GPU.vrez == 0 ? 240f : 480f;
 
@@ -521,33 +505,35 @@ namespace PS1_Emulator {
         }
         protected override void OnUpdateFrame(FrameEventArgs args) {
             base.OnUpdateFrame(args);
-             
-            for (int i = 0; i < CYCLES_PER_FRAME; i++) {        //Timings are nowhere near accurate 
+            for (int i = 0; i < CYCLES_PER_FRAME;) {        //Timings are nowhere near accurate 
                 if (!cpuPaused) {
 
-                    try {
+                    /*try {
                         cpu.emu_cycle();
 
                     }
                     catch (Exception ex) {
                         File.WriteAllTextAsync("Crash.log", ex.ToString());
                         Close();
-                    }
+                    }*/
 
-                    //cpu.emu_cycle();
+                    cpu.emu_cycle();
 
                     CPU.cycles += 2;
+
                     //
-                    cpu.bus.TIMER1.tick();
+                    if (!cpu.bus.TIMER1.isUsingHblank()) { cpu.bus.TIMER1.tick(); }
                     cpu.bus.TIMER2.tick(CPU.cycles);
                     // 
+
                     cpu.bus.spu.SPU_Tick(CPU.cycles);
-                    cpu.bus.GPU.tick(CPU.cycles * 11 / 7);
+                    cpu.bus.GPU.tick(CPU.cycles * (double)11 / 7);
                     cpu.bus.IO_PORTS.tick(CPU.cycles);
                     cpu.bus.IO_PORTS.tick(CPU.cycles);
                     cpu.bus.CDROM_tick(CPU.cycles);
+                    i += CPU.cycles;
                     CPU.cycles = 0;
-
+                    
                 }
 
             }

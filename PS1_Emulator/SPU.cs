@@ -59,7 +59,7 @@ namespace PS1_Emulator {
 
         private WaveOutEvent waveOutEvent = new WaveOutEvent();
         private BufferedWaveProvider bufferedWaveProvider = new BufferedWaveProvider(new WaveFormat());
-        private WaveFileWriter waveFileWriter = new WaveFileWriter("output.wav", new WaveFormat());     //For audio dumping
+        //private WaveFileWriter waveFileWriter = new WaveFileWriter("output.wav", new WaveFormat());     //For audio dumping
 
         public SPU() {
 
@@ -475,8 +475,8 @@ namespace PS1_Emulator {
             KON = 0;
             KOFF = 0;
 
-             sumLeft = 0;
-             sumRight = 0;
+            sumLeft = 0;
+            sumRight = 0;
 
             for (int i = 0; i < voices.Length; i++) {
 
