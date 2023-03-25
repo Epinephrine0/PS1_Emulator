@@ -178,7 +178,6 @@ namespace PS1_Emulator {
                 Console.WriteLine("[OpenGL] Uncompleted Frame Buffer !");
             }
 
-
             GL.PixelStore(PixelStoreParameter.UnpackAlignment, 2);
             GL.PixelStore(PixelStoreParameter.PackAlignment, 2);
             GL.Uniform1(GL.GetUniformLocation(shader.Handle, "u_vramTex"), 0);
@@ -221,10 +220,10 @@ namespace PS1_Emulator {
 
         public void draw(ref short[] vertices, ref byte[] colors, ref ushort[] uv, ushort clut, ushort page, int texMode) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-            
             GL.Uniform1(texModeLoc, texMode);
 
-           // GL.Enable(EnableCap.ScissorTest);
+            // GL.Enable(EnableCap.ScissorTest);
+            //GL.Enable(EnableCap.Blend);
 
             GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
             GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(short), vertices, BufferUsageHint.StreamDraw);
@@ -235,7 +234,8 @@ namespace PS1_Emulator {
             GL.BufferData(BufferTarget.ArrayBuffer, colors.Length * sizeof(byte), colors, BufferUsageHint.StreamDraw);
             GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(1);
-            
+
+
             if (uv != null) {
                 GL.Uniform1(clutLoc, clut);
                 GL.Uniform1(texPageLoc, page);
@@ -251,6 +251,8 @@ namespace PS1_Emulator {
             //Lets hope there is no need to sync and wait for the GPU 
 
         }
+
+
         internal void drawLines(ref short[] vertices, ref byte[] colors) {
 
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
@@ -288,7 +290,9 @@ namespace PS1_Emulator {
             //GL.Scissor(0,0,this.Size.X,this.Size.Y);
             GL.Disable(EnableCap.ScissorTest);
 
-            GL.Disable(EnableCap.Blend);
+            //GL.Disable(EnableCap.Blend);
+            disableBlending();
+
             GL.Viewport(0, 0, this.Size.X, this.Size.Y);
             GL.Enable(EnableCap.Texture2D);
             GL.BindTexture(TextureTarget.Texture2D, vram_texture);
@@ -313,7 +317,6 @@ namespace PS1_Emulator {
         }
         public void vramFill(float r, float g, float b, int x, int y, int width, int height) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
             GL.ClearColor(r,g,b,1.0f);
 
@@ -325,12 +328,33 @@ namespace PS1_Emulator {
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
 
         }
-        public void rectFill(float r, float g, float b, int x, int y, int width, int height) {
-
+        public void rectFill(byte r, byte g, byte b, int x, int y, int width, int height) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
-            GL.ClearColor(r, g, b, 1.0f);
+
+            //Define the quad 
+            Int16[] vertices = {
+                (short)(x),(short)y,0,
+                (short)(x+width),(short)y,0,
+                (short)x,(short)(y+height),0,
+
+                 (short)(x+width),(short)y,0,
+                 (short)x,(short)(y+height),0,
+                 (short)(x+width),(short)(y+height),0,
+
+            };
+            byte[] colors = {
+                r,g,b,
+                r,g,b,
+                r,g,b,
+                r,g,b,
+                r,g,b,
+                r,g,b
+            };
+            ushort[] uv = null; //Dummy
+            draw(ref vertices,ref colors,ref uv,0,0,-1);
+
+            /*GL.ClearColor(r/255.0f, g/255.0f, b/255.0f, 1.0f);
 
             x += offset_x;
             y += offset_y;
@@ -367,7 +391,7 @@ namespace PS1_Emulator {
             GL.Clear(ClearBufferMask.ColorBufferBit);
 
             //After that reset the Scissor box to the drawing area
-            GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+            GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);*/
 
 
         }
@@ -586,10 +610,43 @@ namespace PS1_Emulator {
             base.OnUnload();
         }
 
-        
+        internal void disableBlending() {
+            ///GL.Disable(EnableCap.Blend);
+
+            GL.BlendFunc(BlendingFactor.One, BlendingFactor.Zero);
+            GL.BlendEquation(BlendEquationMode.FuncAdd);
+        }
+        internal void setBlendingFunction(uint function) {
+
+            GL.Enable(EnableCap.Blend);
+            
+            switch (function) {
+                case 0:
+                    GL.BlendColor(1f, 1f, 1f,0.5f);
+                    GL.BlendFunc(BlendingFactor.ConstantAlpha , BlendingFactor.ConstantAlpha);
+                    GL.BlendEquation(BlendEquationMode.FuncAdd);
+                    break;
+
+                case 1:
+                    GL.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+                    GL.BlendEquation(BlendEquationMode.FuncAdd);
+                    break;
+
+                case 2:
+                    GL.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+                    GL.BlendEquation(BlendEquationMode.FuncReverseSubtract);
+                    break;
+
+                case 3:
+                    GL.BlendColor(1f, 1f, 1f, 0.25f);
+                    GL.BlendFunc(BlendingFactor.ConstantAlpha, BlendingFactor.One);
+                    GL.BlendEquation(BlendEquationMode.FuncAdd);
+                    break;
+
+                default:
+                    throw new Exception("Unknown blend function: " + function);
+            }
+        }
     }
-
-
-
 
 }

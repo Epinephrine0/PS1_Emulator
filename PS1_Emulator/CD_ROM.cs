@@ -98,10 +98,10 @@ namespace PS1_Emulator {
 
         public byte padding;
 
-        bool hasDisk = true;
+        bool hasDisk = false;
         bool ledOpen = false;
 
-        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 01).bin");
+        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Crash Bandicoot\Crash Bandicoot.bin");
 
         private byte CDROM_Status() {
             DRQSTS = (byte)((currentSector.Count > 0) ? 1 : 0);

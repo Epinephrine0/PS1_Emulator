@@ -438,7 +438,7 @@ namespace PS1_Emulator {
 
 
                 case 0x20:
-                case 0x22:
+                case 0x22: //Semi-transparent
                     if (currentCommand == null) {
                         currentCommand = new GP0_Command(opcode, 4);
                     }
@@ -447,7 +447,7 @@ namespace PS1_Emulator {
 
                     if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
 
-                        gp0_triangle_shaded_opaque();
+                        gp0_triangle_shaded();
 
                         currentCommand = null;
 
@@ -466,7 +466,7 @@ namespace PS1_Emulator {
 
                     if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
 
-                        gp0_quad_mono_opaque();
+                        gp0_quad_mono();
                         currentCommand = null;
 
                     }
@@ -521,7 +521,7 @@ namespace PS1_Emulator {
 
                     if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
 
-                        gp0_triangle_shaded_opaque();
+                        gp0_triangle_shaded();
                         currentCommand = null;
 
                     }
@@ -538,7 +538,7 @@ namespace PS1_Emulator {
 
                     if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
 
-                        gp0_quad_shaded_opaque();
+                        gp0_quad_shaded();
                         currentCommand = null;
 
                     }
@@ -892,7 +892,7 @@ namespace PS1_Emulator {
             list.TrimExcess();
             
         }
-        private void gp0_quad_shaded_opaque() {
+        private void gp0_quad_shaded() {
 
             
             Int16[] vertices = { //x,y,z
@@ -918,7 +918,13 @@ namespace PS1_Emulator {
            (byte)currentCommand.buffer[4], (byte)(currentCommand.buffer[4] >> 8) , (byte)(currentCommand.buffer[4] >> 16),
            (byte)currentCommand.buffer[6], (byte)(currentCommand.buffer[6] >> 8) , (byte)(currentCommand.buffer[6] >> 16),
             };
+            if ((currentCommand.buffer[0] >> 25 & 1) == 1) {
+                window.setBlendingFunction(semi_transparency);
 
+            }
+            else {
+                window.disableBlending();
+            }
 
             window.draw(ref vertices,ref colors,ref dummy,0,0,-1);
 
@@ -966,7 +972,8 @@ namespace PS1_Emulator {
             return num_of_words;
         }
 
-        private void gp0_quad_mono_opaque() {
+        private void gp0_quad_mono() {
+
            // Debug.WriteLine("Draw quad command!");
 
             Int16[] vertices = { //x,y,z
@@ -993,6 +1000,13 @@ namespace PS1_Emulator {
           
             };
 
+            if ((currentCommand.buffer[0] >> 25 & 1) == 1) {
+                window.setBlendingFunction(semi_transparency);
+
+            }
+            else {
+                window.disableBlending();
+            }
 
             window.draw(ref vertices, ref colors, ref dummy, 0, 0, -1);
 
@@ -1411,12 +1425,21 @@ namespace PS1_Emulator {
             //int width = (int)(((currentCommand.buffer[2] & 0x3FF) + 0x0F) & (~0x0F));
             //int height = (int)((currentCommand.buffer[2] >> 16) & 0x1FF);
 
-            float r = ((float)(color & 0xff)) / 255.0f;                  //Scale to float of range [0,1]
-            float g = ((float)((color >> 8) & 0xff)) / 255.0f;           //because it is going to be passed 
-            float b = ((float)((color >> 16) & 0xff)) / 255.0f;          //directly to GL.clear()
-
+            byte r = ((byte)(color & 0xff));                  //Scale to float of range [0,1]
+            byte g = ((byte)((color >> 8) & 0xff));           //because it is going to be passed 
+            byte b = ((byte)((color >> 16) & 0xff));          //directly to GL.clear()
             ushort width;
             ushort height;
+
+
+            if ((currentCommand.buffer[0] >> 25 & 1) == 1) {
+                window.setBlendingFunction(semi_transparency);
+            }
+            else {
+                window.disableBlending();
+            }
+
+
 
             switch (currentCommand.opcode) {
                 case 0x68:
@@ -1435,18 +1458,19 @@ namespace PS1_Emulator {
 
                 case 0x02:
 
+                    window.disableBlending();
+
                     width = (ushort)(currentCommand.buffer[2] & 0x3FF);
                     height = (ushort)((currentCommand.buffer[2] >> 16) & 0x1FF);
-                    window.vramFill(r, g, b, x, y, width, height);
-
+                    window.vramFill(r/255.0f, g/255.0f, b/255.0f, x, y, width, height);
                     break;
 
                 default:
                     throw new Exception("GP0 opcode: " + currentCommand.opcode.ToString("x"));
             }
-         
 
-           
+            
+
 
         }
         private void gp0_quad_texture_raw() {
@@ -1642,7 +1666,7 @@ namespace PS1_Emulator {
         }
 
 
-        private void gp0_triangle_shaded_opaque() {
+        private void gp0_triangle_shaded() {
 
             Int16[] vertices;
             byte[] colors;
@@ -1661,7 +1685,7 @@ namespace PS1_Emulator {
 
                     (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
                     (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
-                    (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16)
+                    (byte)currentCommand.buffer[0], (byte)(currentCommand.buffer[0] >> 8) , (byte)(currentCommand.buffer[0] >> 16),
 
                     };
 
@@ -1689,6 +1713,14 @@ namespace PS1_Emulator {
                 default:
                     throw new Exception((currentCommand.opcode).ToString("x"));
                    
+            }
+
+            if ((currentCommand.buffer[0] >> 25 & 1) == 1) {
+                window.setBlendingFunction(semi_transparency);
+
+            }
+            else {
+                window.disableBlending();
             }
 
             window.draw(ref vertices, ref colors, ref dummy, 0, 0, -1);

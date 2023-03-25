@@ -176,7 +176,7 @@ namespace PS1_Emulator {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
-                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\psxtest_cpu\psxtest_cpu.exe");
+                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gpu\transparency\transparency.exe");
 
                     break;
 
