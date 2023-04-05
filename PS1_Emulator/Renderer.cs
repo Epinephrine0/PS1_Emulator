@@ -563,25 +563,28 @@ namespace PS1_Emulator {
             }
 
             //Read controller input 
-            cpu.bus.IO_PORTS.controller.isConnected = JoystickStates[0] != null;
+            cpu.bus.IO_PORTS.controller1.readInput(JoystickStates[0]);
+            cpu.bus.IO_PORTS.controller2.readInput(JoystickStates[1]);
 
-            if (cpu.bus.IO_PORTS.controller.isConnected) {
-                for (int j = 0; j < JoystickStates[0].ButtonCount; j++) {
+            /*
+             * 
+             *  for (int j = 0; j < JoystickStates[0].ButtonCount; j++) {
                     if (buttons_Dictionary.ContainsKey(j)) {
                         if (JoystickStates[0].IsButtonDown(j)) {
                             int bit = ~(1 << buttons_Dictionary[j]);
-                            cpu.bus.IO_PORTS.controller.buttons &= (ushort)(bit);
+                            cpu.bus.IO_PORTS.controller1.buttons &= (ushort)(bit);
 
                         }
                         else {
                             int bit = (1 << buttons_Dictionary[j]);
-                            cpu.bus.IO_PORTS.controller.buttons |= (ushort)(bit);
+                            cpu.bus.IO_PORTS.controller1.buttons |= (ushort)(bit);
+
                         }
 
                     }
 
                 }
-            }
+             */
 
 
         }

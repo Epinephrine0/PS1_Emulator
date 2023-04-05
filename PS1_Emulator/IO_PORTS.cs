@@ -30,9 +30,9 @@ namespace PS1_Emulator {
 
         public static int delay = 0;
         MemoryCard memoryCard;
-        public Controller controller;
+        public Controller controller1;
+        public Controller controller2;
 
-        bool PADS_Communication;
         //JOYSTAT
         bool TXREADY1 = true;
         bool TXREADY2 = true;
@@ -95,7 +95,8 @@ namespace PS1_Emulator {
 
 
             memoryCard = new MemoryCard(memoryCardData);
-            controller = new Controller();
+            controller1 = new Controller();
+            controller2 = new Controller();
 
 
         }
@@ -110,7 +111,7 @@ namespace PS1_Emulator {
 
                     if (JOYoutput) {
                         TXREADY2 = true;
-                        if (SlotNum == 1) {                     //Second controller & memory card are unconnected
+                        if (SlotNum == 1 && selectedDevice == SelectedDevice.MemoryCard) {                     //Second memory card is not connected
                             ACKLevel = false;
                             return 0xff;
                         }
@@ -184,8 +185,8 @@ namespace PS1_Emulator {
                         //en = true;
                         TXREADY2 = true;
                         if (selectedDevice == SelectedDevice.Controller) {
-                            JOY_RX_DATA = controller.response(JOY_TX_DATA);
-                            ACKLevel = controller.ack;
+                            JOY_RX_DATA = SlotNum == 0 ? controller1.response(JOY_TX_DATA) : controller2.response(JOY_TX_DATA);
+                            ACKLevel = SlotNum == 0 ? controller1.ack : controller2.ack;
 
                             //Console.WriteLine("Sent: " + JOY_TX_DATA.ToString("x"));
                             //Console.WriteLine("Response: " + JOY_RX_DATA.ToString("x") + " ACK: " + ACKLevel);
@@ -222,7 +223,7 @@ namespace PS1_Emulator {
                     }
 
                     if (!ACKLevel) {
-                        controller.sequenceNum = 0;
+                        controller1.sequenceNum = 0;
                         memoryCard.reset();
                         counter = -1;
                         selectedDevice = SelectedDevice.None;
@@ -332,7 +333,7 @@ namespace PS1_Emulator {
             if (!JOYoutput) {
                 memoryCard.reset();
                 selectedDevice = SelectedDevice.None;
-                controller.sequenceNum = 0;
+                controller1.sequenceNum = 0;
 
             }
 
@@ -340,7 +341,7 @@ namespace PS1_Emulator {
                 reset();
                 memoryCard.reset();
                 selectedDevice = SelectedDevice.None;
-                controller.sequenceNum = 0;
+                controller1.sequenceNum = 0;
             }
 
         }
