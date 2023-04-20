@@ -32,7 +32,7 @@ namespace PS1_Emulator {
         public Scratchpad scratchpad;
         public MDEC MDEC;
 
-        UInt32[] Region_Mask = { 
+        private readonly UInt32[] region_Mask = { 
         
                      // KUSEG: 2048MB
                        0xffffffff , 0xffffffff, 0xffffffff , 0xffffffff,
@@ -69,14 +69,6 @@ namespace PS1_Emulator {
             this.MDEC = new MDEC(); 
             
         }
-        public void TIMER1_tick() {
-
-            if (!this.TIMER1.isUsingHblank()) {
-                this.TIMER1.tick();
-            }
-
-        }
-       
        
 
         public UInt32 load32(UInt32 address) {
@@ -165,9 +157,14 @@ namespace PS1_Emulator {
 
                 return scratchpad.read(offset);
             }
-            //else if (this.MDEC.range.contains(mask(address)) != null) { 
-            //   return MDEC.read(offset);
-            //  }
+            else if (this.IO_PORTS.range.contains(mask(address)) != null) { 
+               return IO_PORTS.read(offset);
+              }
+
+            //MDEC
+            else if (address >= 0x1F801820 && address <= 0x1F801824) {
+                return 0;
+            }
 
             else {
                 throw new Exception("cannot find address: " + address.ToString("X") + " in memory map");
@@ -296,16 +293,15 @@ namespace PS1_Emulator {
                 scratchpad.write(offset,value);
             }
 
-           // else if (this.MDEC.range.contains(mask(address)) != null) {
-           //     offset = (UInt32)MDEC.range.contains(mask(address));
-          //      MDEC.write(offset,value);
-          //  }
+
+            //MDEC
+            else if (address >= 0x1F801820 && address <= 0x1F801824) {
+                return;
+            }
 
             else {
 
-                throw new Exception("Cannot find address: " + address.ToString("X") + " in memory map"
-                                    + " Physical address: " + mask(address).ToString("x")
-                            );
+                throw new Exception("unknown address: " + address.ToString("X") + " - " + " Physical: " + mask(address).ToString("x"));
 
             }
         }
@@ -315,7 +311,7 @@ namespace PS1_Emulator {
         private UInt32 mask(UInt32 address) {
 
             UInt32 index = address >> 29;
-            UInt32 physical_address = address & this.Region_Mask[index];
+            UInt32 physical_address = address & this.region_Mask[index];
 
             return physical_address;
 
@@ -634,6 +630,9 @@ namespace PS1_Emulator {
                     UInt32 data = this.ram.read(current_address);
 
                     switch (ch.get_portnum()) {
+                        case 0: //MDECin  (RAM to MDEC)
+                            break;
+
 
                         case 2:
 
@@ -660,6 +659,8 @@ namespace PS1_Emulator {
 
                 else {
                     switch (ch.get_portnum()) {
+                        case 1: //MDECout (MDEC to RAM)
+                            break;
 
                         case 2:
                             

@@ -542,7 +542,6 @@ namespace PS1_Emulator {
                     }*/
 
                     cpu.emu_cycle();
-
                     CPU.cycles += 2;
 
                     //

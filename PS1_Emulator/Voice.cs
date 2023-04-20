@@ -31,10 +31,10 @@ namespace PS1_Emulator {
         Int16[] decodedSamples = new Int16[31]; //28 samples + 3 
         byte[] samples = new byte[16];
 
-        int[] pos_xa_adpcm_table = { 0, +60, +115, +98, +122 };
-        int[] neg_xa_adpcm_table = { 0, 0, -52, -55, -60 };
+        private readonly int[] pos_xa_adpcm_table = { 0, +60, +115, +98, +122 };
+        private readonly int[] neg_xa_adpcm_table = { 0, 0, -52, -55, -60 };
 
-        private static short[] gaussTable = new short[] {
+        private readonly short[] gaussTable = new short[] {
                 -0x001, -0x001, -0x001, -0x001, -0x001, -0x001, -0x001, -0x001,
                 -0x001, -0x001, -0x001, -0x001, -0x001, -0x001, -0x001, -0x001,
                 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0001,

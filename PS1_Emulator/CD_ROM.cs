@@ -101,7 +101,7 @@ namespace PS1_Emulator {
         bool hasDisk = true;
         bool ledOpen = false;
 
-        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 01).bin");
+        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Crash Bandicoot\Crash Bandicoot.bin");
 
         private byte CDROM_Status() {
             DRQSTS = (byte)((currentSector.Count > 0) ? 1 : 0);
@@ -335,9 +335,10 @@ namespace PS1_Emulator {
 
                     break;
 
-                case 0x6:
+                case 0x1B:  //ReadS
+                case 0x6:   //ReadN
 
-                    readN();
+                    readN_S();
 
                     break;
 
@@ -597,7 +598,7 @@ namespace PS1_Emulator {
 
         }
 
-        private void readN() {
+        private void readN_S() {
             CDROM_State = State.ReadingSectors;
            // Console.WriteLine("[CDROM] ReadN at MSF: " + m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0'));
 

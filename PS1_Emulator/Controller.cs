@@ -12,7 +12,7 @@ namespace PS1_Emulator {
         public ushort buttons = 0xffff;
         public int sequenceNum;
 
-        public static readonly Dictionary<int, int> buttons_Dictionary = new Dictionary<int, int>() //This is for PS5, I need to handle having a PS4 controller 
+        public static readonly Dictionary<int, int> dualSense_Dictionary = new Dictionary<int, int>() //This is for PS5, I need to handle having a PS4 controller 
         {
            {0, 15},      //Square
            {1, 14},      //X
@@ -30,8 +30,26 @@ namespace PS1_Emulator {
            {16, 5},      //Pad right
            {17, 6},      //Pad down
            {18, 7},      //Pad Left
-
         };
+       /* public static readonly Dictionary<int, int> x360_Dictionary = new Dictionary<int, int>() //This is for PS5, I need to handle having a PS4 controller 
+        {
+           {2, 15},      //Square
+           {0, 14},      //X
+           {1, 13},      //Circle
+           {3, 12},      //Triangle
+           {4, 10},      //L1
+           {5, 11},      //R1
+           //{6, 8},       //L2   (wrong)
+           //{7, 9},       //R2   (wrong)
+           {6, 0},       //Select
+           {7, 3},       //Start
+           {8, 1},      //L3
+           {9, 2},      //R3
+           {10, 4},      //Pad up
+           {11, 5},      //Pad right
+           {12, 6},      //Pad down
+           {13, 7},      //Pad Left
+        };*/
 
         public byte response(uint data) {
             if (!isConnected) {
@@ -67,16 +85,14 @@ namespace PS1_Emulator {
             }
 
             for (int j = 0; j < externalController.ButtonCount; j++) {
-                if (buttons_Dictionary.ContainsKey(j)) {
+                if (dualSense_Dictionary.ContainsKey(j)) {
                     if (externalController.IsButtonDown(j)) {
-                        int bit = ~(1 << buttons_Dictionary[j]);
+                        int bit = ~(1 << dualSense_Dictionary[j]);
                         buttons &= (ushort)(bit);
-
                     }
                     else {
-                        int bit = (1 << buttons_Dictionary[j]);
+                        int bit = (1 << dualSense_Dictionary[j]);
                         buttons |= (ushort)(bit);
-
                     }
 
                 }

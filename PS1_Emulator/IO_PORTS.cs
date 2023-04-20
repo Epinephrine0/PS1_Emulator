@@ -118,12 +118,12 @@ namespace PS1_Emulator {
                     }
                    
 
-                    return (byte)JOY_RX_DATA; 
+                    return (byte)JOY_RX_DATA;
 
+              
 
                 default:
-
-                    throw new Exception(offset.ToString("x"));
+                    throw new Exception("Unhandled reading from IO Ports at offset: " + offset.ToString("x"));
             }
 
         }

@@ -128,7 +128,7 @@ namespace PS1_Emulator {
 
 
             //PC must be 32 bit aligned 
-            if ((current_pc & 0x3) != 0) {
+            if ((current_pc & 0x3) != 0) {  
                 exception(this, LoadAddressError);
                 return;
             }
@@ -1785,7 +1785,7 @@ namespace PS1_Emulator {
             UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
             //Address must be 16 bit aligned
-            if (final_address % 2 == 0) {
+            if ((final_address & 1) == 0) {
                 cpu.bus.store16(final_address, (UInt16)cpu.regs[targetReg]);
             }
             else {
@@ -1852,7 +1852,7 @@ namespace PS1_Emulator {
             UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
             //Address must be 32 bit aligned
-            if (final_address % 4 == 0) {
+            if ((final_address & 0x3) == 0) {
 
                 //if (final_address == 0x80083C58) {Debug.WriteLine("loaded " + regs[targetReg].ToString("x") + " from reg: " + targetReg); }
 
