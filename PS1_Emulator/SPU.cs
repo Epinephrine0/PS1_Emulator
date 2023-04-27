@@ -22,7 +22,10 @@ namespace PS1_Emulator {
         byte[] RAM = new byte[512*1024];
 
         UInt16 SPUCNT;
-        private bool reverbEnabled;
+        bool reverbEnabled;
+        bool SPU_Enable;
+        bool IRQ9_Enable;
+
 
         //STAT:
         byte SPU_Mode;                          //0-5
@@ -54,7 +57,7 @@ namespace PS1_Emulator {
         uint currentAddress;
         uint reverbCurrentAddress;
         Voice[] voices;
-
+        uint SPU_IRQ_Address;
         //Reverb registers
         ushort mBASE;   //(divided by 8)
         ushort dAPF1;   //Type: disp
@@ -152,7 +155,7 @@ namespace PS1_Emulator {
                 case 0x1b4: external_Audio_Input_Volume = external_Audio_Input_Volume & 0xFFFF0000 | value; break;
                 case 0x1b6: external_Audio_Input_Volume = external_Audio_Input_Volume & 0x0000FFFF | (uint)value << 16; break;
                 case 0x1ac: transfer_Control = value; break;
-
+                case 0x1a4: SPU_IRQ_Address = (uint)value << 3; break;
                 case 0x1a6:
                     transfer_address = value;            //Store adress devided by 8
                     currentAddress = (uint)(value << 3); //Store adress multiplied by 8
@@ -160,9 +163,10 @@ namespace PS1_Emulator {
 
                 case 0x1a8:
                     if((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
-                    RAM[currentAddress] = (byte)(value & 0xFF);
-                    RAM[currentAddress+1] = (byte)((value >> 8) & 0xFF);
-                    currentAddress += 2;
+                    currentAddress &= 0x7FFFF;
+                    RAM[currentAddress++] = (byte)(value & 0xFF);
+                    RAM[currentAddress++] = (byte)((value >> 8) & 0xFF);
+
                     break;
 
                 case 0x19C:     //Read only?
@@ -180,7 +184,7 @@ namespace PS1_Emulator {
                 //Reverb area
                 case 0x1a2: 
                     mBASE = value;
-                    reverbCurrentAddress = (uint)value << 3; // <-- Can this cause problems if I don't have reverb?
+                    reverbCurrentAddress = (uint)value << 3;
                     break;
 
                 case 0x1c0: dAPF1 = value; break;
@@ -384,10 +388,22 @@ namespace PS1_Emulator {
 
             SPUCNT = value;
 
+            SPU_Enable = ((SPUCNT >> 15) & 1) == 1;
+            IRQ9_Enable = ((SPUCNT >> 6) & 1) == 1;
             SPU_Mode = (byte)(value & 0x3F);
             DMA_Read_Write_Request = (byte)((value >> 5) & 0x1);
             reverbEnabled = ((value >> 7) & 1) == 1;        //Only affects Reverb bufffer write, SPU can still read from reverb area
 
+
+            if (!SPU_Enable) {
+                for (int i = 0; i < voices.Length; i++) {
+                    voices[i].adsr.setPhase(Phase.Off);
+                }
+            }
+
+            if (!IRQ9_Enable) {
+                IRQ_Flag = 0;
+            }
 
         }
 
@@ -397,13 +413,14 @@ namespace PS1_Emulator {
         int outputBufferPtr = 0;
         int sumLeft;
         int sumRight;
-        private bool reverbReady = true;
-     
+        private int reverbCounter = 0;
+
+
         public void SPU_Tick(int cycles) {        //SPU Clock
             
             clk_counter += cycles;
             if (clk_counter < CYCLES_PER_SAMPLE) { return; }
-            reverbReady = !reverbReady; //For half the frequency
+            reverbCounter = (reverbCounter + 1) & 1;    //For half the frequency
             clk_counter = 0;
 
             uint edgeKeyOn = KON;
@@ -417,6 +434,7 @@ namespace PS1_Emulator {
             int reverbRight = 0;
             int reverbLeft_Input = 0;
             int reverbRight_Input = 0;
+            bool voiceHitAddress = false;
 
             for (int i = 0; i < voices.Length; i++) {
 
@@ -440,9 +458,10 @@ namespace PS1_Emulator {
                 if ((NON & (1 << i)) == 0) {
 
                     if (!voices[i].isLoaded) {
-                        voices[i].getSamples(ref RAM);
+                        voices[i].getSamples(ref RAM, SPU_IRQ_Address);
                         voices[i].decodeADPCM();
-                        
+                        voiceHitAddress = voiceHitAddress || voices[i].hit_IRQ_Address;
+                        voices[i].hit_IRQ_Address = false;
                     }
 
                     sample = voices[i].interpolate();
@@ -472,21 +491,20 @@ namespace PS1_Emulator {
                
             }
 
-            if (reverbReady) {            
-                (reverbLeft, reverbRight) = processReverb(reverbLeft_Input, reverbRight_Input);
+                      
+            (reverbLeft, reverbRight) = processReverb(reverbLeft_Input, reverbRight_Input);
 
-                sumLeft += reverbLeft;
-                sumRight += reverbRight;
-            }
-
+            sumLeft += (reverbLeft * reverbCounter);
+            sumRight += (reverbRight * reverbCounter);
+            
             sumLeft = (Math.Clamp(sumLeft, -0x8000, 0x7FFE) * mainVolumeLeft) >> 15;
             sumRight = (Math.Clamp(sumRight, -0x8000, 0x7FFE) * mainVolumeRight) >> 15;
 
-            if (((SPUCNT >> 14) & 0x1) == 0) {  //SPU Mute
-                sumLeft = 0;
-                sumRight = 0;
-            }
-           
+
+            //SPU Mute
+            sumLeft *= (SPUCNT >> 14) & 1;      
+            sumRight *= (SPUCNT >> 14) & 1;
+
             outputBuffer[outputBufferPtr++] = (byte)sumLeft;
             outputBuffer[outputBufferPtr++] = (byte)(sumLeft >> 8);
             outputBuffer[outputBufferPtr++] = (byte)sumRight;
@@ -498,6 +516,9 @@ namespace PS1_Emulator {
                 playAudio(outputBuffer);
                 outputBufferPtr -= 2048;
 
+            }
+            if (voiceHitAddress) {
+                SPU_IRQ();
             }
 
 
@@ -604,7 +625,22 @@ namespace PS1_Emulator {
             return (leftOutput , rightOutput);
 
         }
+        public void SPU_IRQ() {
 
+            if (IRQ9_Enable) {
+                IRQ_Flag = 1;
+                IRQ_CONTROL.IRQsignal(9);
+            }
+
+            if (SPU_IRQ_Address >= 0 && SPU_IRQ_Address <= 0x7FF) {
+                Writing_Capture_Buffers = 0;
+
+            }else if (SPU_IRQ_Address >= 0x800 && SPU_IRQ_Address <= 0xFFF) {
+                Writing_Capture_Buffers = 1;
+
+            }
+
+        }
         
         private void reverbMemoryWrite(short value, uint address) {
             if (!reverbEnabled) { return; }     
@@ -613,7 +649,7 @@ namespace PS1_Emulator {
             uint start = (uint)mBASE << 3;
             uint end = 0x7FFFF;      
             uint final = (start + ((address - start) % (end - start))) & 0x7FFFE; //Aliengment for even addresses only
-
+            if (final == SPU_IRQ_Address || final + 1 == SPU_IRQ_Address) { SPU_IRQ(); }
             RAM[final] = (byte)value;
             RAM[final + 1] = (byte)(value >> 8);
 
@@ -623,7 +659,7 @@ namespace PS1_Emulator {
             uint start = (uint)mBASE << 3;
             uint end = 0x7FFFF; 
             uint final = (start + ((address - start) % (end - start))) & 0x7FFFE; //Aliengment for even addresses only
-
+            if(final == SPU_IRQ_Address || final + 1 == SPU_IRQ_Address) { SPU_IRQ(); }
             return (short)(((uint)RAM[final + 1] << 8) | RAM[final]);
 
         }
@@ -656,19 +692,18 @@ namespace PS1_Emulator {
             if (waveOutEvent.PlaybackState != PlaybackState.Playing) {
                 waveOutEvent.Volume = 1; 
                 waveOutEvent.Play();
-
+                
             }
             
         }
 
         internal void DMAtoSPU(uint data) {
             if ((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
-
-            RAM[currentAddress] = (byte)(data & 0xFF);
-            RAM[currentAddress + 1] = (byte)((data >> 8) & 0xFF);
-            RAM[currentAddress + 2] = (byte)((data >> 16) & 0xFF);
-            RAM[currentAddress + 3] = (byte)((data >> 24) & 0xFF);
-            currentAddress += 4;
+            currentAddress &= 0x7FFFF;
+            RAM[currentAddress++] = (byte)(data & 0xFF);
+            RAM[currentAddress++] = (byte)((data >> 8) & 0xFF);
+            RAM[currentAddress++] = (byte)((data >> 16) & 0xFF);
+            RAM[currentAddress++] = (byte)((data >> 24) & 0xFF);
 
         }
     }

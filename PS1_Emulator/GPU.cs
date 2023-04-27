@@ -694,6 +694,7 @@ namespace PS1_Emulator {
                     break;
 
                 default:
+                    return; //Bad idea
 
                     throw new Exception("Unhandled GP0 opcode :" + opcode.ToString("X")); 
             

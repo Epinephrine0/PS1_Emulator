@@ -529,62 +529,41 @@ namespace PS1_Emulator {
         }
         protected override void OnUpdateFrame(FrameEventArgs args) {
             base.OnUpdateFrame(args);
+
+            if (cpuPaused) { return; }
+
             for (int i = 0; i < CYCLES_PER_FRAME;) {        //Timings are nowhere near accurate 
-                if (!cpuPaused) {
 
-                    /*try {
-                        cpu.emu_cycle();
-
-                    }
-                    catch (Exception ex) {
-                        File.WriteAllTextAsync("Crash.log", ex.ToString());
-                        Close();
-                    }*/
-
+                /*try {
                     cpu.emu_cycle();
-                    CPU.cycles += 2;
 
-                    //
-                    if (!cpu.bus.TIMER1.isUsingHblank()) { cpu.bus.TIMER1.tick(); }
-                    cpu.bus.TIMER2.tick(CPU.cycles);
-                    // 
-
-                    cpu.bus.spu.SPU_Tick(CPU.cycles);
-                    cpu.bus.GPU.tick(CPU.cycles * (double)11 / 7);
-                    cpu.bus.IO_PORTS.tick(CPU.cycles);
-                    cpu.bus.IO_PORTS.tick(CPU.cycles);
-                    cpu.bus.CDROM_tick(CPU.cycles);
-                    i += CPU.cycles;
-                    CPU.cycles = 0;
-                    
                 }
+                catch (Exception ex) {
+                    File.WriteAllTextAsync("Crash.log", ex.ToString());
+                    Close();
+                }*/
+
+                cpu.emu_cycle();
+                CPU.cycles += 2;
+
+                //
+                if (!cpu.bus.TIMER1.isUsingHblank()) { cpu.bus.TIMER1.tick(); }
+                cpu.bus.TIMER2.tick(CPU.cycles);
+                // 
+
+                cpu.bus.spu.SPU_Tick(CPU.cycles);
+                cpu.bus.GPU.tick(CPU.cycles * (double)11 / 7);
+                cpu.bus.IO_PORTS.tick(CPU.cycles);
+               // cpu.bus.IO_PORTS.tick(CPU.cycles);
+                cpu.bus.CDROM_tick(CPU.cycles);
+                i += CPU.cycles;
+                CPU.cycles = 0;
 
             }
 
             //Read controller input 
             cpu.bus.IO_PORTS.controller1.readInput(JoystickStates[0]);
-            cpu.bus.IO_PORTS.controller2.readInput(JoystickStates[1]);
-
-            /*
-             * 
-             *  for (int j = 0; j < JoystickStates[0].ButtonCount; j++) {
-                    if (buttons_Dictionary.ContainsKey(j)) {
-                        if (JoystickStates[0].IsButtonDown(j)) {
-                            int bit = ~(1 << buttons_Dictionary[j]);
-                            cpu.bus.IO_PORTS.controller1.buttons &= (ushort)(bit);
-
-                        }
-                        else {
-                            int bit = (1 << buttons_Dictionary[j]);
-                            cpu.bus.IO_PORTS.controller1.buttons |= (ushort)(bit);
-
-                        }
-
-                    }
-
-                }
-             */
-
+            //cpu.bus.IO_PORTS.controller2.readInput(JoystickStates[1]);
 
         }
 

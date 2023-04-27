@@ -40,7 +40,7 @@ namespace PS1_Emulator {
         private const UInt32 Overflow = 0xc;
         private byte[] testRom;
 
-        bool fastBoot = false;
+        bool fastBoot = true;
 
         /* Main Opcodes:
            00h=SPECIAL 08h=ADDI  10h=COP0 18h=N/A   20h=LB   28h=SB   30h=LWC0 38h=SWC0
@@ -117,11 +117,13 @@ namespace PS1_Emulator {
 
             //Should move these to J,Jal,Jr,Jalr instead of checking on every instruction
             intercept(pc);
-            /*if (fastBoot) {       //Skip Sony logo, doesn't work 
+
+           /* if (fastBoot) {       //Skip Sony logo, doesn't work 
                 if (pc == 0x80030000) {
-                    pc = outRegs[31];
-                    next_pc = pc+4;
-                    fastBoot = false;
+                     pc = outRegs[31];
+                     next_pc = pc + 4;
+                     fastBoot = false;
+                    return;
                 }
             }*/
             //----------------------------------------------------------------------

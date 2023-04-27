@@ -11,7 +11,7 @@ namespace PS1_Emulator {
         public bool isConnected;
         public ushort buttons = 0xffff;
         public int sequenceNum;
-
+        bool configMode = false;
         public static readonly Dictionary<int, int> dualSense_Dictionary = new Dictionary<int, int>() //This is for PS5, I need to handle having a PS4 controller 
         {
            {0, 15},      //Square
@@ -52,14 +52,23 @@ namespace PS1_Emulator {
         };*/
 
         public byte response(uint data) {
+
             if (!isConnected) {
                 ack = false;
                 return 0xFF;
             }
 
             ack = true;
+         
             switch (sequenceNum++) {
-                case 0: return 0x41;
+                case 0:
+                    if (data == 0x43) { 
+                        ack = false;
+                        sequenceNum = 0;
+                        return 0xFF;
+                    }
+
+                    return 0x41;
                 case 1: return 0x5A;
                 case 2: return (byte)(buttons & 0xff);
                 case 3:
@@ -72,7 +81,6 @@ namespace PS1_Emulator {
                     sequenceNum = 0;
                     return 0xFF;
             }
-
 
         }
         public void readInput(JoystickState externalController) {

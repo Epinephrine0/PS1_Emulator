@@ -8,6 +8,7 @@ using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace PS1_Emulator {
     public class IO_PORTS {
@@ -107,7 +108,7 @@ namespace PS1_Emulator {
                  case 0:
                    
                     fifoFull = false;
-                    counter = 0;
+                    //counter = 1500;
 
                     if (JOYoutput) {
                         TXREADY2 = true;
@@ -120,11 +121,28 @@ namespace PS1_Emulator {
 
                     return (byte)JOY_RX_DATA;
 
-              
+                case 4:
+
+                    return (byte)JOY_STAT;
+
 
                 default:
                     throw new Exception("Unhandled reading from IO Ports at offset: " + offset.ToString("x"));
             }
+
+        }
+        public uint read32(uint offset) {
+
+            switch (offset) {
+
+
+                case 4: return JOY_STAT;
+
+
+                default:
+                    throw new Exception("Unhandled reading from IO Ports at offset: " + offset.ToString("x"));
+            }
+
 
         }
         public UInt16 read16(uint offset) {
@@ -157,12 +175,13 @@ namespace PS1_Emulator {
 
 
         public int counter = 0;
-        bool en = false;
+        bool en = true;
+
         public void tick(int cycles) {
             //counter += ACKLevel ? cycles : 0;
             counter -= cycles;
 
-            if (counter < 0) {
+            if (counter <= 0 && en) {
                 ACKLevel = false;
                 IRQ = true;
                 IRQ_CONTROL.IRQsignal(7);  
@@ -180,14 +199,13 @@ namespace PS1_Emulator {
                     JOY_RX_DATA = 0xFF;
                     fifoFull = true;
                     TXREADY1 = true;
-                    
+                    //Console.WriteLine(value.ToString("x"));
+
                     if (JOYoutput) {
-                        //en = true;
                         TXREADY2 = true;
                         if (selectedDevice == SelectedDevice.Controller) {
-                            JOY_RX_DATA = SlotNum == 0 ? controller1.response(JOY_TX_DATA) : controller2.response(JOY_TX_DATA);
-                            ACKLevel = SlotNum == 0 ? controller1.ack : controller2.ack;
-
+                            JOY_RX_DATA = controller1.response(JOY_TX_DATA) ;
+                            ACKLevel = controller1.ack;
                             //Console.WriteLine("Sent: " + JOY_TX_DATA.ToString("x"));
                             //Console.WriteLine("Response: " + JOY_RX_DATA.ToString("x") + " ACK: " + ACKLevel);
 
@@ -197,8 +215,6 @@ namespace PS1_Emulator {
                             JOY_RX_DATA = memoryCard.response(JOY_TX_DATA);
                             ACKLevel = memoryCard.ack;
 
-                            //Console.WriteLine("Sent: " + JOY_TX_DATA.ToString("x"));
-                            //Console.WriteLine("Response: " + JOY_RX_DATA.ToString("x") + " ACK: " + ACKLevel);
 
                         }
                         else {
@@ -227,12 +243,15 @@ namespace PS1_Emulator {
                         memoryCard.reset();
                         counter = -1;
                         selectedDevice = SelectedDevice.None;
+                        en = false;
 
                     }
                     else {
                         counter = 1500;
+                        en = true;  
                     }
 
+                  
                     break;
 
                 
@@ -368,87 +387,6 @@ namespace PS1_Emulator {
             clkOutputPolarity = ((value >> 8) & 0x1) != 0;
 
         }
-
-       
-       /* public uint response(UInt32 command) {
-            if (command == 0x81) {
-                memoryCard.state = MemoryCard.State.Active;
-                return 0xff;
-            }
-            if (command == 0x01) {
-                PADS_Communication = true;
-                pads.Clear();
-                pads.Enqueue(0x41);
-                pads.Enqueue(0x5A);
-                pads.Enqueue((byte)(dPadButtons & 0xff));
-                pads.Enqueue((byte)((dPadButtons >> 8) & 0xff));
-                return 0xff;
-            }
-
-
-            if (memoryCard.state == MemoryCard.State.Active) {
-                //Console.WriteLine("[IO] " + command.ToString("x"));
-                byte r = memoryCard.response(command);
-                Console.WriteLine(" Response: " + r.ToString("x"));
-                return r;
-
-            }
-
-            if (PADS_Communication) {
-
-                if (pads.Count == 0) {
-                    return 0xff;
-                }
-
-                return pads.Dequeue();
-
-            }
-            return 0xff;
-
-           *//* switch (command) {
-                case 0x0:
-
-                    if (queue.Count == 0) {
-                        return 0xff;
-                    }
-
-                    return queue.Dequeue();
-
-                case 0x1:                       //Controller 
-
-                    queue.Clear();
-                    queue.Enqueue(0x41);
-                    queue.Enqueue(0x5A);
-                    queue.Enqueue((byte)(dPadButtons & 0xff));
-                    queue.Enqueue((byte)((dPadButtons >> 8) & 0xff));
-                    //resetDPads();
-
-                    return 0xff;
-
-                case 0x42:
-
-                    return queue.Dequeue();
-
-                case 0x81:                 //Memory Card
-                    //Console.WriteLine("[IO] " + command.ToString("x"));
-
-                    //memoryCard.reset();
-                    memoryCard.state = MemoryCard.State.Active;
-
-                    return 0xff;
-
-                default:
-
-                    return 0xff;
-
-            }*//*
-
-
-
-
-        }*/
-
-      
 
     }
 

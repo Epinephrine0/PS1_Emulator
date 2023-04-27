@@ -25,6 +25,7 @@ namespace PS1_Emulator {
         public uint ENDX = 1;
 
         public bool isLoaded = false;
+        public bool hit_IRQ_Address = false;
 
         private WaveOutEvent waveOutEvent = new WaveOutEvent();
         private BufferedWaveProvider bufferedWaveProvider = new BufferedWaveProvider(new WaveFormat());
@@ -117,15 +118,15 @@ namespace PS1_Emulator {
         public void setADSR_HI(UInt16 v) {
             this.adsr.adsrHI = v;
         }
-        public void getSamples(ref byte[] SPU_RAM) {
+        public void getSamples(ref byte[] SPU_RAM, uint IRQ_Address) {
 
+            hit_IRQ_Address = IRQ_Address >= (current_address << 3) && IRQ_Address <= (current_address << 3) + samples.Length - 1;
 
             for (int i = 0; i < samples.Length; i++) {
-                samples[i] = SPU_RAM[(current_address << 3) + i] ;
-
+                int index = (current_address << 3) + i;
+                samples[i] = SPU_RAM[index];
             }
 
- 
             isLoaded = true;
 
             //Handle Loop Start/End/Repeat flags

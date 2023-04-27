@@ -157,9 +157,11 @@ namespace PS1_Emulator {
 
                 return scratchpad.read(offset);
             }
-            else if (this.IO_PORTS.range.contains(mask(address)) != null) { 
-               return IO_PORTS.read(offset);
-              }
+            else if (this.IO_PORTS.range.contains(mask(address)) != null) {
+                offset = (UInt32)IO_PORTS.range.contains(mask(address));
+
+                return IO_PORTS.read32(offset);
+             }
 
             //MDEC
             else if (address >= 0x1F801820 && address <= 0x1F801824) {
@@ -640,7 +642,7 @@ namespace PS1_Emulator {
 
                             break;
                         case 4:
-                            spuDMA= true;
+                            spuDMA = true;
                             this.spu.DMAtoSPU(data);
 
                             if(transfer_size - 1 <= 0) {
@@ -725,20 +727,19 @@ namespace PS1_Emulator {
             ch.done();
             IRQ_CONTROL.IRQsignal(3);
 
-            if (spuDMA) {
-                IRQ_CONTROL.IRQsignal(9);
+            /*if (spuDMA) {
+                spu.SPU_IRQ();
                 spuDMA= false;
-            }
+                //Also SPUSTAT bit 6 = 1
+            }*/
 
         }
-
-       
 
         public void CDROM_tick(int cycles) {
             
             this.CD_ROM.tick(cycles);
-            CDROM_delay_read -= cycles;
-            CDROM_delay_write -= cycles;
+            //CDROM_delay_read -= cycles;
+            //CDROM_delay_write -= cycles;
 
         }
     }
