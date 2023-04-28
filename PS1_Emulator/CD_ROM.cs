@@ -98,10 +98,15 @@ namespace PS1_Emulator {
 
         public byte padding;
 
-        bool hasDisk = true;
-        bool ledOpen = false;
+        public bool hasDisk = true;       //A game disk, audio disks are not supported yet 
+        public bool ledOpen = false;
+        public string path = @"C:\Users\Old Snake\Desktop\PS1\ROMS\Metal Gear Solid (USA) (Disc 1) (v1.0)\Metal Gear Solid (USA) (Disc 1).bin";
+        byte[] disk;
 
-        byte[] disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Metal Gear Solid (USA) (Disc 1) (v1.0)\Metal Gear Solid (USA) (Disc 1) (v1.0).bin");
+        public CD_ROM() {
+            disk = hasDisk? File.ReadAllBytes(path) : null; 
+
+        }
 
         private byte CDROM_Status() {
             DRQSTS = (byte)((currentSector.Count > 0) ? 1 : 0);

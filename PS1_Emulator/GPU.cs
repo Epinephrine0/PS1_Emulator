@@ -1323,7 +1323,6 @@ namespace PS1_Emulator {
 
 
         private void gp0_textured_rectangle() {
-
             ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
             ushort page = (ushort)(page_base_x  | (page_base_y << 4));
             
@@ -1475,6 +1474,7 @@ namespace PS1_Emulator {
 
         }
         private void gp0_quad_texture_raw() {
+
             UInt32 opcode = currentCommand.opcode;
 
             ushort clut = (ushort)(currentCommand.buffer[2] >> 16);
@@ -1577,9 +1577,7 @@ namespace PS1_Emulator {
 
                  };
 
-
             window.draw(ref vertices, ref colors, ref uv, clut, page, texmode);
-
         }
         private void gp0_triangle_texture_raw() {
 

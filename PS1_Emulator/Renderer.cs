@@ -14,6 +14,7 @@ using System.Linq.Expressions;
 using static System.Net.Mime.MediaTypeNames;
 using System.IO;
 using NAudio.Wave.SampleProviders;
+using System.Linq;
 
 namespace PS1_Emulator {
     public class Renderer {
@@ -86,6 +87,201 @@ namespace PS1_Emulator {
         public bool isFullScreen = false;
 
         Shader shader;
+        string vertixShader = @"
+            #version 330 
+
+            layout(location = 0) in ivec3 aPosition;
+            layout(location = 1) in uvec3 vColors;
+            layout (location = 2) in vec2 inUV;
+
+
+            out vec3 color_in;
+            out vec2 texCoords;
+            flat out ivec2 clutBase;
+            flat out ivec2 texpageBase;
+
+            flat out int isScreenQuad;
+
+            uniform ivec3 offset;
+
+            uniform int fullVram;
+
+            uniform int inClut;
+            uniform int inTexpage;
+
+            uniform float display_area_x = 1024.0;
+            uniform float display_area_y = 512.0;
+
+            uniform float display_area_x_offset = 0.0;
+            uniform float display_area_y_offset = 0.0;
+
+            void main()
+            {
+    
+            //Convert x from [0,1023] and y from [0,511] coords to [-1,1]
+
+            float xpos = ((float(aPosition.x) + float(offset.x) + 0.5) /512.0) - 1.0;
+            float ypos = ((float(aPosition.y) + float(offset.y) - 0.5) /256.0) - 1.0;
+	
+
+            if(fullVram == 1){		//This is for displaying a full screen quad with the entire vram texture 
+
+                vec4 positions[4] = vec4[](
+                vec4(-1.0 + display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),    // Top-left
+                vec4(1.0 - display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),     // Top-right
+                vec4(-1.0 + display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0),   // Bottom-left
+                vec4(1.0 - display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0)     // Bottom-right
+            );
+ 
+                vec2 texcoords[4] = vec2[](		//Inverted in Y because PS1 Y coords are inverted
+                vec2(0.0, 0.0),   			// Top-left
+
+                vec2(display_area_x/1024.0, 0.0),   // Top-right
+
+                vec2(0.0, display_area_y/512.0),   // Bottom-left
+
+                vec2(display_area_x/1024.0, display_area_y/512.0)    // Bottom-right
+            );
+ 
+            gl_Position = positions[gl_VertexID];
+            texCoords = texcoords[gl_VertexID];
+            isScreenQuad = 1;
+
+            return;
+
+            }else{
+
+            gl_Position.xyzw = vec4(xpos,ypos,0.0, 1.0);
+            isScreenQuad = 0;
+            }
+
+            texpageBase = ivec2((inTexpage & 0xf) * 64, ((inTexpage >> 4) & 0x1) * 256);
+            clutBase = ivec2((inClut & 0x3f) * 16, inClut >> 6);
+            texCoords = inUV;
+
+            color_in = vec3(
+            float(vColors.r)/255.0,
+            float(vColors.g)/255.0,
+            float(vColors.b)/255.0
+	
+            );
+
+            }";
+
+        string fragmentShader = @"
+            #version 330 
+
+            in vec3 color_in;
+            in vec2 texCoords;
+            flat in ivec2 clutBase;
+            flat in ivec2 texpageBase;
+            uniform int TextureMode;
+
+            flat in int isScreenQuad;
+
+            uniform ivec4 u_texWindow;
+            uniform vec4 u_blendFactors;
+
+            uniform sampler2D u_vramTex;
+
+            out vec4 outputColor;
+
+            vec4 grayScale(vec4 color) {
+                   float x = 0.299*(color.r) + 0.587*(color.g) + 0.114*(color.b);
+                   return vec4(x,x,x,1);
+              }
+
+               int floatToU5(float f) {				
+                        return int(floor(f * 31.0 + 0.5));
+                    }
+
+            vec4 sampleVRAM(ivec2 coords) {
+                   coords &= ivec2(1023, 511); // Out-of-bounds VRAM accesses wrap
+                   return texelFetch(u_vramTex, coords, 0);
+              }
+
+            int sample16(ivec2 coords) {
+                   vec4 colour = sampleVRAM(coords);
+                   int r = floatToU5(colour.r);
+                   int g = floatToU5(colour.g);
+                   int b = floatToU5(colour.b);
+                   int msb = int(ceil(colour.a)) << 15;
+                   return r | (g << 5) | (b << 10) | msb;
+                }
+
+             vec4 texBlend(vec4 colour1, vec4 colour2) {
+                        vec4 ret = (colour1 * colour2) / (128.0 / 255.0);
+                        ret.a = 1.0;
+                        return ret;
+                    }
+
+
+            void main()
+            {
+
+	            if(isScreenQuad == 1){		//Drawing a full screen quad case 
+	  
+	              ivec2 coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
+                    outputColor = texelFetch(u_vramTex, coords, 0);
+    		
+	  
+	              return;
+
+	            }
+
+                // Fix up UVs and apply texture window
+                  ivec2 UV = ivec2(floor(texCoords + vec2(0.0001, 0.0001))) & ivec2(0xff);
+                  UV = (UV & u_texWindow.xy) | u_texWindow.zw;
+  
+  	            if(TextureMode == -1){		//No texture, for now i am using my own flag (TextureMode) instead of (inTexpage & 0x8000) 
+    		             outputColor = vec4(color_in.r, color_in.g,color_in.b, 1.0);
+   	 	             return;
+
+                 }else if(TextureMode == 0){  //4 Bit texture
+
+ 		               ivec2 texelCoord = ivec2(UV.x >> 2, UV.y) + texpageBase;
+               
+       	               int sample = sample16(texelCoord);
+                           int shift = (UV.x & 3) << 2;
+                           int clutIndex = (sample >> shift) & 0xf;
+
+                           ivec2 sampleCoords = ivec2(clutBase.x + clutIndex, clutBase.y);
+
+                           outputColor = texelFetch(u_vramTex, sampleCoords, 0);
+
+
+		               if (outputColor.rgb == vec3(0.0, 0.0, 0.0)) discard;
+                           outputColor = texBlend(outputColor, vec4(color_in,1.0));
+		
+
+	            }else if (TextureMode == 1) { // 8 bit texture
+                           ivec2 texelCoord = ivec2(UV.x >> 1, UV.y) + texpageBase;
+               
+                           int sample = sample16(texelCoord);
+                           int shift = (UV.x & 1) << 3;
+                           int clutIndex = (sample >> shift) & 0xff;
+                           ivec2 sampleCoords = ivec2(clutBase.x + clutIndex, clutBase.y);
+                           outputColor = texelFetch(u_vramTex, sampleCoords, 0);
+                           if (outputColor.rgb == vec3(0.0, 0.0, 0.0)) discard;
+
+                           outputColor = texBlend(outputColor, vec4(color_in,1.0));
+                       }
+
+	            else {  //16 Bit texture
+ 		               ivec2 texelCoord = UV + texpageBase;
+
+                           outputColor = sampleVRAM(texelCoord);
+
+                           if (outputColor.rgb == vec3(0.0, 0.0, 0.0)) discard;
+
+                           outputColor = texBlend(outputColor, vec4(color_in,1.0));	
+
+	            }
+
+	
+            }";
+
+
 
         //Map my button indexes to the corrosponding bits in the PS1 controller
         public static Dictionary<int, int> buttons_Dictionary = new Dictionary<int, int>()
@@ -121,12 +317,22 @@ namespace PS1_Emulator {
             Interconnect i = new Interconnect(bios, this);
             cpu = new CPU(i);
             this.Title += bios.ID.Contains("1001") ? (" - BIOS: " + bios.ID) : "";
-
+            if (cpu.bus.CD_ROM.hasDisk) {
+                string gameName = Path.ChangeExtension(cpu.bus.CD_ROM.path, null);
+                char stop = (char)92;
+                for (int j = gameName.Length - 1; j >= 0; j--) {
+                    if (gameName.ElementAt(j) == stop) {
+                        gameName = gameName.Remove(0, j + 1);
+                        break;
+                    }
+                }
+                this.Title += " - " + gameName;
+            }
         }
         protected override void OnLoad() {
             
             //Load shaders 
-            shader = new Shader("C:\\Users\\Old Snake\\Desktop\\PS1\\shader.vert", "C:\\Users\\Old Snake\\Desktop\\PS1\\shader.frag");
+            shader = new Shader(vertixShader, fragmentShader);
             shader.Use();
 
             GL.Viewport(0, 0, this.Size.X, this.Size.Y);
@@ -328,7 +534,8 @@ namespace PS1_Emulator {
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
 
         }
-        public void rectFill(byte r, byte g, byte b, int x, int y, int width, int height) {
+        public void rectFill(byte r, byte g, byte b, int x, int y, int width, int height) { 
+
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
 
@@ -527,6 +734,7 @@ namespace PS1_Emulator {
             }
 
         }
+        
         protected override void OnUpdateFrame(FrameEventArgs args) {
             base.OnUpdateFrame(args);
 

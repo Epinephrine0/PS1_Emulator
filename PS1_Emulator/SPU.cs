@@ -355,6 +355,12 @@ namespace PS1_Emulator {
 
                     return (ushort)(NON >> 16);
 
+                /*case 0x1b0: //1F801DB0h - CD Audio Input Volume (for normal CD-DA, and compressed XA-ADPCM)
+                case 0x1b2:
+                case 0x1b4: //1F801DB4h - External Audio Input Volume
+                case 0x1b6:
+
+                    return 0;*/
 
                 default:
                     throw new NotImplementedException("Offset: " + offset.ToString("x") + "\n"
