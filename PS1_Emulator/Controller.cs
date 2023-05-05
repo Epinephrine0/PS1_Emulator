@@ -11,7 +11,6 @@ namespace PS1_Emulator {
         public bool isConnected;
         public ushort buttons = 0xffff;
         public int sequenceNum;
-        bool configMode = false;
         public static readonly Dictionary<int, int> dualSense_Dictionary = new Dictionary<int, int>() //This is for PS5, I need to handle having a PS4 controller 
         {
            {0, 15},      //Square
@@ -31,7 +30,7 @@ namespace PS1_Emulator {
            {17, 6},      //Pad down
            {18, 7},      //Pad Left
         };
-       /* public static readonly Dictionary<int, int> x360_Dictionary = new Dictionary<int, int>() //This is for PS5, I need to handle having a PS4 controller 
+       /* public static readonly Dictionary<int, int> x360_Dictionary = new Dictionary<int, int>()
         {
            {2, 15},      //Square
            {0, 14},      //X
