@@ -111,8 +111,8 @@ namespace PS1_Emulator {
                     //counter = 1500;
 
                     if (JOYoutput) {
-                        TXREADY2 = true;
-                        if (SlotNum == 1 && selectedDevice == SelectedDevice.MemoryCard) {                     //Second memory card is not connected
+                        TXREADY2 = true;                
+                        if (SlotNum == 1) {     // PAD 2 and Memory card 2 are not connected
                             ACKLevel = false;
                             return 0xff;
                         }
@@ -211,11 +211,8 @@ namespace PS1_Emulator {
 
                         }
                         else if(selectedDevice == SelectedDevice.MemoryCard) {
-
                             JOY_RX_DATA = memoryCard.response(JOY_TX_DATA);
                             ACKLevel = memoryCard.ack;
-
-
                         }
                         else {
                             if (JOY_TX_DATA == 0x01) {
@@ -361,6 +358,7 @@ namespace PS1_Emulator {
                 memoryCard.reset();
                 selectedDevice = SelectedDevice.None;
                 controller1.sequenceNum = 0;
+                en = false;
             }
 
         }

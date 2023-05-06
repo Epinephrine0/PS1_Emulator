@@ -1,13 +1,6 @@
-﻿using NAudio.Dmo.Effect;
-using NAudio.Wave;
-using OpenTK.Graphics.ES11;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
 using System.IO;
-using System.Linq;
-using static PS1_Emulator.CD_ROM;
 
 namespace PS1_Emulator {
     public unsafe class CD_ROM {
