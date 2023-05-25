@@ -242,8 +242,6 @@ namespace PS1_Emulator {
                     }
 
                     IRQ_CONTROL.IRQsignal(0);     //VBLANK
-                    //IRQ_CONTROL.IRQsignal(9);   //Fake SPU IRQ
-
                     this.TIMER1.GPUinVblank = true;
                 }
 

@@ -1,18 +1,5 @@
-﻿using Microsoft.VisualBasic;
-using NAudio.Dsp;
-using NAudio.Wave;
-using OpenTK.Windowing.Common;
-using OpenTK.Windowing.GraphicsLibraryFramework;
+﻿using NAudio.Wave;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Linq;
-using System.Net;
-using System.Runtime.ConstrainedExecution;
-using System.Text;
-using System.Threading.Tasks;
-using static PS1_Emulator.Voice;
 using static PS1_Emulator.Voice.ADSR;
 
 namespace PS1_Emulator {
@@ -164,6 +151,7 @@ namespace PS1_Emulator {
                 case 0x1a8:
                     if((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
                     currentAddress &= 0x7FFFF;
+                    if (currentAddress <= SPU_IRQ_Address && currentAddress + 1 >= SPU_IRQ_Address) { SPU_IRQ(); }
                     RAM[currentAddress++] = (byte)(value & 0xFF);
                     RAM[currentAddress++] = (byte)((value >> 8) & 0xFF);
 
@@ -453,7 +441,7 @@ namespace PS1_Emulator {
                 }
 
                 if (voices[i].adsr.phase == Voice.ADSR.Phase.Off) {
-                    voices[i].latest = 0;
+                    voices[i].lastSample = 0;
 
                     continue;
 
@@ -477,15 +465,14 @@ namespace PS1_Emulator {
                 else {
                     Console.WriteLine("[SPU] Noise generator !");   
                     voices[i].adsr.adsrVolume = 0;
-                    voices[i].latest = 0;
+                    voices[i].lastSample = 0;
 
                 }
 
                 sample = (short)((sample * voices[i].adsr.adsrVolume) >> 15);
                 voices[i].adsr.ADSREnvelope();
-
-                voices[i].latest = sample;
-
+                voices[i].lastSample = sample;
+               
                 sumLeft += (sample * voices[i].getVolumeLeft()) >> 15;
                 sumRight += (sample * voices[i].getVolumeRight()) >> 15;
 
@@ -497,7 +484,8 @@ namespace PS1_Emulator {
                
             }
 
-                      
+            captureBuffers();
+
             (reverbLeft, reverbRight) = processReverb(reverbLeft_Input, reverbRight_Input);
 
             sumLeft += (reverbLeft * reverbCounter);
@@ -529,8 +517,25 @@ namespace PS1_Emulator {
 
 
         }
+        uint captureAddress = 0;
 
+        private void captureBuffers() { //Experimental 
 
+            RAM[0x00800 + captureAddress] = (byte)voices[1].lastSample;
+            RAM[0x00800 + captureAddress + 1] = (byte)(voices[1].lastSample >> 8);
+
+            RAM[0x00C00 + captureAddress] = (byte)voices[3].lastSample;
+            RAM[0x00C00 + captureAddress + 1] = (byte)(voices[3].lastSample >> 8);
+
+            if (((0x00800 + captureAddress == SPU_IRQ_Address) || (0x00C00 + captureAddress == SPU_IRQ_Address))
+                && ((transfer_Control >> 2) & 0x3) != 0) { 
+                SPU_IRQ();
+            }
+
+            captureAddress = (captureAddress + 2) & 0x3FF;
+            
+
+        }
         private (int, int) processReverb(int leftInput, int rightInput) {
 
             //Apply reverb formula
@@ -638,13 +643,7 @@ namespace PS1_Emulator {
                 IRQ_CONTROL.IRQsignal(9);
             }
 
-            if (SPU_IRQ_Address >= 0 && SPU_IRQ_Address <= 0x7FF) {
-                Writing_Capture_Buffers = 0;
-
-            }else if (SPU_IRQ_Address >= 0x800 && SPU_IRQ_Address <= 0xFFF) {
-                Writing_Capture_Buffers = 1;
-
-            }
+           
 
         }
         
@@ -675,7 +674,7 @@ namespace PS1_Emulator {
             int step =  voices[i].ADPCM_Pitch;   //Sign extended to 32-bits
 
             if (((PMON & (1 << i)) != 0) && i > 0) {
-                int factor = voices[i - 1].latest;
+                int factor = voices[i - 1].lastSample;
                 factor += 0x8000;
                 step = step * factor;
                 step = step >> 15;
@@ -706,6 +705,8 @@ namespace PS1_Emulator {
         internal void DMAtoSPU(uint data) {
             if ((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
             currentAddress &= 0x7FFFF;
+            if(currentAddress <= SPU_IRQ_Address && currentAddress + 3 >= SPU_IRQ_Address) { SPU_IRQ(); }
+
             RAM[currentAddress++] = (byte)(data & 0xFF);
             RAM[currentAddress++] = (byte)((data >> 8) & 0xFF);
             RAM[currentAddress++] = (byte)((data >> 16) & 0xFF);

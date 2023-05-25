@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 
 namespace PS1_Emulator {
     public unsafe class CPU {
-        private UInt32 pc;                //32-bit program counter
+        private UInt32 pc;           //32-bit program counter
         private UInt32 next_pc;
         private UInt32 current_pc;
         public  Interconnect bus;
@@ -14,7 +14,7 @@ namespace PS1_Emulator {
         private Instruction current;
         private UInt32 SR;           //cop0 reg12 , the status register 
         private UInt32 cause;        //cop0 reg13 , the cause register 
-        private UInt32 epc;          //cop0 reg14, epc
+        private UInt32 epc;          //cop0 reg14 , epc
 
         private (UInt32, UInt32) pendingload; //to emulate the load delay
 
@@ -42,18 +42,6 @@ namespace PS1_Emulator {
 
         bool fastBoot = true;
 
-        /* Main Opcodes:
-           00h=SPECIAL 08h=ADDI  10h=COP0 18h=N/A   20h=LB   28h=SB   30h=LWC0 38h=SWC0
-           01h=BcondZ  09h=ADDIU 11h=COP1 19h=N/A   21h=LH   29h=SH   31h=LWC1 39h=SWC1
-           02h=J       0Ah=SLTI  12h=COP2 1Ah=N/A   22h=LWL  2Ah=SWL  32h=LWC2 3Ah=SWC2
-           03h=JAL     0Bh=SLTIU 13h=COP3 1Bh=N/A   23h=LW   2Bh=SW   33h=LWC3 3Bh=SWC3
-           04h=BEQ     0Ch=ANDI  14h=N/A  1Ch=N/A   24h=LBU  2Ch=N/A  34h=N/A  3Ch=N/A
-           05h=BNE     0Dh=ORI   15h=N/A  1Dh=N/A   25h=LHU  2Dh=N/A  35h=N/A  3Dh=N/A
-           06h=BLEZ    0Eh=XORI  16h=N/A  1Eh=N/A   26h=LWR  2Eh=SWR  36h=N/A  3Eh=N/A
-           07h=BGTZ    0Fh=LUI   17h=N/A  1Fh=N/A   27h=N/A  2Fh=N/A  37h=N/A  3Fh=N/A
-
-       */
-
         private static readonly delegate*<CPU,Instruction, void>[] mainLookUpTable = new delegate*<CPU, Instruction, void>[] {
                 &special,   &bxx,       &jump,      &jal,       &beq,        &bne,       &blez,      &bgtz,
                 &addi,      &addiu,     &slti,      &sltiu,     &andi,       &ori,       &xori,      &lui,
@@ -63,22 +51,7 @@ namespace PS1_Emulator {
                 &sb,        &sh,        &swl,       &sw,        &illegal,    &illegal,   &swr,       &illegal,
                 &lwc0,      &lwc1,      &lwc2,      &lwc3,      &illegal,    &illegal,   &illegal,   &illegal,
                 &swc0,      &swc1,      &swc2,      &swc3,      &illegal,    &illegal,   &illegal,   &illegal
-
-            };
-
-
-        /*
-            Special Opcodes:
-            00h=SLL   08h=JR      10h=MFHI 18h=MULT  20h=ADD  28h=N/A  30h=N/A  38h=N/A
-            01h=N/A   09h=JALR    11h=MTHI 19h=MULTU 21h=ADDU 29h=N/A  31h=N/A  39h=N/A
-            02h=SRL   0Ah=N/A     12h=MFLO 1Ah=DIV   22h=SUB  2Ah=SLT  32h=N/A  3Ah=N/A
-            03h=SRA   0Bh=N/A     13h=MTLO 1Bh=DIVU  23h=SUBU 2Bh=SLTU 33h=N/A  3Bh=N/A
-            04h=SLLV  0Ch=SYSCALL 14h=N/A  1Ch=N/A   24h=AND  2Ch=N/A  34h=N/A  3Ch=N/A
-            05h=N/A   0Dh=BREAK   15h=N/A  1Dh=N/A   25h=OR   2Dh=N/A  35h=N/A  3Dh=N/A
-            06h=SRLV  0Eh=N/A     16h=N/A  1Eh=N/A   26h=XOR  2Eh=N/A  36h=N/A  3Eh=N/A
-            07h=SRAV  0Fh=N/A     17h=N/A  1Fh=N/A   27h=NOR  2Fh=N/A  37h=N/A  3Fh=N/A
-        
-         */
+        };
 
         private static readonly delegate*<CPU, Instruction, void>[] specialLookUpTable = new delegate*<CPU, Instruction, void>[] {
                 &sll,       &illegal,   &srl,       &sra,       &sllv,      &illegal,   &srlv,      &srav,
@@ -89,10 +62,10 @@ namespace PS1_Emulator {
                 &illegal,   &illegal,   &slt,       &sltu,      &illegal,   &illegal,   &illegal,   &illegal,
                 &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,
                 &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal
+        };
 
-            };
         public CPU(Interconnect bus) {
-            this.pc = 0xbfc00000;         
+            this.pc = 0xbfc00000;   //BIOS initial PC       
             this.next_pc = pc + 4;
             this.bus = bus;
             this.regs = new UInt32[32];
@@ -105,8 +78,6 @@ namespace PS1_Emulator {
             this.LO = 0xdeadbeef;
             this._branch = false;
             this.delay_slot = false;
-
-            
             Console.ForegroundColor = ConsoleColor.Green;   //For TTY Console
             Console.Title = "TTY Console";
         }
@@ -114,9 +85,7 @@ namespace PS1_Emulator {
         public void emu_cycle() {   
               
             current_pc = pc;   //Save current pc In case of an exception
-
-            //Should move these to J,Jal,Jr,Jalr instead of checking on every instruction
-            intercept(pc);
+            intercept(pc);     //TTY
 
            /* if (fastBoot) {       //Skip Sony logo, doesn't work 
                 if (pc == 0x80030000) {
@@ -129,26 +98,24 @@ namespace PS1_Emulator {
             //----------------------------------------------------------------------
 
 
-            //PC must be 32 bit aligned 
+            //PC must be 32 bit aligned, can be ignored?
             if ((current_pc & 0x3) != 0) {  
                 exception(this, LoadAddressError);
                 return;
             }
 
             current = new Instruction(bus.load32(pc));
-            
 
-            delay_slot = _branch;
+            delay_slot = _branch;   //Brach delay 
             _branch = false;       
                                 
             pc = next_pc;
-            next_pc = next_pc + 4;
+            next_pc = next_pc + 4;  
 
             outRegs[pendingload.Item1] = pendingload.Item2;     //Load any pending load 
             pendingload = (0, 0);                              //Reset 
 
             outRegs[0] = 0;
-
 
             if (IRQ_CONTROL.isRequestingIRQ()) {  //Interrupt check 
                 cause |= 1 << 10;
@@ -161,8 +128,7 @@ namespace PS1_Emulator {
             }
 
             executeInstruction(current);
-
-             outRegs[0] = 0;
+            outRegs[0] = 0;
 
             for (int i = 0; i < regs.Length; i++) {
                 regs[i] = outRegs[i];
@@ -173,13 +139,15 @@ namespace PS1_Emulator {
         private void executeInstruction(Instruction instruction) {
             mainLookUpTable[instruction.getOpcode()](this,instruction);
         }
+        private static void special(CPU cpu, Instruction instruction) {
+            specialLookUpTable[instruction.get_subfunction()](cpu, instruction);
+        }
 
         private void intercept(uint pc) {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
                     //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gpu\clipping\clipping.exe");
-
                     break;
 
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
@@ -251,13 +219,13 @@ namespace PS1_Emulator {
                         case 0x9E:
                         case 0xA2:
                         case 0xA3:
-                            if (bus.print) {
+                            if (bus.debug) {
                                 CDROM_trace(regs[9]);
                             }
                             break;
 
                         default:
-                            if (bus.print) {
+                            if (bus.debug) {
                                 Console.WriteLine("Function A: " + regs[9].ToString("x"));
                             }
 
@@ -314,7 +282,7 @@ namespace PS1_Emulator {
                             break;
 
                         case 0xB:
-                            if (bus.print) {
+                            if (bus.debug) {
                                 Console.WriteLine("TestEvent");
                                 Console.WriteLine("$a0: " + regs[4].ToString("X"));
                                 Console.WriteLine("$a1: " + regs[5].ToString("X"));
@@ -342,7 +310,7 @@ namespace PS1_Emulator {
                             break;
 
                         default:
-                            if (bus.print) {
+                            if (bus.debug) {
                                 Console.WriteLine("Function B: " + regs[9].ToString("x"));
                             }
                             break;
@@ -352,7 +320,7 @@ namespace PS1_Emulator {
 
                     break;
                 case 0xC0:
-                    if (bus.print) {
+                    if (bus.debug) {
                         Console.WriteLine("Function C: " + regs[9].ToString("x"));
                     }
                     break;
@@ -467,395 +435,6 @@ namespace PS1_Emulator {
 
         }
         
-       
-       
-        /*public void decode_execute(Instruction instruction) {
-
-            switch (instruction.getOpcode()) {
-
-                case 0b001111:
-
-                    lui(instruction);
-                    break;
-
-                case 0b001101:
-
-                    ori(instruction);
-                    break;
-
-                case 0b101011:
-
-                    sw(instruction);
-                    break;
-
-                case 0b000000:
-
-                    special(instruction);
-                    break;
-
-                case 0b001001:
-
-                    addiu(instruction);
-                    break;
-
-                case 0b000010:
-
-                    jump(instruction);
-                    break;
-
-                case 0b010000:
-
-                    cop0(instruction);
-                    break;
-
-                case 0b000101:
-
-                    bne(instruction);
-                    break;
-
-                case 0b001000:
-
-                    addi(instruction);
-                    break;
-
-                case 0b100011:
-
-                    lw(instruction);
-                    break;
-
-                case 0b101001:
-
-                    sh(instruction);
-
-                    break;
-
-                case 0b000011:
-
-                    jal(instruction);
-                    break;
-
-                case 0b001100:
-
-                    andi(instruction);
-                    break;
-
-                case 0b101000:
-
-                    sb(instruction);
-                    break;
-
-                case 0b100000:
-
-                    lb(instruction);
-                    break;
-
-
-                case 0b000100:
-
-                    beq(instruction);
-                    break;
-
-                case 0b000111:
-
-                    bgtz(instruction);
-                    break;
-
-                case 0b000110:
-
-                    blez(instruction);
-
-                    break;
-
-                case 0b100100:
-
-                    lbu(instruction);
-                    break;
-
-                case 0b000001:
-
-                    bxx(instruction);
-                    break;
-
-                case 0b001010:
-
-                    slti(instruction);
-                    break;
-
-                case 0b001011:
-
-                    sltiu(instruction);
-                    break;
-
-                case 0b100101:
-
-                    lhu(instruction);
-                    break;
-
-                case 0b100001:
-
-                    lh(instruction);
-                    break;
-
-                case 0xe:
-
-                    xori(instruction);
-                    break;
-
-                case 0x11:
-
-                    cop1(instruction);
-                    break;
-
-                case 0x12:
-
-                    cop2(instruction);
-                    break;
-
-                case 0x13:
-
-                    cop3(instruction);
-                    break;
-
-                case 0x22:
-
-                    lwl(instruction);
-                    break;
-
-                case 0x26:
-
-                    lwr(instruction);
-                    break;
-
-                case 0x2a:
-
-                    swl(instruction);
-                    break;
-
-                case 0x2e:
-
-                    swr(instruction);
-                    break;
-
-                case 0x30:
-
-                    lwc0(instruction);
-                    break;
-
-                case 0x31:
-
-                    lwc1(instruction);
-                    break;
-
-                case 0x32:
-                    
-                    lwc2(instruction);
-                    break;
-
-                case 0x33:
-
-                    lwc3(instruction);
-                    break;
-
-                case 0x38:
-
-                    swc0(instruction);
-                    break;
-
-                case 0x39:
-
-                    swc1(instruction);
-                    break;
-
-            
-                case 0x41:
-
-                    swc3(instruction);
-
-                    break;
-
-                case 0x3A:
-
-                    swc2(instruction);
-                    break;
-
-                default:
-
-                    illegal(instruction);
-                    break;
-
-            }
-
-
-        }*/
-
-
-        private static void special(CPU cpu, Instruction instruction) {
-            specialLookUpTable[instruction.get_subfunction()](cpu, instruction);
-
-            /*switch (instruction.get_subfunction()) {
-
-                case 0b000000:
-
-                    sll(instruction);
-
-                    break;
-
-                case 0b100101:
-
-                    OR(instruction);
-
-                    break;
-
-                case 0b100100:
-
-                    AND(instruction);
-
-                    break;
-
-                case 0b101011:
-
-                    stlu(instruction);
-
-                    break;
-
-                case 0b100001:
-
-                    addu(instruction);
-                    break;
-
-                case 0b001000:
-
-                    jr(instruction);
-                    break;
-
-                case 0b100000:
-
-                    add(instruction);
-                    break;
-
-
-                case 0b001001:
-
-                    jalr(instruction);
-                    break;
-
-                case 0b100011:
-
-                    subu(instruction);
-                    break;
-
-                case 0b000011:
-
-
-                    sra(instruction);
-                    break;
-
-                case 0b011010:
-
-                    div(instruction);
-                    break;
-
-                case 0b010010:
-
-                    mflo(instruction);
-                    break;
-
-                case 0b000010:
-
-                    srl(instruction);
-                    break;
-
-                case 0b011011:
-
-                    divu(instruction);
-                    break;
-
-                case 0b010000:
-
-                    mfhi(instruction);
-                    break;
-
-                case 0b101010:
-
-                    slt(instruction);
-                    break;
-
-                case 0b001100:
-
-                    syscall(instruction);
-                    break;
-
-                case 0b010011:
-
-                    mtlo(instruction);
-
-                    break;
-
-                case 0b010001:
-
-                    mthi(instruction);
-
-                    break;
-
-                case 0b000100:
-
-                    sllv(instruction);
-                    break;
-
-                case 0b100111:
-
-                    nor(instruction);
-                    break;
-
-                case 0b000111:
-
-                    srav(instruction);
-                    break;
-
-                case 0b000110:
-
-                    srlv(instruction);
-                    break;
-
-                case 0b011001:
-
-                    multu(instruction);
-                    break;
-
-                case 0b100110:
-
-                    xor(instruction);
-                    break;
-
-                case 0xd:
-
-                    break_(instruction);
-                    break;
-
-                case 0x18:
-
-                    mult(instruction);
-                    break;
-
-                case 0x22:
-
-                    sub(instruction);
-
-                    break;
-
-                case 0x0E:
-                    illegal(instruction);
-
-                    break;
-
-
-                default:
-
-                    throw new Exception("Unhandeled special instruction [ " + instruction.getfull().ToString("X").PadLeft(8, '0') + " ] with subfunction: " + Convert.ToString(instruction.get_subfunction(), 2).PadLeft(6, '0'));
-
-            }*/
-
-        }
         private static void cop0(CPU cpu, Instruction instruction) {
 
             switch (instruction.get_rs()) {
@@ -1898,73 +1477,49 @@ namespace PS1_Emulator {
         }
         
         private static void add(CPU cpu, Instruction instruction) {
-
             Int32 reg1 = (Int32)cpu.regs[instruction.get_rs()];       
             Int32 reg2 = (Int32)cpu.regs[instruction.get_rt()];
-
             try {
-                Int32 value = checked(reg1 + reg2);        //Check for signed integer overflow 
-
+                Int32 value = checked(reg1 + reg2);        //Check for signed integer overflow, can be ignored as no games rely on this 
                 cpu.outRegs[instruction.get_rd()] = (UInt32)value;
-
             }
             catch (OverflowException) {
                 exception(cpu,Overflow);    
-            
             }
 
-          
         }
 
         private static void jr(CPU cpu, Instruction instruction) {
-
             cpu.next_pc = cpu.regs[instruction.get_rs()];      //Return or Jump to address in register 
             if ((cpu.next_pc & 0x3) != 0) {
                 exception(cpu, LoadAddressError);
             }
             cpu._branch = true;
-           
         }
 
         private static void addu(CPU cpu, Instruction instruction) {
-
-
             cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] + cpu.regs[instruction.get_rt()];
-          
         }
 
         private static void sltu(CPU cpu, Instruction instruction) {
             if (cpu.regs[instruction.get_rs()] < cpu.regs[instruction.get_rt()]) { //Int32 ?
-
                 cpu.outRegs[instruction.get_rd()] = (UInt32) 1;
-
             }
             else {
                 cpu.outRegs[instruction.get_rd()] = (UInt32) 0;
-
             }
 
-          
         }
-
         public static void sll(CPU cpu,Instruction instruction) {
-
             cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rt()] << (Int32)instruction.get_sa();
-           
         }
         private static void addiu(CPU cpu, Instruction instruction) {
-
             cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
-            
-
         }
 
         private static void jump(CPU cpu, Instruction instruction) {
-
             cpu.next_pc = (cpu.next_pc & 0xf0000000) | (instruction.imm_jump() << 2);
             cpu._branch = true;
-
-
         }
 
 
@@ -2019,7 +1574,6 @@ namespace PS1_Emulator {
         private static void mtc0(CPU cpu, Instruction instruction) {
 
             switch (instruction.get_rd()) {
-
                 case 3:
                 case 5:                          //Breakpoints registers
                 case 6:
@@ -2028,32 +1582,24 @@ namespace PS1_Emulator {
                 case 11:
 
                     if (cpu.regs[instruction.get_rt()] != 0) {
-
                         throw new Exception("Unhandled write to cop0 register: " + instruction.get_rd());
-
                     }
 
                     break;
 
                 case 12:
-
                     cpu.SR = cpu.regs[instruction.get_rt()];            //Setting the status register's 16th bit
-
                     break;
 
                 case 13:
                     //cause register, mostly read-only data describing the
                     //cause of an exception. Apparently only bits[9:8] are writable
                     if (cpu.regs[instruction.get_rt()] != 0) { 
-
                         throw new Exception("Unhandled write to CAUSE register: " + instruction.get_rd());
-
                     }
-
                     break;
 
                 default:
-                    
                     throw new Exception("Unhandled cop0 register: " + instruction.get_rd());
             }
           
@@ -2062,12 +1608,9 @@ namespace PS1_Emulator {
 
         }
         private static void bne(CPU cpu, Instruction instruction) {
-
             if (!cpu.regs[instruction.get_rs()].Equals(cpu.regs[instruction.get_rt()])) {
                 branch(cpu,instruction.signed_imm());
             }
-
-
         }
 
         private static void branch(CPU cpu, UInt32 offset) {
@@ -2075,8 +1618,7 @@ namespace PS1_Emulator {
             cpu.next_pc = cpu.next_pc + offset;
             cpu.next_pc = cpu.next_pc - 4;        //Cancel the +4 from the emu cycle 
             cpu._branch = true;
-                    
-            
+                 
         }
 
        

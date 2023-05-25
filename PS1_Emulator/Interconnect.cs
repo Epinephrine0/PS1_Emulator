@@ -33,22 +33,19 @@ namespace PS1_Emulator {
         public MDEC MDEC;
 
         private readonly UInt32[] region_Mask = { 
-        
-                     // KUSEG: 2048MB
-                       0xffffffff , 0xffffffff, 0xffffffff , 0xffffffff,
+                    // KUSEG: 2048MB
+                       0xffffffff, 0xffffffff, 0xffffffff , 0xffffffff,
                     // KSEG0: 512MB
                        0x7fffffff,
                     // KSEG1: 512MB
                        0x1fffffff,
                     // KSEG2: 1024MB
                        0xffffffff, 0xffffffff
-
         };
 
         //No class for now
         public Range TIMER0 = new Range(0x1F801100, 0xF+1);        //Assumption 
-
-        public bool print = false;
+        public bool debug = false;
 
         public Interconnect(BIOS b, Window w) { 
             this.bios = b;
@@ -72,40 +69,42 @@ namespace PS1_Emulator {
        
 
         public UInt32 load32(UInt32 address) {
-            
+            uint physical_address = mask(address);
 
-            if (bios.range.contains(mask(address)) != null) {
 
-                offset = (UInt32) bios.range.contains(mask(address));
+
+            if (bios.range.contains(physical_address) != null) {
+
+                offset = (UInt32) bios.range.contains(physical_address);
 
 
                 return bios.fetch(offset);
 
 
-            } else if (ram.range.contains(mask(address)) != null) {
+            } else if (ram.range.contains(physical_address) != null) {
 
-                offset = (UInt32)ram.range.contains(mask(address));
+                offset = (UInt32)ram.range.contains(physical_address);
                 
                 return ram.read(offset);                        
 
             }
-            else if (IRQ_CONTROL.range.contains(mask(address)) != null) {
-                offset = (UInt32)IRQ_CONTROL.range.contains(mask(address));
+            else if (IRQ_CONTROL.range.contains(physical_address) != null) {
+                offset = (UInt32)IRQ_CONTROL.range.contains(physical_address);
 
                 return IRQ_CONTROL.read32(offset);
 
             }
-            else if (DMA.range.contains(mask(address)) != null) {
+            else if (DMA.range.contains(physical_address) != null) {
 
-                offset = (UInt32)DMA.range.contains(mask(address));
+                offset = (UInt32)DMA.range.contains(physical_address);
 
                 return DMA.read_dma_reg(offset);
 
             }
-            else if (GPU.range.contains(mask(address)) != null) {
+            else if (GPU.range.contains(physical_address) != null) {
 
 
-                offset = (UInt32)GPU.range.contains(mask(address));
+                offset = (UInt32)GPU.range.contains(physical_address);
 
                 switch (offset) {
                     case 0:
@@ -125,40 +124,36 @@ namespace PS1_Emulator {
             }
 
 
-            else if (this.TIMER0.contains(mask(address)) != null) { 
+            else if (this.TIMER0.contains(physical_address) != null) { 
 
                 //Console.WriteLine("Unhandled read to TIMER0 register at address: " + address.ToString("X"));
                 return 0;  
             }
-            else if (this.TIMER1.range.contains(mask(address)) != null) {
-                offset = (UInt32)TIMER1.range.contains(mask(address));
+            else if (this.TIMER1.range.contains(physical_address) != null) {
+                offset = (UInt32)TIMER1.range.contains(physical_address);
 
                 return TIMER1.get(offset);  
 
             }
-            else if (this.TIMER2.range.contains(mask(address)) != null) {
-                offset = (UInt32)TIMER2.range.contains(mask(address));
-
-                //Debug.WriteLine("Unhandled read to TIMER2 register at address: " + address.ToString("X"));
+            else if (this.TIMER2.range.contains(physical_address) != null) {
+                offset = (UInt32)TIMER2.range.contains(physical_address);
                 return TIMER2.get(offset);
 
             }
             else if (address == 0x1F801060) {
-
                 //Memory Control 2
-
                 return 0X00000B88;
 
             }else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
                 return 0x200931E1;
             }
-            else if (scratchpad.range.contains(mask(address)) != null) {
-                offset = (UInt32)scratchpad.range.contains(mask(address));
+            else if (scratchpad.range.contains(physical_address) != null) {
+                offset = (UInt32)scratchpad.range.contains(physical_address);
 
                 return scratchpad.read(offset);
             }
-            else if (this.IO_PORTS.range.contains(mask(address)) != null) {
-                offset = (UInt32)IO_PORTS.range.contains(mask(address));
+            else if (this.IO_PORTS.range.contains(physical_address) != null) {
+                offset = (UInt32)IO_PORTS.range.contains(physical_address);
 
                 return IO_PORTS.read32(offset);
              }
@@ -176,8 +171,11 @@ namespace PS1_Emulator {
         int CDROM_delay_read;
         int CDROM_delay_write; 
         public void store32(UInt32 address,UInt32 value) {
-            if (memoryControl.range.contains(mask(address)) != null) {
-                switch (memoryControl.range.contains(mask(address))) {
+            uint physical_address = mask(address);
+
+
+            if (memoryControl.range.contains(physical_address) != null) {
+                switch (memoryControl.range.contains(physical_address)) {
 
                     case 0:
                         if (value != 0x1f000000) {
@@ -204,36 +202,36 @@ namespace PS1_Emulator {
 
 
             }
-            else if (ram_size.range.contains(mask(address)) != null) {        
+            else if (ram_size.range.contains(physical_address) != null) {        
 
-                offset = (UInt32)ram_size.range.contains(mask(address));
+                offset = (UInt32)ram_size.range.contains(physical_address);
                 this.ram_size.set_Size(offset, value);                  //Configure ram size (not necessary)
 
 
             }
-            else if (ram.range.contains(mask(address)) != null) {             //Write to RAM
+            else if (ram.range.contains(physical_address) != null) {             //Write to RAM
 
-                offset = (UInt32)ram.range.contains(mask(address));
+                offset = (UInt32)ram.range.contains(physical_address);
 
                 this.ram.write(offset, value);
 
             }
 
-            else if (cacheControl.range.contains(mask(address)) != null) {
+            else if (cacheControl.range.contains(physical_address) != null) {
 
                 Debug.WriteLine("Unhandled write to CACHECONTROL register, address: " + address.ToString("X"));
             }
 
-            else if (IRQ_CONTROL.range.contains(mask(address)) != null) {
+            else if (IRQ_CONTROL.range.contains(physical_address) != null) {
 
-                offset = (UInt32)IRQ_CONTROL.range.contains(mask(address));
+                offset = (UInt32)IRQ_CONTROL.range.contains(physical_address);
 
                 IRQ_CONTROL.write(offset, (ushort)value);   
 
             }
-            else if (DMA.range.contains(mask(address)) != null) {
+            else if (DMA.range.contains(physical_address) != null) {
 
-                offset = (UInt32)DMA.range.contains(mask(address));
+                offset = (UInt32)DMA.range.contains(physical_address);
                 DMA.set_dma_reg(offset, value);
 
                 DMAChannel activeCH = DMA.is_active(offset);
@@ -250,9 +248,9 @@ namespace PS1_Emulator {
                 }
 
             }
-            else if (GPU.range.contains(mask(address)) != null) {
+            else if (GPU.range.contains(physical_address) != null) {
 
-                offset = (UInt32)GPU.range.contains(mask(address));
+                offset = (UInt32)GPU.range.contains(physical_address);
 
                 switch (offset) {
 
@@ -268,30 +266,30 @@ namespace PS1_Emulator {
 
                     default:
                         throw new Exception("Unhandled write to offset: " + offset + " val: " + value.ToString("x")
-                                            + "Physical address: " + mask(address).ToString("x"));
+                                            + "Physical address: " + physical_address.ToString("x"));
                 }
 
 
 
 
             }
-            else if (this.TIMER0.contains(mask(address)) != null) {   
+            else if (this.TIMER0.contains(physical_address) != null) {   
 
                 Debug.WriteLine("Unhandled write to TIMER0 register at address: " + address.ToString("X"));
                 
             }
-            else if (this.TIMER1.range.contains(mask(address)) != null) {
-                offset = (UInt32)TIMER1.range.contains(mask(address));
+            else if (this.TIMER1.range.contains(physical_address) != null) {
+                offset = (UInt32)TIMER1.range.contains(physical_address);
 
                 TIMER1.set(offset, value);
 
             }
-            else if (this.TIMER2.range.contains(mask(address)) != null) {
-                offset = (UInt32)TIMER2.range.contains(mask(address));
+            else if (this.TIMER2.range.contains(physical_address) != null) {
+                offset = (UInt32)TIMER2.range.contains(physical_address);
 
                 TIMER2.set(offset, value);    
-            }else if (this.scratchpad.range.contains(mask(address)) != null) {  
-                offset = (UInt32)scratchpad.range.contains(mask(address));
+            }else if (this.scratchpad.range.contains(physical_address) != null) {  
+                offset = (UInt32)scratchpad.range.contains(physical_address);
                 scratchpad.write(offset,value);
             }
 
@@ -303,7 +301,7 @@ namespace PS1_Emulator {
 
             else {
 
-                throw new Exception("unknown address: " + address.ToString("X") + " - " + " Physical: " + mask(address).ToString("x"));
+                throw new Exception("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
 
             }
         }
@@ -321,26 +319,28 @@ namespace PS1_Emulator {
         }
 
         internal byte load8(UInt32 address) {
-            if (print) {
+            uint physical_address = mask(address);
+
+            if (debug) {
                // Debug.WriteLine("ADDR:" + address.ToString("x"));
             }
-            if (this.bios.range.contains(mask(address)) != null) {
-                offset = (UInt32)bios.range.contains(mask(address));
+            if (this.bios.range.contains(physical_address) != null) {
+                offset = (UInt32)bios.range.contains(physical_address);
 
                 return bios.load8(offset);
 
-            }else if (this.expansion1.range.contains(mask(address)) != null) {
+            }else if (this.expansion1.range.contains(physical_address) != null) {
                
                 return (byte)0xff;
 
-            }else if (this.ram.range.contains(mask(address)) != null) {
-                offset = (UInt32)ram.range.contains(mask(address));
+            }else if (this.ram.range.contains(physical_address) != null) {
+                offset = (UInt32)ram.range.contains(physical_address);
 
 
                 return this.ram.load8(offset);
 
-            }else if (this.CD_ROM.range.contains(mask(address)) != null) {
-                offset = (UInt32)CD_ROM.range.contains(mask(address));
+            }else if (this.CD_ROM.range.contains(physical_address) != null) {
+                offset = (UInt32)CD_ROM.range.contains(physical_address);
 
                 /*if (CDROM_delay_read > 0) {
                     //return 0;
@@ -349,13 +349,13 @@ namespace PS1_Emulator {
                 return this.CD_ROM.load8(offset);
 
             }
-            else if (this.IO_PORTS.range.contains(mask(address)) != null) {
-                offset = (UInt32)IO_PORTS.range.contains(mask(address));
+            else if (this.IO_PORTS.range.contains(physical_address) != null) {
+                offset = (UInt32)IO_PORTS.range.contains(physical_address);
 
                 return IO_PORTS.read(offset);
             }
-            else if (this.scratchpad.range.contains(mask(address)) != null) {
-                offset = (UInt32)scratchpad.range.contains(mask(address));
+            else if (this.scratchpad.range.contains(physical_address) != null) {
+                offset = (UInt32)scratchpad.range.contains(physical_address);
 
                 return scratchpad.load8(offset);
             }
@@ -371,61 +371,60 @@ namespace PS1_Emulator {
         }
 
         internal UInt16 load16(UInt32 address) {
-            if (print) {
-                //Debug.WriteLine("ADDR:" + address.ToString("x"));
-            }
+            uint physical_address = mask(address);
 
-            if (this.spu.range.contains(mask(address)) != null) {
 
-                offset = (UInt32)spu.range.contains(mask(address));
+            if (this.spu.range.contains(physical_address) != null) {
+
+                offset = (UInt32)spu.range.contains(physical_address);
 
                 return this.spu.load16(offset);
             }
-            else if (this.ram.range.contains(mask(address)) != null) {
+            else if (this.ram.range.contains(physical_address) != null) {
 
-                offset = (UInt32)ram.range.contains(mask(address));
+                offset = (UInt32)ram.range.contains(physical_address);
 
                 return this.ram.load16(offset);
             }
-            else if (IRQ_CONTROL.range.contains(mask(address)) != null) {
+            else if (IRQ_CONTROL.range.contains(physical_address) != null) {
 
-                offset = (UInt32)IRQ_CONTROL.range.contains(mask(address));
+                offset = (UInt32)IRQ_CONTROL.range.contains(physical_address);
 
                 return IRQ_CONTROL.read16(offset);
             }
-            else if (this.TIMER0.contains(mask(address)) != null) {  //Return 0, No idea if correct since the guide didn't mention timer reads (page 109) 
+            else if (this.TIMER0.contains(physical_address) != null) { 
 
                 Debug.WriteLine("Unhandled read to TIMER0 register at address: " + address.ToString("X"));
                 return 0;
             }
-            else if (this.TIMER1.range.contains(mask(address)) != null) {
-                offset = (UInt32)TIMER1.range.contains(mask(address));
+            else if (this.TIMER1.range.contains(physical_address) != null) {
+                offset = (UInt32)TIMER1.range.contains(physical_address);
 
                 return (ushort)TIMER1.get(offset);
 
             }
-            else if (this.TIMER2.range.contains(mask(address)) != null) {
-                offset = (UInt32)TIMER2.range.contains(mask(address));
+            else if (this.TIMER2.range.contains(physical_address) != null) {
+                offset = (UInt32)TIMER2.range.contains(physical_address);
 
                 return (ushort)TIMER2.get(offset);
 
             }
-            else if (this.IO_PORTS.range.contains(mask(address)) != null) {
-                offset = (UInt32)IO_PORTS.range.contains(mask(address));
+            else if (this.IO_PORTS.range.contains(physical_address) != null) {
+                offset = (UInt32)IO_PORTS.range.contains(physical_address);
 
                 return IO_PORTS.read16(offset);
             }
-            else if (this.bios.range.contains(mask(address)) != null){
-                offset = (UInt32)bios.range.contains(mask(address));
+            else if (this.bios.range.contains(physical_address) != null){
+                offset = (UInt32)bios.range.contains(physical_address);
 
                 return this.bios.load16(offset);
             }
-            else if (this.scratchpad.range.contains(mask(address)) != null) {
-                offset = (UInt32)scratchpad.range.contains(mask(address));
+            else if (this.scratchpad.range.contains(physical_address) != null) {
+                offset = (UInt32)scratchpad.range.contains(physical_address);
                 
                 return this.scratchpad.load16(offset);
             }
-            else if (this.expansion1.range.contains(mask(address)) != null) {    //ignore expansion 1
+            else if (this.expansion1.range.contains(physical_address) != null) {    //ignore expansion 1
 
                 return 0xFF;
             }
@@ -435,64 +434,65 @@ namespace PS1_Emulator {
 
             
             throw new Exception("Unhandled load16 at address : " + address.ToString("x") + "\n" + 
-                                "Physical address: " + mask(address).ToString("x")
+                                "Physical address: " + physical_address.ToString("x")
                                  );
 
 
         }
 
         public void store16(UInt32 address, UInt16 value) {
+            uint physical_address = mask(address);
 
-            if (this.spu.range.contains(mask(address)) != null) {
-                offset = (UInt32)spu.range.contains(mask(address));
+            if (this.spu.range.contains(physical_address) != null) {
+                offset = (UInt32)spu.range.contains(physical_address);
 
                 this.spu.store16(offset, value);
 
                 return;
             }
 
-            else if (this.TIMER0.contains(mask(address))!= null) {
+            else if (this.TIMER0.contains(physical_address)!= null) {
 
                 Debug.WriteLine("Unhandled write to TIMER0 register at address: " + address.ToString("X"));
                 return;
             }
-            else if (this.TIMER1.range.contains(mask(address)) != null) {
-                offset = (UInt32)TIMER1.range.contains(mask(address));
+            else if (this.TIMER1.range.contains(physical_address) != null) {
+                offset = (UInt32)TIMER1.range.contains(physical_address);
 
                 TIMER1.set(offset, value);
                 return;
             }
-            else if (this.TIMER2.range.contains(mask(address)) != null) {
-                offset = (UInt32)TIMER2.range.contains(mask(address));
+            else if (this.TIMER2.range.contains(physical_address) != null) {
+                offset = (UInt32)TIMER2.range.contains(physical_address);
 
                 TIMER2.set(offset, value);
                 return;
 
             }
-            else if (this.ram.range.contains(mask(address)) != null) {
+            else if (this.ram.range.contains(physical_address) != null) {
 
-                offset = (UInt32)ram.range.contains(mask(address));
+                offset = (UInt32)ram.range.contains(physical_address);
 
                 this.ram.store16(offset,value);
                 return;
             }
-            else if (IRQ_CONTROL.range.contains(mask(address)) != null) {
+            else if (IRQ_CONTROL.range.contains(physical_address) != null) {
 
-                offset = (UInt32)IRQ_CONTROL.range.contains(mask(address));
+                offset = (UInt32)IRQ_CONTROL.range.contains(physical_address);
                 IRQ_CONTROL.write(offset, value);
 
                 return;
 
             }
-            else if (this.IO_PORTS.range.contains(mask(address)) != null){
+            else if (this.IO_PORTS.range.contains(physical_address) != null){
 
-                offset = (UInt32)IO_PORTS.range.contains(mask(address));
+                offset = (UInt32)IO_PORTS.range.contains(physical_address);
 
                 IO_PORTS.write(offset, value);  
                 return;
             }
-            else if (this.scratchpad.range.contains(mask(address)) != null) {
-                offset = (UInt32)scratchpad.range.contains(mask(address));
+            else if (this.scratchpad.range.contains(physical_address) != null) {
+                offset = (UInt32)scratchpad.range.contains(physical_address);
 
                 this.scratchpad.store16(offset, value);
 
@@ -506,19 +506,20 @@ namespace PS1_Emulator {
 
         }
         public void store8(UInt32 address, byte value) {
+            uint physical_address = mask(address);
 
-            if (this.expansion2.range.contains(mask(address)) != null) {
+            if (this.expansion2.range.contains(physical_address) != null) {
                 Debug.WriteLine("Unhandled write to EXPANTION2 at address : " + address.ToString("x"));
                 return;
             }
-            else if (this.ram.range.contains(mask(address)) != null) {
-                offset = (UInt32)ram.range.contains(mask(address));
+            else if (this.ram.range.contains(physical_address) != null) {
+                offset = (UInt32)ram.range.contains(physical_address);
 
                 this.ram.store8(offset, value);
                 return;
 
-            }else if (this.CD_ROM.range.contains(mask(address)) != null) {
-                offset = (UInt32)CD_ROM.range.contains(mask(address));
+            }else if (this.CD_ROM.range.contains(physical_address) != null) {
+                offset = (UInt32)CD_ROM.range.contains(physical_address);
 
                 /*if (CDROM_delay_write > 0) {
                  //   return;
@@ -533,17 +534,17 @@ namespace PS1_Emulator {
                 return;
 
             }
-            else if (this.IO_PORTS.range.contains(mask(address)) != null) {
+            else if (this.IO_PORTS.range.contains(physical_address) != null) {
 
-                offset = (UInt32)IO_PORTS.range.contains(mask(address));
+                offset = (UInt32)IO_PORTS.range.contains(physical_address);
 
                 this.IO_PORTS.write(offset, value);
 
                 return;
 
-            }else if (this.scratchpad.range.contains(mask(address)) != null) {
+            }else if (this.scratchpad.range.contains(physical_address) != null) {
 
-                offset = (UInt32)scratchpad.range.contains(mask(address));
+                offset = (UInt32)scratchpad.range.contains(physical_address);
 
                 this.scratchpad.store8(offset, value);
                 //Debug.WriteLine("Ignoring store8 to Scratchpad");
@@ -603,7 +604,7 @@ namespace PS1_Emulator {
 
 
         }
-        bool spuDMA = false;
+
         private void dma_transfer(ref DMAChannel activeCH) {
             DMAChannel ch = activeCH;
             int arrPtr = 0;
@@ -642,7 +643,6 @@ namespace PS1_Emulator {
 
                             break;
                         case 4:
-                            spuDMA = true;
                             this.spu.DMAtoSPU(data);
 
                             if(transfer_size - 1 <= 0) {
@@ -726,12 +726,6 @@ namespace PS1_Emulator {
             
             ch.done();
             IRQ_CONTROL.IRQsignal(3);
-
-            /*if (spuDMA) {
-                spu.SPU_IRQ();
-                spuDMA= false;
-                //Also SPUSTAT bit 6 = 1
-            }*/
 
         }
 

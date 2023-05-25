@@ -453,7 +453,7 @@ namespace PS1_Emulator {
             }
 
             GL.DrawArrays(PrimitiveType.Triangles, 0, vertices.Length / 3);
-
+            
             //Lets hope there is no need to sync and wait for the GPU 
 
         }
@@ -620,7 +620,7 @@ namespace PS1_Emulator {
          
         }
         internal void VramToVramCopy(int x0_src, int y0_src, int x0_dest, int y0_dest, int width, int height) {
-            //WIP
+            //No idea if correct, TODO: find a test?
 
             /*GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0);
             //GL.BindTexture(TextureTarget.Texture2D, sample_texture);
@@ -711,7 +711,7 @@ namespace PS1_Emulator {
                 Close();
             }
             else if (e.Key.Equals(Keys.D)) {
-                cpu.bus.print = true;
+                cpu.bus.debug = true;
                 Thread.Sleep(100);
 
             }
@@ -754,7 +754,7 @@ namespace PS1_Emulator {
                 cpu.emu_cycle();
                 CPU.cycles += 2;
 
-                //
+                //TIMERS are the source of a lots of FPS drops, especially timer 1 as it needs gpu clock
                 if (!cpu.bus.TIMER1.isUsingHblank()) { cpu.bus.TIMER1.tick(); }
                 cpu.bus.TIMER2.tick(CPU.cycles);
                 // 
@@ -762,7 +762,6 @@ namespace PS1_Emulator {
                 cpu.bus.spu.SPU_Tick(CPU.cycles);
                 cpu.bus.GPU.tick(CPU.cycles * (double)11 / 7);
                 cpu.bus.IO_PORTS.tick(CPU.cycles);
-               // cpu.bus.IO_PORTS.tick(CPU.cycles);
                 cpu.bus.CDROM_tick(CPU.cycles);
                 i += CPU.cycles;
                 CPU.cycles = 0;

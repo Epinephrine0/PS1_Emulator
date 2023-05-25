@@ -21,7 +21,7 @@ namespace PS1_Emulator {
 
         public short old;
         public short older;
-        public short latest;
+        public short lastSample;
         public uint ENDX = 1;
 
         public bool isLoaded = false;
@@ -108,7 +108,7 @@ namespace PS1_Emulator {
             this.adsr.setPhase(ADSR.Phase.Off);
             this.volumeLeft = 0;
             this.volumeRight = 0;
-            this.latest = 0;
+            this.lastSample = 0;
             this.ADPCM = 0;
             this.ADPCM_Pitch = 0;
         }

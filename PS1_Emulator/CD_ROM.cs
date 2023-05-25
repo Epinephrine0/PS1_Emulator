@@ -336,7 +336,7 @@ namespace PS1_Emulator {
             cdrom.CDROM_State = State.ReadingSectors;
             cdrom.command = Command.Play;
 
-            Console.WriteLine("[CDROM] Play");
+            Console.WriteLine("[CDROM] Play command ignored");
             //currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
 
             cdrom.stat = 0x2;
