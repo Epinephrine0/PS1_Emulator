@@ -7,21 +7,15 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp;
 using System;
-using System.Diagnostics;
 using System.Threading;
 using System.Collections.Generic;
-using System.Linq.Expressions;
-using static System.Net.Mime.MediaTypeNames;
 using System.IO;
-using NAudio.Wave.SampleProviders;
 using System.Linq;
 
 namespace PS1_Emulator {
-    public class Renderer {
-
-        public Window window;
-        
-        public Renderer() {
+    public class PSX_EMU {
+        public Renderer mainWindow;
+        public PSX_EMU() {
 
             var nativeWindowSettings = new NativeWindowSettings() {
                 Size = new Vector2i(1280, 720),
@@ -34,14 +28,21 @@ namespace PS1_Emulator {
             };
 
             var Gws = GameWindowSettings.Default;
-            Gws.RenderFrequency = 60;
+            Gws.RenderFrequency = 60;   
             Gws.UpdateFrequency = 60;
             nativeWindowSettings.Location = new Vector2i((1980 - nativeWindowSettings.Size.X) / 2, (1080 - nativeWindowSettings.Size.Y) / 2);
 
-            var windowIcon = new WindowIcon(new OpenTK.Windowing.Common.Input.Image(300, 300, ImageToByteArray(@"C:\Users\Old Snake\Desktop\PS1\PSX logo.jpg")));
-            nativeWindowSettings.Icon = windowIcon;
-            window = new Window(Gws, nativeWindowSettings);
-            window.Run();
+            try {
+                var windowIcon = new WindowIcon(new OpenTK.Windowing.Common.Input.Image(300, 300, ImageToByteArray(@"PSX logo.jpg")));
+                nativeWindowSettings.Icon = windowIcon;
+
+            }
+            catch (FileNotFoundException ex) { 
+                Console.WriteLine("Warning: PSX logo not found!");
+            }
+
+            mainWindow = new Renderer(Gws, nativeWindowSettings);
+            mainWindow.Run();
 
         }
 
@@ -52,15 +53,10 @@ namespace PS1_Emulator {
 
             return pixels;
         }
-
-
-
     }
 
-    public class Window : GameWindow {
-        CPU cpu;
-        bool cpuPaused = false;
-        const uint CYCLES_PER_FRAME = 33868800 / 60;
+    public class Renderer : GameWindow {
+        CPU CPU;
         const int VRAM_WIDTH = 1024;
         const int VRAM_HEIGHT = 512;
 
@@ -81,6 +77,9 @@ namespace PS1_Emulator {
         private int display_area_X_Offset_Loc;
         private int display_area_Y_Offset_Loc;
         private int vramFrameBuffer;
+
+        Int16 offset_x;
+        Int16 offset_y;
 
         public bool isUsingMouse = false;
         public bool showTextures = false;
@@ -282,43 +281,20 @@ namespace PS1_Emulator {
             }";
 
 
-
-        //Map my button indexes to the corrosponding bits in the PS1 controller
-        public static Dictionary<int, int> buttons_Dictionary = new Dictionary<int, int>()
-         {
-           {0, 15},      //Square
-           {1, 14},      //X
-           {2, 13},      //Circle
-           {3, 12},      //Triangle
-           {4, 10},      //L1
-           {5, 11},      //R1
-           {6, 8},       //L2
-           {7, 9},       //R2
-           {8, 0},       //Select
-           {9, 3},       //Start
-           {10, 1},      //L3
-           {11, 2},      //R3
-           {15, 4},      //Pad up
-           {16, 5},      //Pad right
-           {17, 6},      //Pad down
-           {18, 7},      //Pad Left
-
-        };
-
-        public Window(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
+        public Renderer(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
              : base(gameWindowSettings, nativeWindowSettings) {
 
+            //Clear the window
             GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             GL.Clear(ClearBufferMask.ColorBufferBit);
             SwapBuffers();
 
-            //A shitty way, and a hardcoded path 
-            BIOS bios = new BIOS(@"C:\Users\Old Snake\Desktop\PS1\BIOS\PSX - SCPH1001.BIN");
-            Interconnect i = new Interconnect(bios, this);
-            cpu = new CPU(i);
-            this.Title += bios.ID.Contains("1001") ? (" - BIOS: " + bios.ID) : "";
-            if (cpu.bus.CD_ROM.hasDisk) {
-                string gameName = Path.ChangeExtension(cpu.bus.CD_ROM.path, null);
+           
+            BUS bus = new BUS(this);
+            CPU = new CPU(bus);     //The Renderer will handle the CPU clock
+
+            if (CPU.BUS.CD_ROM.hasDisk) {
+                string gameName = Path.ChangeExtension(CPU.BUS.CD_ROM.path, null);
                 char stop = (char)92;
                 for (int j = gameName.Length - 1; j >= 0; j--) {
                     if (gameName.ElementAt(j) == stop) {
@@ -390,8 +366,6 @@ namespace PS1_Emulator {
 
         }
 
-        Int16 offset_x;
-        Int16 offset_y;
         public void setOffset(Int16 x, Int16 y, Int16 z) {
             offset_x = x;
             offset_y = y;
@@ -399,7 +373,6 @@ namespace PS1_Emulator {
 
         }
         public void setTextureWindow(ushort x, ushort y, ushort z, ushort w) {
-
             GL.Uniform4(texWindow, x, y, z, w);
         }
 
@@ -475,18 +448,13 @@ namespace PS1_Emulator {
             GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(1);
 
-
             GL.DrawArrays(PrimitiveType.Lines, 0, vertices.Length / 3);
 
         }
 
-
-
         public void readBackTexture(UInt16 x, UInt16 y, UInt16 width, UInt16 height, ref UInt16[] texData) {
-
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
             GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, texData);
-
         }
 
         void displayFrame() {
@@ -561,45 +529,6 @@ namespace PS1_Emulator {
             ushort[] uv = null; //Dummy
             draw(ref vertices,ref colors,ref uv,0,0,-1);
 
-            /*GL.ClearColor(r/255.0f, g/255.0f, b/255.0f, 1.0f);
-
-            x += offset_x;
-            y += offset_y;
-
-            //Handle clipping manually (because GL.Scissor will be changed)
-
-            //Completely outside
-            if (x > scissorBox_x + scissorBox_w || y > scissorBox_y + scissorBox_h || x + width < scissorBox_x || y + height < scissorBox_y) {
-                return;
-            }
-
-            //Too wide or too tall
-            if (width > scissorBox_w) {
-                width = scissorBox_w;
-
-            }
-            if (height > scissorBox_h) {
-                height = scissorBox_h;
-            }
-
-            //Partially outside
-            if (x < scissorBox_x && x + width < scissorBox_x + scissorBox_w) {
-                x = scissorBox_x;
-
-            }
-
-            if (y < scissorBox_y && y + height < scissorBox_y + scissorBox_h) {
-                y = scissorBox_y;
-
-            }
-
-
-            GL.Scissor(x, y, width, height);
-            GL.Clear(ClearBufferMask.ColorBufferBit);
-
-            //After that reset the Scissor box to the drawing area
-            GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);*/
-
 
         }
 
@@ -646,8 +575,8 @@ namespace PS1_Emulator {
         }
 
         public void modifyAspectRatio() {
-            float disp_x = cpu.bus.GPU.hrez.getHR();
-            float disp_y = cpu.bus.GPU.vrez == 0 ? 240f : 480f;
+            float disp_x = CPU.BUS.GPU.hrez.getHR();
+            float disp_y = CPU.BUS.GPU.vrez == 0 ? 240f : 480f;
 
 
             if (!showTextures) {
@@ -711,12 +640,12 @@ namespace PS1_Emulator {
                 Close();
             }
             else if (e.Key.Equals(Keys.D)) {
-                cpu.bus.debug = true;
+                CPU.BUS.debug = true;
                 Thread.Sleep(100);
 
             }
             else if (e.Key.Equals(Keys.P)) {
-                cpuPaused = !cpuPaused;
+                CPU.isPaused = !CPU.isPaused;
                 Thread.Sleep(100);
 
             }
@@ -737,39 +666,11 @@ namespace PS1_Emulator {
         
         protected override void OnUpdateFrame(FrameEventArgs args) {
             base.OnUpdateFrame(args);
-
-            if (cpuPaused) { return; }
-
-            for (int i = 0; i < CYCLES_PER_FRAME;) {        //Timings are nowhere near accurate 
-
-                /*try {
-                    cpu.emu_cycle();
-
-                }
-                catch (Exception ex) {
-                    File.WriteAllTextAsync("Crash.log", ex.ToString());
-                    Close();
-                }*/
-
-                cpu.emu_cycle();
-                CPU.cycles += 2;
-
-                //TIMERS are the source of a lots of FPS drops, especially timer 1 as it needs gpu clock
-                if (!cpu.bus.TIMER1.isUsingHblank()) { cpu.bus.TIMER1.tick(); }
-                cpu.bus.TIMER2.tick(CPU.cycles);
-                // 
-
-                cpu.bus.spu.SPU_Tick(CPU.cycles);
-                cpu.bus.GPU.tick(CPU.cycles * (double)11 / 7);
-                cpu.bus.IO_PORTS.tick(CPU.cycles);
-                cpu.bus.CDROM_tick(CPU.cycles);
-                i += CPU.cycles;
-                CPU.cycles = 0;
-
-            }
-
+            //Clock the CPU
+            CPU.tick();
+           
             //Read controller input 
-            cpu.bus.IO_PORTS.controller1.readInput(JoystickStates[0]);
+            CPU.BUS.IO_PORTS.controller1.readInput(JoystickStates[0]);
             //cpu.bus.IO_PORTS.controller2.readInput(JoystickStates[1]);
 
         }

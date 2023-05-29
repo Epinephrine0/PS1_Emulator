@@ -13,19 +13,19 @@ using System.Threading.Tasks;
 
 namespace PS1_Emulator {
 
-    public class Interconnect {
+    public class BUS {      //Main BUS, connects the CPU to everything
         UInt32 offset;
-        public BIOS bios;
+        public BIOS BIOS;
         public MemoryControl memoryControl;
         public RAM_SIZE ram_size;
         public CACHECONTROL cacheControl;
-        public RAM ram;
-        public SPU spu;
+        public RAM RAM;
+        public SPU SPU;
         public EXPANSION1 expansion1;
         public EXPANSION2 expansion2;
         public DMA DMA;
         public GPU GPU;
-        public CD_ROM CD_ROM;   //for hacky stuff on the cpu side 
+        public CD_ROM CD_ROM;
         public TIMER1 TIMER1;
         public TIMER2 TIMER2;
         public IO_PORTS IO_PORTS;
@@ -47,19 +47,28 @@ namespace PS1_Emulator {
         public Range TIMER0 = new Range(0x1F801100, 0xF+1);        //Assumption 
         public bool debug = false;
 
-        public Interconnect(BIOS b, Window w) { 
-            this.bios = b;
+        public BUS(Renderer mainWindow) {
+            try {
+                BIOS = new BIOS(@"BIOS\PSX - SCPH1001.BIN");
+                mainWindow.Title += BIOS.ID.Contains("1001") ? (" - BIOS: " + BIOS.ID) : "";
+            }
+            catch (FileNotFoundException e) {
+                Console.WriteLine("ERROR: PSX BIOS WAS NOT FOUND!");
+                Console.WriteLine("Press any key to exit");
+                Console.ReadKey();
+                mainWindow.Close();
+            }
             this.memoryControl = new MemoryControl();   
             this.ram_size = new RAM_SIZE(); 
             this.cacheControl = new CACHECONTROL(); 
-            this.ram = new RAM();
-            this.spu = new SPU();
+            this.RAM = new RAM();
+            this.SPU = new SPU();
             this.expansion1 = new EXPANSION1();
             this.expansion2 = new EXPANSION2();
             this.DMA = new DMA();
             this.TIMER1 = new TIMER1();
             this.TIMER2 = new TIMER2();
-            this.GPU = new GPU(w, ref TIMER1);
+            this.GPU = new GPU(mainWindow, ref TIMER1);
             this.CD_ROM = new CD_ROM();
             this.IO_PORTS = new IO_PORTS();
             this.scratchpad = new Scratchpad();
@@ -71,21 +80,19 @@ namespace PS1_Emulator {
         public UInt32 load32(UInt32 address) {
             uint physical_address = mask(address);
 
+            if (BIOS.range.contains(physical_address) != null) {
+
+                offset = (UInt32) BIOS.range.contains(physical_address);
 
 
-            if (bios.range.contains(physical_address) != null) {
-
-                offset = (UInt32) bios.range.contains(physical_address);
+                return BIOS.fetch(offset);
 
 
-                return bios.fetch(offset);
+            } else if (RAM.range.contains(physical_address) != null) {
 
-
-            } else if (ram.range.contains(physical_address) != null) {
-
-                offset = (UInt32)ram.range.contains(physical_address);
+                offset = (UInt32)RAM.range.contains(physical_address);
                 
-                return ram.read(offset);                        
+                return RAM.read(offset);                        
 
             }
             else if (IRQ_CONTROL.range.contains(physical_address) != null) {
@@ -110,9 +117,8 @@ namespace PS1_Emulator {
                     case 0:
                         //Skip for now
                         //Debug.WriteLine("Ignoring GPU read offset: " + offset);
-                        return this.GPU.gpuReadReg();
+                        return 0xFF; // this.GPU.gpuReadReg();
                        
-
                     case 4:
 
                         return this.GPU.read_GPUSTAT();
@@ -132,12 +138,12 @@ namespace PS1_Emulator {
             else if (this.TIMER1.range.contains(physical_address) != null) {
                 offset = (UInt32)TIMER1.range.contains(physical_address);
 
-                return TIMER1.get(offset);  
+                return TIMER1.read(offset);  
 
             }
             else if (this.TIMER2.range.contains(physical_address) != null) {
                 offset = (UInt32)TIMER2.range.contains(physical_address);
-                return TIMER2.get(offset);
+                return TIMER2.read(offset);
 
             }
             else if (address == 0x1F801060) {
@@ -209,11 +215,11 @@ namespace PS1_Emulator {
 
 
             }
-            else if (ram.range.contains(physical_address) != null) {             //Write to RAM
+            else if (RAM.range.contains(physical_address) != null) {             //Write to RAM
 
-                offset = (UInt32)ram.range.contains(physical_address);
+                offset = (UInt32)RAM.range.contains(physical_address);
 
-                this.ram.write(offset, value);
+                this.RAM.write(offset, value);
 
             }
 
@@ -281,13 +287,13 @@ namespace PS1_Emulator {
             else if (this.TIMER1.range.contains(physical_address) != null) {
                 offset = (UInt32)TIMER1.range.contains(physical_address);
 
-                TIMER1.set(offset, value);
+                TIMER1.write(offset, value);
 
             }
             else if (this.TIMER2.range.contains(physical_address) != null) {
                 offset = (UInt32)TIMER2.range.contains(physical_address);
 
-                TIMER2.set(offset, value);    
+                TIMER2.write(offset, value);    
             }else if (this.scratchpad.range.contains(physical_address) != null) {  
                 offset = (UInt32)scratchpad.range.contains(physical_address);
                 scratchpad.write(offset,value);
@@ -324,20 +330,20 @@ namespace PS1_Emulator {
             if (debug) {
                // Debug.WriteLine("ADDR:" + address.ToString("x"));
             }
-            if (this.bios.range.contains(physical_address) != null) {
-                offset = (UInt32)bios.range.contains(physical_address);
+            if (this.BIOS.range.contains(physical_address) != null) {
+                offset = (UInt32)BIOS.range.contains(physical_address);
 
-                return bios.load8(offset);
+                return BIOS.load8(offset);
 
             }else if (this.expansion1.range.contains(physical_address) != null) {
                
                 return (byte)0xff;
 
-            }else if (this.ram.range.contains(physical_address) != null) {
-                offset = (UInt32)ram.range.contains(physical_address);
+            }else if (this.RAM.range.contains(physical_address) != null) {
+                offset = (UInt32)RAM.range.contains(physical_address);
 
 
-                return this.ram.load8(offset);
+                return this.RAM.load8(offset);
 
             }else if (this.CD_ROM.range.contains(physical_address) != null) {
                 offset = (UInt32)CD_ROM.range.contains(physical_address);
@@ -374,17 +380,17 @@ namespace PS1_Emulator {
             uint physical_address = mask(address);
 
 
-            if (this.spu.range.contains(physical_address) != null) {
+            if (this.SPU.range.contains(physical_address) != null) {
 
-                offset = (UInt32)spu.range.contains(physical_address);
+                offset = (UInt32)SPU.range.contains(physical_address);
 
-                return this.spu.load16(offset);
+                return this.SPU.load16(offset);
             }
-            else if (this.ram.range.contains(physical_address) != null) {
+            else if (this.RAM.range.contains(physical_address) != null) {
 
-                offset = (UInt32)ram.range.contains(physical_address);
+                offset = (UInt32)RAM.range.contains(physical_address);
 
-                return this.ram.load16(offset);
+                return this.RAM.load16(offset);
             }
             else if (IRQ_CONTROL.range.contains(physical_address) != null) {
 
@@ -400,13 +406,13 @@ namespace PS1_Emulator {
             else if (this.TIMER1.range.contains(physical_address) != null) {
                 offset = (UInt32)TIMER1.range.contains(physical_address);
 
-                return (ushort)TIMER1.get(offset);
+                return (ushort)TIMER1.read(offset);
 
             }
             else if (this.TIMER2.range.contains(physical_address) != null) {
                 offset = (UInt32)TIMER2.range.contains(physical_address);
 
-                return (ushort)TIMER2.get(offset);
+                return (ushort)TIMER2.read(offset);
 
             }
             else if (this.IO_PORTS.range.contains(physical_address) != null) {
@@ -414,10 +420,10 @@ namespace PS1_Emulator {
 
                 return IO_PORTS.read16(offset);
             }
-            else if (this.bios.range.contains(physical_address) != null){
-                offset = (UInt32)bios.range.contains(physical_address);
+            else if (this.BIOS.range.contains(physical_address) != null){
+                offset = (UInt32)BIOS.range.contains(physical_address);
 
-                return this.bios.load16(offset);
+                return this.BIOS.load16(offset);
             }
             else if (this.scratchpad.range.contains(physical_address) != null) {
                 offset = (UInt32)scratchpad.range.contains(physical_address);
@@ -443,10 +449,10 @@ namespace PS1_Emulator {
         public void store16(UInt32 address, UInt16 value) {
             uint physical_address = mask(address);
 
-            if (this.spu.range.contains(physical_address) != null) {
-                offset = (UInt32)spu.range.contains(physical_address);
+            if (this.SPU.range.contains(physical_address) != null) {
+                offset = (UInt32)SPU.range.contains(physical_address);
 
-                this.spu.store16(offset, value);
+                this.SPU.store16(offset, value);
 
                 return;
             }
@@ -459,21 +465,21 @@ namespace PS1_Emulator {
             else if (this.TIMER1.range.contains(physical_address) != null) {
                 offset = (UInt32)TIMER1.range.contains(physical_address);
 
-                TIMER1.set(offset, value);
+                TIMER1.write(offset, value);
                 return;
             }
             else if (this.TIMER2.range.contains(physical_address) != null) {
                 offset = (UInt32)TIMER2.range.contains(physical_address);
 
-                TIMER2.set(offset, value);
+                TIMER2.write(offset, value);
                 return;
 
             }
-            else if (this.ram.range.contains(physical_address) != null) {
+            else if (this.RAM.range.contains(physical_address) != null) {
 
-                offset = (UInt32)ram.range.contains(physical_address);
+                offset = (UInt32)RAM.range.contains(physical_address);
 
-                this.ram.store16(offset,value);
+                this.RAM.store16(offset,value);
                 return;
             }
             else if (IRQ_CONTROL.range.contains(physical_address) != null) {
@@ -512,10 +518,10 @@ namespace PS1_Emulator {
                 Debug.WriteLine("Unhandled write to EXPANTION2 at address : " + address.ToString("x"));
                 return;
             }
-            else if (this.ram.range.contains(physical_address) != null) {
-                offset = (UInt32)ram.range.contains(physical_address);
+            else if (this.RAM.range.contains(physical_address) != null) {
+                offset = (UInt32)RAM.range.contains(physical_address);
 
-                this.ram.store8(offset, value);
+                this.RAM.store8(offset, value);
                 return;
 
             }else if (this.CD_ROM.range.contains(physical_address) != null) {
@@ -578,13 +584,13 @@ namespace PS1_Emulator {
             while (true) {
 
 
-                UInt32 header = this.ram.read(address);
+                UInt32 header = this.RAM.read(address);
                 UInt32 num_of_words = header >> 24;
 
                 while (num_of_words > 0) {
                     address = (address + 4) & 0x1ffffc;
 
-                    UInt32 command = this.ram.read(address);
+                    UInt32 command = this.RAM.read(address);
                     this.GPU.write_GP0(command);
 
                     num_of_words -= 1;
@@ -630,7 +636,7 @@ namespace PS1_Emulator {
 
                 if (ch.get_direction() == ch.Direction["FromRam"]) {
 
-                    UInt32 data = this.ram.read(current_address);
+                    UInt32 data = this.RAM.read(current_address);
 
                     switch (ch.get_portnum()) {
                         case 0: //MDECin  (RAM to MDEC)
@@ -643,10 +649,10 @@ namespace PS1_Emulator {
 
                             break;
                         case 4:
-                            this.spu.DMAtoSPU(data);
+                            this.SPU.DMAtoSPU(data);
 
                             if(transfer_size - 1 <= 0) {
-                                this.spu.DMA_Read_Request = 0;
+                                this.SPU.DMA_Read_Request = 0;
                                 
                             }
 
@@ -671,7 +677,7 @@ namespace PS1_Emulator {
                             
                             UInt32 merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
 
-                            this.ram.write(current_address, merged_Pixels);
+                            this.RAM.write(current_address, merged_Pixels);
 
                             break;
 
@@ -690,7 +696,7 @@ namespace PS1_Emulator {
 
                             UInt32 merged_bytes = (byte0 | (byte1 << 8) | (byte2 << 16) | (byte3 << 24));
                            
-                            this.ram.write(current_address, merged_bytes);
+                            this.RAM.write(current_address, merged_bytes);
 
                             break;
 
@@ -698,12 +704,12 @@ namespace PS1_Emulator {
                             switch (transfer_size) {
 
                                 case 1:
-                                    this.ram.write(current_address, 0xffffff);
+                                    this.RAM.write(current_address, 0xffffff);
                                     break;
 
 
                                 default:
-                                    this.ram.write(current_address, (base_address - 4) & 0x1fffff);
+                                    this.RAM.write(current_address, (base_address - 4) & 0x1fffff);
                                     break;
 
                             }

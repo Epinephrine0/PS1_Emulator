@@ -8,7 +8,7 @@ namespace PS1_Emulator {
         private UInt32 pc;           //32-bit program counter
         private UInt32 next_pc;
         private UInt32 current_pc;
-        public  Interconnect bus;
+        public  BUS BUS;
         private UInt32[] regs;
         private UInt32[] outRegs;
         private Instruction current;
@@ -41,6 +41,8 @@ namespace PS1_Emulator {
         private byte[] testRom;
 
         bool fastBoot = true;
+        public bool isPaused = false;
+        const uint CYCLES_PER_FRAME = 33868800 / 60;
 
         private static readonly delegate*<CPU,Instruction, void>[] mainLookUpTable = new delegate*<CPU, Instruction, void>[] {
                 &special,   &bxx,       &jump,      &jal,       &beq,        &bne,       &blez,      &bgtz,
@@ -64,10 +66,10 @@ namespace PS1_Emulator {
                 &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal
         };
 
-        public CPU(Interconnect bus) {
+        public CPU(BUS bus) {
             this.pc = 0xbfc00000;   //BIOS initial PC       
             this.next_pc = pc + 4;
-            this.bus = bus;
+            this.BUS = bus;
             this.regs = new UInt32[32];
             this.outRegs = new UInt32[32];
             this.regs[0] = 0;
@@ -104,7 +106,7 @@ namespace PS1_Emulator {
                 return;
             }
 
-            current = new Instruction(bus.load32(pc));
+            current = new Instruction(BUS.load32(pc));
 
             delay_slot = _branch;   //Brach delay 
             _branch = false;       
@@ -189,8 +191,8 @@ namespace PS1_Emulator {
                             }
                             else {
 
-                                while (bus.load8(address) != 0) {
-                                    character = (char)bus.load8(address);
+                                while (BUS.load8(address) != 0) {
+                                    character = (char)BUS.load8(address);
                                     Console.Write(character);
                                     address++;
                                 }
@@ -219,13 +221,13 @@ namespace PS1_Emulator {
                         case 0x9E:
                         case 0xA2:
                         case 0xA3:
-                            if (bus.debug) {
+                            if (BUS.debug) {
                                 CDROM_trace(regs[9]);
                             }
                             break;
 
                         default:
-                            if (bus.debug) {
+                            if (BUS.debug) {
                                 Console.WriteLine("Function A: " + regs[9].ToString("x"));
                             }
 
@@ -271,8 +273,8 @@ namespace PS1_Emulator {
                             }
                             else {
 
-                                while (bus.load8(address) != 0) {
-                                    character = (char)bus.load8(address);
+                                while (BUS.load8(address) != 0) {
+                                    character = (char)BUS.load8(address);
                                     Console.Write(character);
                                     address++;
                                 }
@@ -282,7 +284,7 @@ namespace PS1_Emulator {
                             break;
 
                         case 0xB:
-                            if (bus.debug) {
+                            if (BUS.debug) {
                                 Console.WriteLine("TestEvent");
                                 Console.WriteLine("$a0: " + regs[4].ToString("X"));
                                 Console.WriteLine("$a1: " + regs[5].ToString("X"));
@@ -310,7 +312,7 @@ namespace PS1_Emulator {
                             break;
 
                         default:
-                            if (bus.debug) {
+                            if (BUS.debug) {
                                 Console.WriteLine("Function B: " + regs[9].ToString("x"));
                             }
                             break;
@@ -320,7 +322,7 @@ namespace PS1_Emulator {
 
                     break;
                 case 0xC0:
-                    if (bus.debug) {
+                    if (BUS.debug) {
                         Console.WriteLine("Function C: " + regs[9].ToString("x"));
                     }
                     break;
@@ -335,7 +337,7 @@ namespace PS1_Emulator {
 
             for (int i = 0x800; i < testRom.Length; i++) {
 
-                bus.store8((uint)(addressInRAM), testRom[i]);
+                BUS.store8((uint)(addressInRAM), testRom[i]);
                 addressInRAM++;
             }
             this.pc = (uint)(testRom[0x10] | (testRom[0x10 + 1] << 8) | (testRom[0x10 + 2] << 16) | (testRom[0x10 + 3] << 24));
@@ -489,7 +491,7 @@ namespace PS1_Emulator {
 
             uint rt = instruction.get_rt();
             uint word = cpu.gte.read(rt);
-            cpu.bus.store32(address, word);
+            cpu.BUS.store32(address, word);
 
         }
 
@@ -517,7 +519,7 @@ namespace PS1_Emulator {
                 return;
             }
 
-            uint word = cpu.bus.load32(address);
+            uint word = cpu.BUS.load32(address);
             uint rt = instruction.get_rt();
             cpu.gte.write(rt, word);
 
@@ -540,7 +542,7 @@ namespace PS1_Emulator {
 
 
             UInt32 value = cpu.regs[instruction.get_rt()];                           //Bypass load delay
-            UInt32 current_value = cpu.bus.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            UInt32 current_value = cpu.BUS.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -572,7 +574,7 @@ namespace PS1_Emulator {
                     throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            cpu.bus.store32((UInt32)(final_address & (~3)), finalValue);
+            cpu.BUS.store32((UInt32)(final_address & (~3)), finalValue);
         }
 
         private static void swl(CPU cpu, Instruction instruction) {
@@ -582,7 +584,7 @@ namespace PS1_Emulator {
 
 
             UInt32 value = cpu.regs[instruction.get_rt()];                           //Bypass load delay
-            UInt32 current_value = cpu.bus.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            UInt32 current_value = cpu.BUS.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -614,7 +616,7 @@ namespace PS1_Emulator {
                     throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            cpu.bus.store32((UInt32)(final_address & (~3)), finalValue);
+            cpu.BUS.store32((UInt32)(final_address & (~3)), finalValue);
 
 
         }
@@ -627,7 +629,7 @@ namespace PS1_Emulator {
 
 
             UInt32 current_value = cpu.outRegs[instruction.get_rt()];       //Bypass load delay
-            UInt32 word = cpu.bus.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            UInt32 word = cpu.BUS.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -676,7 +678,7 @@ namespace PS1_Emulator {
 
 
             UInt32 current_value = cpu.outRegs[instruction.get_rt()];       //Bypass load delay
-            UInt32 word = cpu.bus.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            UInt32 word = cpu.BUS.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -793,7 +795,7 @@ namespace PS1_Emulator {
             UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
             //aligned?
-            Int16 hw = (Int16)cpu.bus.load16(final_address);
+            Int16 hw = (Int16)cpu.BUS.load16(final_address);
             if ((final_address & 0x1) == 0) {
 
                 //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
@@ -819,7 +821,7 @@ namespace PS1_Emulator {
             UInt32 final_address = cpu.regs[base_] + addressRegPos;
 
             if ((final_address & 0x1) == 0) {
-                UInt32 hw = (UInt32)cpu.bus.load16(final_address);
+                UInt32 hw = (UInt32)cpu.BUS.load16(final_address);
 
                 //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
                 if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
@@ -1224,7 +1226,7 @@ namespace PS1_Emulator {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
-            byte b = cpu.bus.load8(cpu.regs[base_] + addressRegPos);
+            byte b = cpu.BUS.load8(cpu.regs[base_] + addressRegPos);
 
             //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
             if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
@@ -1303,7 +1305,7 @@ namespace PS1_Emulator {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
-            sbyte sb = (sbyte)cpu.bus.load8(cpu.regs[base_] + addressRegPos);
+            sbyte sb = (sbyte)cpu.BUS.load8(cpu.regs[base_] + addressRegPos);
 
             //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
             if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
@@ -1328,7 +1330,7 @@ namespace PS1_Emulator {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
-            cpu.bus.store8(cpu.regs[base_] + addressRegPos, (byte)cpu.regs[targetReg]);
+            cpu.BUS.store8(cpu.regs[base_] + addressRegPos, (byte)cpu.regs[targetReg]);
 
 
 
@@ -1367,7 +1369,7 @@ namespace PS1_Emulator {
 
             //Address must be 16 bit aligned
             if ((final_address & 1) == 0) {
-                cpu.bus.store16(final_address, (UInt16)cpu.regs[targetReg]);
+                cpu.BUS.store16(final_address, (UInt16)cpu.regs[targetReg]);
             }
             else {
                 exception(cpu,StoreAddressError);
@@ -1437,7 +1439,7 @@ namespace PS1_Emulator {
 
                 //if (final_address == 0x80083C58) {Debug.WriteLine("loaded " + regs[targetReg].ToString("x") + " from reg: " + targetReg); }
 
-                cpu.bus.store32(final_address, cpu.regs[targetReg]);
+                cpu.BUS.store32(final_address, cpu.regs[targetReg]);
             }
             else {
                 exception(cpu,StoreAddressError);
@@ -1466,7 +1468,7 @@ namespace PS1_Emulator {
                 }
 
                 cpu.pendingload.Item1 = instruction.get_rt();          //Position
-                cpu.pendingload.Item2 = cpu.bus.load32(final_address);    //Value
+                cpu.pendingload.Item2 = cpu.BUS.load32(final_address);    //Value
 
               
             }
@@ -1621,6 +1623,37 @@ namespace PS1_Emulator {
                  
         }
 
-       
+        internal void tick() {
+
+            if (isPaused) { return; }
+
+            for (int i = 0; i < CYCLES_PER_FRAME;) {        //Timings are nowhere near accurate 
+
+                /*try {
+                    cpu.emu_cycle();
+
+                }
+                catch (Exception ex) {
+                    File.WriteAllTextAsync("Crash.log", ex.ToString());
+                    Close();
+                }*/
+
+                emu_cycle();
+                cycles += 2;
+
+                //TIMERS are the source of a lots of FPS drops, especially timer 1 as it needs gpu clock
+                if (BUS.TIMER1.isUsingSystemClock()) { BUS.TIMER1.tick(cycles); }
+                BUS.TIMER2.tick(cycles);
+                // 
+                BUS.SPU.SPU_Tick(cycles);
+                BUS.GPU.tick(cycles * (double)11 / 7);
+                BUS.IO_PORTS.tick(cycles);
+                BUS.CDROM_tick(cycles);
+                i += cycles;
+                cycles = 0;
+
+            }
+
+        }
     }
 }

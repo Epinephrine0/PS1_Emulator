@@ -183,7 +183,7 @@ namespace PS1_Emulator {
             }
 
         }
-        public void execute(ref Window window) {
+        public void execute(ref Renderer window) {
             setup();
 
             window.draw(ref vertices,ref colors,ref uv,clut,page,texMode);

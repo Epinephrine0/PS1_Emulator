@@ -71,142 +71,77 @@ namespace PS1_Emulator {
             S[3] = new Vector3();
         }
 
-        
-        
         public uint read(uint rt) {
 
             switch (rt) {
-                case 0:
-                    return V[0].XY;
-                case 1:
-                    return (uint)V[0].Z;
-                case 2:
-                    return V[1].XY;
-                case 3:
-                    return (uint)V[1].Z;
-                case 4:
-                    return V[2].XY;
-                case 5:
-                    return (uint)V[2].Z;
-                case 6:
-                    return RGBC;
-                case 7:
-                    return OTZ;
-                case 8:
-                    return (uint)IR[0];
-                case 9:
-                    return (uint)IR[1];
-                case 10:
-                    return (uint)IR[2];
-                case 11:
-                    return (uint)IR[3];
-                case 12:
-                    return S[0].XY;
-                case 13:
-                    return S[1].XY;
+                case 0:  return V[0].XY;
+                case 1:  return (uint)V[0].Z;
+                case 2:  return V[1].XY;
+                case 3:  return (uint)V[1].Z;
+                case 4:  return V[2].XY;
+                case 5:  return (uint)V[2].Z;
+                case 6:  return RGBC;
+                case 7:  return OTZ;
+                case 8:  return (uint)IR[0];
+                case 9:  return (uint)IR[1];
+                case 10: return (uint)IR[2];
+                case 11: return (uint)IR[3];
+                case 12: return S[0].XY;
+                case 13: return S[1].XY;
                 case 14:
-                case 15:
-                    return S[2].XY;
-                case 16:
-                    return (ushort)S[0].Z;
-                case 17:
-                    return (ushort)S[1].Z;
-                case 18:
-                    return (ushort)S[2].Z;
-                case 19:
-                    return (ushort)S[3].Z;
-                case 20:
-                    return Color[0];
-                case 21:
-                    return Color[1];
-                case 22:
-                    return Color[2];
-                case 23:
-                    return RES1;
-                case 24:
-                    return (uint)MAC[0];
-                case 25:
-                    return (uint)MAC[1];
-                case 26:
-                    return (uint)MAC[2];
-                case 27:
-                    return (uint)MAC[3];
+                case 15: return S[2].XY;
+                case 16: return (ushort)S[0].Z;
+                case 17: return (ushort)S[1].Z;
+                case 18: return (ushort)S[2].Z;
+                case 19: return (ushort)S[3].Z;
+                case 20: return Color[0];
+                case 21: return Color[1];
+                case 22: return Color[2];
+                case 23: return RES1;
+                case 24: return (uint)MAC[0];
+                case 25: return (uint)MAC[1];
+                case 26: return (uint)MAC[2];
+                case 27: return (uint)MAC[3];
                 case 28:
-                case 29:
-                    return (uint)((Math.Clamp(IR[1] / 0x80, 0, +0x1F)) | (Math.Clamp(IR[2] / 0x80, 0, +0x1F)) << 5 
+                case 29: return (uint)((Math.Clamp(IR[1] / 0x80, 0, +0x1F)) | (Math.Clamp(IR[2] / 0x80, 0, +0x1F)) << 5 
                         | ((Math.Clamp(IR[3] / 0x80, 0, +0x1F)) << 10));
 
-                case 30:
-                    return (uint)LZCS;
-
-                case 31:
-                    return countSignBit((uint)LZCS);
-
-                case 32:
-                    return ((ushort)RT.getElement(1, 1)) | ((uint)RT.getElement(1, 2) << 16);
-                case 33:
-                    return ((ushort)RT.getElement(1, 3)) | ((uint)RT.getElement(2, 1) << 16);
-                case 34:
-                    return ((ushort)RT.getElement(2, 2)) | ((uint)RT.getElement(2, 3) << 16);
-                case 35:
-                    return ((ushort)RT.getElement(3, 1)) | ((uint)RT.getElement(3, 2) << 16);
-                case 36:
-                    return (uint)RT.getElement(3, 3);
-                case 37:
-                    return (uint)TR[0];
-                case 38:
-                    return (uint)TR[1];
-                case 39:
-                    return (uint)TR[2];
-                case 40:
-                    return ((ushort)LLM.getElement(1, 1)) | ((uint)LLM.getElement(1, 2) << 16);
-                case 41:
-                    return ((ushort)LLM.getElement(1, 3)) | ((uint)LLM.getElement(2, 1) << 16); 
-                case 42:
-                    return ((ushort)LLM.getElement(2, 2)) | ((uint)LLM.getElement(2, 3) << 16);
-                case 43:
-                    return ((ushort)LLM.getElement(3, 1)) | ((uint)LLM.getElement(3, 2) << 16); 
-                case 44:
-                    return (uint)LLM.getElement(3, 3);
-                case 45:
-                    return (uint)BK_Color[0];
-                case 46:
-                    return (uint)BK_Color[1];
-                case 47:
-                    return (uint)BK_Color[2];
-                case 48:
-                    return ((ushort)LCM.getElement(1, 1)) | ((uint)LCM.getElement(1, 2) << 16);
-                case 49:
-                    return ((ushort)LCM.getElement(1, 3)) | ((uint)LCM.getElement(2, 1) << 16); 
-                case 50:
-                    return ((ushort)LCM.getElement(2, 2)) | ((uint)LCM.getElement(2, 3) << 16); 
-                case 51:
-                    return ((ushort)LCM.getElement(3, 1)) | ((uint)LCM.getElement(3, 2) << 16); 
-                case 52:
-                    return (uint)LCM.getElement(3, 3);
-                case 53:
-                    return (uint)far_Color[0];
-                case 54:
-                    return (uint)far_Color[1];
-                case 55:
-                    return (uint)far_Color[2];
-                case 56:
-                    return (uint)OF[0];
-                case 57:
-                    return (uint)OF[1];
-                case 58:
-                    return (uint)(short)H;
-                case 59:
-                    return (uint)DQA;
-                case 60:
-                    return (uint)DQB;
-                case 61:
-                    return (uint)ZSF3;
-                case 62:
-                    return (uint)ZSF4;
-                case 63:
-                    return flagRegister();
+                case 30: return (uint)LZCS;
+                case 31: return countSignBit((uint)LZCS);
+                case 32: return ((ushort)RT.getElement(1, 1)) | ((uint)RT.getElement(1, 2) << 16);
+                case 33: return ((ushort)RT.getElement(1, 3)) | ((uint)RT.getElement(2, 1) << 16);
+                case 34: return ((ushort)RT.getElement(2, 2)) | ((uint)RT.getElement(2, 3) << 16);
+                case 35: return ((ushort)RT.getElement(3, 1)) | ((uint)RT.getElement(3, 2) << 16);
+                case 36: return (uint)RT.getElement(3, 3);
+                case 37: return (uint)TR[0];
+                case 38: return (uint)TR[1];
+                case 39: return (uint)TR[2];
+                case 40: return ((ushort)LLM.getElement(1, 1)) | ((uint)LLM.getElement(1, 2) << 16);
+                case 41: return ((ushort)LLM.getElement(1, 3)) | ((uint)LLM.getElement(2, 1) << 16); 
+                case 42: return ((ushort)LLM.getElement(2, 2)) | ((uint)LLM.getElement(2, 3) << 16);
+                case 43: return ((ushort)LLM.getElement(3, 1)) | ((uint)LLM.getElement(3, 2) << 16); 
+                case 44: return (uint)LLM.getElement(3, 3);
+                case 45: return (uint)BK_Color[0];
+                case 46: return (uint)BK_Color[1];
+                case 47: return (uint)BK_Color[2];
+                case 48: return ((ushort)LCM.getElement(1, 1)) | ((uint)LCM.getElement(1, 2) << 16);
+                case 49: return ((ushort)LCM.getElement(1, 3)) | ((uint)LCM.getElement(2, 1) << 16); 
+                case 50: return ((ushort)LCM.getElement(2, 2)) | ((uint)LCM.getElement(2, 3) << 16); 
+                case 51: return ((ushort)LCM.getElement(3, 1)) | ((uint)LCM.getElement(3, 2) << 16); 
+                case 52: return (uint)LCM.getElement(3, 3);
+                case 53: return (uint)far_Color[0];
+                case 54: return (uint)far_Color[1];
+                case 55: return (uint)far_Color[2];
+                case 56: return (uint)OF[0];
+                case 57: return (uint)OF[1];
+                case 58: return (uint)(short)H;
+                case 59: return (uint)DQA;
+                case 60: return (uint)DQB;
+                case 61: return (uint)ZSF3;
+                case 62: return (uint)ZSF4;
+                case 63: return flagRegister();
             }
+
             throw new Exception("We should not reach here");
 
         }
@@ -215,348 +150,136 @@ namespace PS1_Emulator {
         internal void write(uint rd, uint value) {
            
             switch (rd) {
-                case 0:
-
-                    V[0].XY = value;
-                    break;
-
-                case 1:
-
-                    V[0].Z = (short)value;
-                    break;
-
-
-                case 2:
-
-                    V[1].XY = value;
-                    break;
-
-                case 3:
-
-                    V[1].Z = (short)value;
-                    break;
-
-                case 4:
-
-                    V[2].XY = value;
-                    break;
-
-                case 5:
-
-                    V[2].Z = (short)value;
-                    break;
-
-                case 6:
-
-                    RGBC = value;
-                    break;
-
-                case 7:
-
-                    OTZ = (ushort)value;
-                    break;
-
-                case 8:
-
-                    IR[0] = (short)value;
-                    break;
-
-                case 9:
-
-                     IR[1] = (short)value;
-                    break;
-
-                case 10:
-
-                    IR[2] = (short)value;
-                    break;
-
-                case 11:
-
-                    IR[3] = (short)value;
-                    break;
-
-                case 12:
-
-                    S[0].XY = value;
-                    break;
-
-                case 13:
-
-                    S[1].XY = value;
-                    break;
-
-                case 14:
-
-                    S[2].XY = value;
-                    break;
-
-
+                case 0:  V[0].XY = value; break;
+                case 1:  V[0].Z = (short)value; break;
+                case 2:  V[1].XY = value; break;
+                case 3:  V[1].Z = (short)value; break;
+                case 4:  V[2].XY = value; break;
+                case 5:  V[2].Z = (short)value; break;
+                case 6:  RGBC = value; break;
+                case 7:  OTZ = (ushort)value; break;
+                case 8:  IR[0] = (short)value; break;
+                case 9:  IR[1] = (short)value; break;
+                case 10: IR[2] = (short)value; break;
+                case 11: IR[3] = (short)value; break;
+                case 12: S[0].XY = value; break;
+                case 13: S[1].XY = value; break;
+                case 14: S[2].XY = value; break;
+                
                 case 15:
                     S[3].XY = value;
-
                     S[0].XY = S[1].XY;
                     S[1].XY = S[2].XY;
                     S[2].XY = value;
-
                     break;
 
-                case 16:
-
-                    S[0].Z = (short)value;
-                    break;
-
-                case 17:
-
-                    S[1].Z = (short)value;
-                    break;
-
-                case 18:
-
-                    S[2].Z = (short)value;
-                    break;
-
-                case 19:
-
-                    S[3].Z = (short)value;
-                    break;
-
-                case 20:
-
-                    Color[0] = value;
-                    break;
-
-                case 21:
-
-                    Color[1] = value;
-                    break;
-
-                case 22:
-
-                    Color[2] = value;
-                    break;
-
-                case 23:
-
-                    RES1 = value;
-                    break;
-
-                case 24:
-
-                    MAC[0] = (int)value;
-                    break;
-
-                case 25:
-
-                    MAC[1] = (int)value;
-                    break;
-
-                case 26:
-
-                    MAC[2] = (int)value;
-                    break;
-
-                case 27:
-
-                    MAC[3] = (int)value;
-                    break;
+                case 16: S[0].Z = (short)value; break;
+                case 17: S[1].Z = (short)value; break;
+                case 18: S[2].Z = (short)value; break;
+                case 19: S[3].Z = (short)value; break;
+                case 20: Color[0] = value; break;
+                case 21: Color[1] = value; break;
+                case 22: Color[2] = value; break;
+                case 23: RES1 = value; break;
+                case 24: MAC[0] = (int)value; break;
+                case 25: MAC[1] = (int)value; break;
+                case 26: MAC[2] = (int)value; break;
+                case 27: MAC[3] = (int)value; break;
 
                 case 28:
                     IR[1] = (short)((value & 0x1f) * 0x80);
                     IR[2] = (short)(((value >> 5) & 0x1f) * 0x80);
                     IR[3] = (short)(((value >> 10) & 0x1f) * 0x80);
-
                     break;
 
-                case 29:
-
-                    ORGB = (ushort)value;
-                    break;
-
-                case 30:
-
-                    LZCS = (int)value;
-                    break;
-
-                case 31:
-
-                    LZCR = (int)value;
-                    break;
+                case 29: ORGB = (ushort)value; break;
+                case 30: LZCS = (int)value; break;
+                case 31: LZCR = (int)value; break;
 
                 case 32:
-
                     RT.setElement(1, 1, (short)value);
                     RT.setElement(1, 2, (short)(value >> 16));
                     break;
 
                 case 33:
-
                     RT.setElement(1, 3, (short)value);
                     RT.setElement(2, 1, (short)(value >> 16));
                     break;
 
                 case 34:
-
                     RT.setElement(2, 2, (short)value);
                     RT.setElement(2, 3, (short)(value >> 16));
                     break;
 
                 case 35:
-
                     RT.setElement(3, 1, (short)value);
                     RT.setElement(3, 2, (short)(value >> 16));
                     break;
 
-                case 36:
-
-                    RT.setElement(3, 3, (short)value);
-                    break;
-
-                case 37:
-
-                    TR[0] = (int)value;
-                    break;
-
-                case 38:
-
-                    TR[1] = (int)value;
-                    break;
-
-                case 39:
-                    
-                    TR[2] = (int)value;
-                    break;
+                case 36: RT.setElement(3, 3, (short)value); break;
+                case 37: TR[0] = (int)value; break;
+                case 38: TR[1] = (int)value; break;
+                case 39: TR[2] = (int)value; break;
 
                 case 40:
-
                     LLM.setElement(1, 1, (short)value);
                     LLM.setElement(1, 2, (short)(value >> 16));
                     break;
 
                 case 41:
-
                     LLM.setElement(1, 3, (short)value);
                     LLM.setElement(2, 1, (short)(value >> 16));
                     break;
 
                 case 42:
-
                     LLM.setElement(2, 2, (short)value);
                     LLM.setElement(2, 3, (short)(value >> 16));
                     break;
 
                 case 43:
-
                     LLM.setElement(3, 1, (short)value);
                     LLM.setElement(3, 2, (short)(value >> 16));
                     break;
 
-                case 44:
-
-                    LLM.setElement(3, 3, (short)value);
-                    break;
-
-                case 45:
-
-                    BK_Color[0] = (int)value;
-                    break;
-
-                case 46:
-
-                    BK_Color[1] = (int)value;
-                    break;
-
-                case 47:
-
-                    BK_Color[2] = (int)value;
-                    break;
+                case 44: LLM.setElement(3, 3, (short)value); break;
+                case 45: BK_Color[0] = (int)value; break;
+                case 46: BK_Color[1] = (int)value; break;
+                case 47: BK_Color[2] = (int)value; break;
 
                 case 48:
-
                     LCM.setElement(1, 1, (short)value);
                     LCM.setElement(1, 2, (short)(value >> 16));
                     break;
 
                 case 49:
-
                     LCM.setElement(1, 3, (short)value);
                     LCM.setElement(2, 1, (short)(value >> 16));
                     break;
 
                 case 50:
-
                     LCM.setElement(2, 2, (short)value);
                     LCM.setElement(2, 3, (short)(value >> 16));
                     break;
 
                 case 51:
-
                     LCM.setElement(3, 1, (short)value);
                     LCM.setElement(3, 2, (short)(value >> 16));
                     break;
 
-                case 52:
+                case 52: LCM.setElement(3, 3, (short)value); break;
+                case 53: far_Color[0] = (int)value; break;
+                case 54: far_Color[1] = (int)value; break;
+                case 55: far_Color[2] = (int)value; break;
+                case 56: OF[0] = (int)value; break;
+                case 57: OF[1] = (int)value; break;
+                case 58: H = (ushort)value; break;
+                case 59: DQA = (short)value; break;
+                case 60: DQB = (int)value; break;
+                case 61: ZSF3 = (short)value; break;
+                case 62: ZSF4 = (short)value; break;
+                case 63: FLAG = value; break;
 
-                    LCM.setElement(3, 3, (short)value);
-                    break;
-
-                case 53:
-
-                    far_Color[0] = (int)value;
-                    break;
-
-                case 54:
-
-                    far_Color[1] = (int)value;
-                    break;
-
-                case 55:
-
-                    far_Color[2] = (int)value;
-                    break;
-
-                case 56:
-
-                    OF[0] = (int)value;
-                    break;
-
-                case 57:
-
-                    OF[1] = (int)value;
-                    break;
-
-                case 58:
-
-                    H = (ushort)value;
-                    break;
-
-                case 59:
-
-                    DQA = (short)value;
-                    break;
-
-                case 60:
-
-                    DQB = (int)value;
-                    break;
-
-                case 61:
-
-                    ZSF3 = (short)value;
-                    break;
-
-                case 62:
-
-                    ZSF4 = (short)value;
-                    break;
-
-                case 63:
-                    FLAG = value;
-                    break;
-
-                default:
-
-                    throw new Exception("we should not reach here");
+                default: throw new Exception("we should not reach here");
             }
 
 

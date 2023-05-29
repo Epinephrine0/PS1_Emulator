@@ -8,7 +8,7 @@ namespace PS1_Emulator {
     public interface GP0_Command_ss {
         bool isReady { get; }
         public void add(uint value);
-        public void execute(ref Window window);
+        public void execute(ref Renderer window);
 
     }
 }

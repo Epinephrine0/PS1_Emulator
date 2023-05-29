@@ -18,7 +18,7 @@ namespace PS1_Emulator {
         GP0_Command? currentCommand = null;
         private readonly int[] numberOfParameters = new int[0x3E];
 
-        Window window;
+        Renderer window;
 
         ushort[] dummy = null;
 
@@ -70,8 +70,8 @@ namespace PS1_Emulator {
 
  
 
-        readonly byte[] NoBlendColors = new[] {          //Colors to blend with if the command does not use blending 
-                                                        //The 0x80 will be cancelled in the bledning formula, so they don't change anything
+        readonly byte[] NoBlendColors = new[] {      //Colors to blend with if the command does not use blending 
+                                                     //The 0x80 will be cancelled in the bledning formula, so they don't change anything
 
                 (byte)0x80, (byte)0x80 , (byte)0x80,
                 (byte)0x80, (byte)0x80 , (byte)0x80,
@@ -126,7 +126,7 @@ namespace PS1_Emulator {
 
         TIMER1 TIMER1;
 
-        public GPU(Window w, ref TIMER1 t1) {
+        public GPU(Renderer rederingWindow, ref TIMER1 timer1) {
             this.page_base_x = 0;
             this.page_base_y = 0;
             this.semi_transparency = 0;
@@ -145,11 +145,8 @@ namespace PS1_Emulator {
             this.display_disabled = true;
             this.interrupt = false;
             this.dma_direction = DmaDirection["Off"];
-            this.window = w;
-            this.TIMER1 = t1;
-
-
-           
+            this.window = rederingWindow;
+            this.TIMER1 = timer1;
 
 
         }
@@ -229,6 +226,7 @@ namespace PS1_Emulator {
 
         public void tick(double cycles) {
             video_cycles += cycles;
+            TIMER1.GPUinVblank = false;
 
             if (video_cycles >= video_cycles_per_scanline && video_cycles_per_scanline > 0) {
                 video_cycles -= video_cycles_per_scanline;
@@ -242,11 +240,14 @@ namespace PS1_Emulator {
                     }
 
                     IRQ_CONTROL.IRQsignal(0);     //VBLANK
-                    this.TIMER1.GPUinVblank = true;
+                    interrupt = true;
+                    TIMER1.GPUinVblank = true;
+                    TIMER1.GPUGotVblankOnce = true;
+
                 }
 
-                if (this.TIMER1.isUsingHblank()) {
-                    this.TIMER1.tick();
+                if (!TIMER1.isUsingSystemClock()) {
+                    TIMER1.tick(1);
                 }
 
             }

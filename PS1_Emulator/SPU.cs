@@ -409,7 +409,7 @@ namespace PS1_Emulator {
         int sumRight;
         private int reverbCounter = 0;
 
-
+        int i = 0;
         public void SPU_Tick(int cycles) {        //SPU Clock
             
             clk_counter += cycles;
@@ -429,7 +429,7 @@ namespace PS1_Emulator {
             int reverbLeft_Input = 0;
             int reverbRight_Input = 0;
             bool voiceHitAddress = false;
-
+            
             for (int i = 0; i < voices.Length; i++) {
 
                 if ((edgeKeyOn & (1 << i)) != 0) {

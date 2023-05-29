@@ -32,20 +32,18 @@ namespace PS1_Emulator {
         */
 
 
-        public void set(uint offset, uint value) {
+        public void write(uint offset, uint value) {
           
 
             switch (offset) {
 
-                case 0:
-                    currentValue = value;
-                    break;
-
+                case 0: currentValue = value; break;
                 case 4:
                     mode = value;
+                    mode |= 1 << 10;     //Set bit 10
                     synchronization = (mode & 1) != 0;
-                    pause = false;
                     counter = 0;
+                    //Clock source
                     switch ((mode >> 8) & 3) {
                         case 0:
                         case 1:
@@ -60,39 +58,30 @@ namespace PS1_Emulator {
 
                     break;
 
-                case 8:
-                    target = value;
-                    break;
+                case 8: target = value; break;
 
-                default:
-                    throw new Exception("Unknown TIMER2 offset: " + offset);
+                default: throw new Exception("Unknown TIMER2 offset: " + offset);
 
             }
 
          
 
         }
-        public uint get(uint offset) {
+        public uint read(uint offset) {
           
             switch (offset) {
                 
-                case 0:
-
-                    return currentValue;        //0x000016b0 random value that works for entering shell
+                case 0:  return currentValue;        //0x000016b0 random value that works for entering shell
 
                 case 4:                        
-
                     uint temp = mode;
-                    mode &= 0b0011111111111;    //Reset bits 11-12
-                    return mode;
+                    mode &= 0b0000_0111_1111_1111;    //Reset bits 11-12 (above 12 are garbage)
+                    return temp;
            
-                case 8:
-
-                    return target;
+                case 8: return target;
                 
 
-                default:
-                    throw new Exception("Unknown TIMER2 offset: " + offset);
+                default: throw new Exception("Unknown TIMER2 offset: " + offset);
 
             }
 
@@ -102,26 +91,27 @@ namespace PS1_Emulator {
         }
 
         int counter;
-
+        bool reset = false;
         public void tick(int cycles) {
-            if(pause) { return; }
+            if(reset) { currentValue = 0; counter = 0; reset = false; }
+            if (!pause) {
+                switch (clockSource) {
+                    case ClockSource.SystemClock:
 
-            switch (clockSource) {
-                case ClockSource.SystemClock:
+                        currentValue += (uint)cycles;
 
-                    currentValue += (uint)cycles;
+                        break;
 
-                    break;
+                    case ClockSource.SystemClockOver8:
 
-                case ClockSource.SystemClockOver8:
+                        counter += cycles;
+                        if (counter >= 8) {
+                            counter -= 8;
+                            currentValue++;
+                        }
 
-                    counter += cycles;
-                    if(counter >= 8) {
-                        counter -= 8;
-                        currentValue++;
-                    }
-
-                    break;
+                        break;
+                }
             }
 
             //Pause?
@@ -129,33 +119,48 @@ namespace PS1_Emulator {
                 switch ((mode >> 1) & 3) {
                     case 0:
                     case 3:
-                         pause= true;
+                         pause = true;
                         break;
 
+                    default:
+                        pause = false;
+                        break;
                 }
             }
+            else {
+                pause = false;
+            }
+
+            uint flag = 0;
+            bool IRQenabled = false;
 
             //Reached target?
             if (((mode >> 3) & 1) == 1) {       //(0=After Counter=FFFFh, 1=After Counter=Target)
                 reachedTarget = currentValue >= target;
+
+                if (((mode >> 4) & 1) == 1) {
+                    IRQenabled = true;
+                }
+                flag = 1 << 11;
+
             }
             else {
                 reachedTarget = currentValue >= 0xffff;
+                if (((mode >> 5) & 1) == 1) {
+                    IRQenabled = true;
+                }
+                flag = 1 << 12;
+
             }
 
             //IRQ?
             if (reachedTarget) {
-                if (currentValue >= target && ((mode >> 4) & 1) == 1) {
+                mode |= flag;
+                if (IRQenabled) {
                     IRQ();
-                    mode |= (1 << 11);
-
                 }
-                if (currentValue >= 0xffff && ((mode >> 5) & 1) == 1) {
+                reset = true;
 
-                    IRQ();
-                    mode |= (1 << 12);
-                }
-                currentValue = 0;
             }
 
         }
