@@ -160,7 +160,7 @@ namespace PS1_Emulator {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
-                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\psxtest_cpu\psxtest_cpu.exe");
+                    loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\psxtest_cpu\psxtest_cpu.exe");
                     break;
 
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
@@ -1199,18 +1199,16 @@ namespace PS1_Emulator {
 
         private static void jalr(CPU cpu, Instruction instruction) {
 
-            if ((cpu.GPR[instruction.get_rs()] & 0x3) != 0) {
-                exception(cpu, LoadAddressError);
-                return;
-            }
-
             // Store return address in $rd
             cpu.directWrite.registerNumber = instruction.get_rd();
             cpu.directWrite.value = cpu.next_pc;
 
+            if ((cpu.GPR[instruction.get_rs()] & 0x3) != 0) {
+                exception(cpu, LoadAddressError);
+                return;
+            }
             // Jump to address in $rs
             cpu.next_pc = cpu.GPR[instruction.get_rs()];
-
             cpu._branch = true;
 
         }
