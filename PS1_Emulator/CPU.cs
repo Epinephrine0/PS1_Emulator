@@ -160,7 +160,7 @@ namespace PS1_Emulator {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
-                    loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\psxtest_cpu\psxtest_cpu.exe");
+                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\timers\timers.exe");
                     break;
 
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
@@ -168,40 +168,17 @@ namespace PS1_Emulator {
 
                     switch (GPR[9]) {
 
-
-                        case 0x03:                        //Writes a number of characters to a file, but I just write it to the console 
-                            character = (char)GPR[5];      //$a1
-                            uint size = GPR[6];            //$a2
-                            //outRegs[2] = size;
-
-                            //fd?
-
-                            while (size > 0) {
-                                //write
-                                size--;
-                            }
-
-                            break;
-
-                        case 0x09:
-
-                            character = (char)GPR[4];    //Writes a character to a file
-                                                         
-                            break;
-
                         case 0x3C:                       //putchar function (Prints the char in $a0)
                             character = (char)GPR[4];
                             Console.Write(character);
                             break;
 
                         case 0x3E:                        //puts function, similar to printf but differ in dealing with 0 character
-
                             uint address = GPR[4];       //address of the string is in $a0
                             if (address == 0) {
                                 Console.Write("\\<NULL>");
                             }
                             else {
-
                                 while (BUS.load8(address) != 0) {
                                     character = (char)BUS.load8(address);
                                     Console.Write(character);
@@ -250,34 +227,12 @@ namespace PS1_Emulator {
 
                 case 0xB0:
                     switch (GPR[9]) {
-                        case 0x35:                      //Writes a number of characters to a file, but I just write it to the console 
-                            character = (char)GPR[5];      //$a1
-                            uint size = GPR[6];            //$a2
-                            //outRegs[2] = size;
-
-                            //fd?
-
-                            while (size > 0) {
-                                // Console.Write(character);
-                                size--;
-                            }
-
-                            break;
-
-
                         case 0x3D:                       //putchar function (Prints the char in $a0)
                             character = (char)GPR[4];
                             Console.Write(character);
                             break;
 
-                        case 0x3B:
-
-                            character = (char)GPR[4];    //Writes a character to a file, but I just write it to the console 
-                                                          //  Console.Write(character);
-                            break;
-
                         case 0x3F:                          //puts function, similar to printf but differ in dealing with 0 character
-
                             uint address = GPR[4];       //address of the string is in $a0
                             if (address == 0) {
                                 Console.Write("\\<NULL>");
@@ -291,7 +246,6 @@ namespace PS1_Emulator {
                                 }
 
                             }
-
                             break;
 
                         case 0xB:
@@ -302,9 +256,7 @@ namespace PS1_Emulator {
                                 Console.WriteLine("$a2: " + GPR[6].ToString("X"));
                                 Console.WriteLine("$a3: " + GPR[7].ToString("X"));
                                
-
                             }
-                            
                             break;
 
                      
@@ -318,8 +270,6 @@ namespace PS1_Emulator {
 
                             openEvent = true;*/
                             
-
-
                             break;
 
                         default:
@@ -327,7 +277,6 @@ namespace PS1_Emulator {
                                 Console.WriteLine("Function B: " + GPR[9].ToString("x"));
                             }
                             break;
-
 
                     }
 
@@ -343,7 +292,6 @@ namespace PS1_Emulator {
         private void loadTestRom(string path) {
             testRom = File.ReadAllBytes(path);
 
-
             uint addressInRAM = (uint)(testRom[0x018] | (testRom[0x018 + 1] << 8) | (testRom[0x018 + 2] << 16) | (testRom[0x018 + 3] << 24));
 
             for (int i = 0x800; i < testRom.Length; i++) {
@@ -353,9 +301,6 @@ namespace PS1_Emulator {
             }
             this.pc = (uint)(testRom[0x10] | (testRom[0x10 + 1] << 8) | (testRom[0x10 + 2] << 16) | (testRom[0x10 + 3] << 24));
             next_pc = this.pc + 4;
-            //Console.WriteLine("Execute at PC:" + pc.ToString("x"));
-
-
         }
 
         public void CDROM_trace(uint func) {
@@ -449,41 +394,18 @@ namespace PS1_Emulator {
         }
         
         private static void cop0(CPU cpu, Instruction instruction) {
-
             switch (instruction.get_rs()) {
-
-                case 0b00100:
-
-                    mtc0(cpu, instruction);
-
-                    break;
-
-
-                case 0b00000:
-
-                    mfc0(cpu, instruction);
-
-                    break;
-
-                case 0b10000:
-
-                    rfe(cpu, instruction);
-
-
-                    break;
-
-                default:
-
-                    throw new Exception("Unhandled cop0 instruction: " + instruction.getfull().ToString("X"));
+                case 0b00100: mtc0(cpu, instruction); break;
+                case 0b00000: mfc0(cpu, instruction); break;
+                case 0b10000: rfe(cpu, instruction);  break;
+                default: throw new Exception("Unhandled cop0 instruction: " + instruction.getfull().ToString("X"));
             }
-
 
         }
         private static void illegal(CPU cpu, Instruction instruction) {
             Console.ForegroundColor = ConsoleColor.Red; 
             Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') + " at PC: " + cpu.pc.ToString("x"));
             Console.ForegroundColor = ConsoleColor.Green;
-
             exception(cpu, IllegalInstruction);
 
         }
@@ -551,7 +473,6 @@ namespace PS1_Emulator {
             UInt32 base_ = instruction.get_rs();
             UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
-
             UInt32 value =  cpu.GPR[instruction.get_rt()];               
             UInt32 current_value = cpu.BUS.loadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
 
@@ -559,30 +480,11 @@ namespace PS1_Emulator {
             UInt32 pos = final_address & 3;
 
             switch (pos) {
-
-                case 0:
-
-                    finalValue = ((current_value & 0x00000000) | (value << 0));
-                    break;
-
-                case 1:
-
-                    finalValue = ((current_value & 0x000000ff) | (value << 8));
-                    break;
-
-                case 2:
-
-                    finalValue = ((current_value & 0x0000ffff) | (value << 16));
-                    break;
-
-                case 3:
-
-                    finalValue = ((current_value & 0x00ffffff) | (value << 24));
-                    break;
-
-                default:
-
-                    throw new Exception("swl instruction error, pos:" + pos);
+                case 0: finalValue = (current_value & 0x00000000) | (value << 0); break;
+                case 1: finalValue = (current_value & 0x000000ff) | (value << 8); break;
+                case 2: finalValue = (current_value & 0x0000ffff) | (value << 16); break;
+                case 3: finalValue = (current_value & 0x00ffffff) | (value << 24); break;
+                default: throw new Exception("swl instruction error, pos:" + pos);
             }
 
             cpu.BUS.storeWord((UInt32)(final_address & (~3)), finalValue);
@@ -593,7 +495,6 @@ namespace PS1_Emulator {
             UInt32 base_ = instruction.get_rs();
             UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
-
             UInt32 value = cpu.GPR[instruction.get_rt()];           
             UInt32 current_value = cpu.BUS.loadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
 
@@ -601,34 +502,14 @@ namespace PS1_Emulator {
             UInt32 pos = final_address & 3;
 
             switch (pos) {
-                
-                case 0:
-
-                    finalValue = ((current_value & 0xffffff00) | (value >> 24));
-                    break;
-
-                case 1:
-
-                    finalValue = ((current_value & 0xffff0000) | (value >> 16));
-                    break;
-
-                case 2:
-
-                    finalValue = ((current_value & 0xff000000) | (value >> 8));
-                    break;
-
-                case 3:
-
-                    finalValue = ((current_value & 0x00000000) | (value >> 0));
-                    break;
-
-                default:
-
-                    throw new Exception("swl instruction error, pos:" + pos);
+                case 0: finalValue = (current_value & 0xffffff00) | (value >> 24); break;
+                case 1: finalValue = (current_value & 0xffff0000) | (value >> 16); break;
+                case 2: finalValue = (current_value & 0xff000000) | (value >> 8); break;
+                case 3: finalValue = (current_value & 0x00000000) | (value >> 0); break;
+                default: throw new Exception("swl instruction error, pos:" + pos);
             }
 
             cpu.BUS.storeWord((UInt32)(final_address & (~3)), finalValue);
-
 
         }
 
@@ -638,11 +519,10 @@ namespace PS1_Emulator {
             UInt32 base_ = instruction.get_rs();
             UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
-
             UInt32 current_value = cpu.GPR[instruction.get_rt()];
 
             if (instruction.get_rt() == cpu.registerLoad.registerNumber) {
-                current_value = cpu.registerLoad.value;             //Bypass load delay
+                current_value = cpu.registerLoad.value;                         //Bypass load delay
             }
 
             UInt32 word = cpu.BUS.loadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
@@ -650,30 +530,11 @@ namespace PS1_Emulator {
             UInt32 pos = final_address & 3;
 
             switch (pos) {
-
-                case 0:
-
-                    finalValue = ((current_value & 0x00000000) | (word >> 0));
-                    break;
-
-                case 1:
-
-                    finalValue = ((current_value & 0xff000000) | (word >> 8));
-                    break;
-
-                case 2:
-
-                    finalValue = ((current_value & 0xffff0000) | (word >> 16));
-                    break;
-
-                case 3:
-
-                    finalValue = ((current_value & 0xffffff00) | (word >> 24));
-                    break;
-
-                default:
-
-                    throw new Exception("lwr instruction error, pos:" + pos);
+                case 0: finalValue = (current_value & 0x00000000) | (word >> 0); break;
+                case 1: finalValue = (current_value & 0xff000000) | (word >> 8); break;
+                case 2: finalValue = (current_value & 0xffff0000) | (word >> 16); break;
+                case 3: finalValue = (current_value & 0xffffff00) | (word >> 24); break;
+                default: throw new Exception("lwr instruction error, pos:" + pos);
             }
 
             cpu.registerDelayedLoad.registerNumber = instruction.get_rt();   //Position
@@ -697,30 +558,11 @@ namespace PS1_Emulator {
             UInt32 pos = final_address & 3;
 
             switch (pos) {
-                
-                case 0:
-
-                    finalValue = ((current_value & 0x00ffffff) | (word << 24));
-                    break;
-
-                case 1:
-
-                    finalValue = ((current_value & 0x0000ffff) | (word << 16));
-                    break;
-
-                case 2:
-
-                    finalValue = ((current_value & 0x000000ff) | (word << 8));
-                    break;
-
-                case 3:
-
-                    finalValue = ((current_value & 0x00000000) | (word << 0));
-                    break;
-
-                default:
-
-                    throw new Exception("lwl instruction error, pos:" + pos);
+                case 0: finalValue = (current_value & 0x00ffffff) | (word << 24); break;
+                case 1: finalValue = (current_value & 0x0000ffff) | (word << 16); break;
+                case 2: finalValue = (current_value & 0x000000ff) | (word << 8); break;
+                case 3: finalValue = (current_value & 0x00000000) | (word << 0); break;
+                default: throw new Exception("lwl instruction error, pos:" + pos);
             }
 
             cpu.registerDelayedLoad.registerNumber = instruction.get_rt();   //Position
@@ -731,9 +573,7 @@ namespace PS1_Emulator {
         private static void cop2(CPU cpu, Instruction instruction) {
 
             if (((instruction.get_rs() >> 4) & 1) == 1) {    //COP2 imm25 command
-                
                 cpu.gte.execute(instruction);
-
                 return;
             }
 
@@ -742,7 +582,6 @@ namespace PS1_Emulator {
             switch (instruction.get_rs()) {
                 
                 case 0b00000:   //MFC
-                    //handle loading to a register in a delay slot???
                     cpu.registerDelayedLoad.registerNumber = instruction.get_rt();
                     cpu.registerDelayedLoad.value = cpu.gte.read(instruction.get_rd());
                     break;
@@ -764,22 +603,17 @@ namespace PS1_Emulator {
                     cpu.gte.write(rd, value);   //Same as CTC but without adding 32 to the position
                     break;
 
-
                 default:  throw new Exception("Unhandled GTE opcode: " + instruction.get_rs().ToString("X"));
             }
         }
 
 
         private static void cop3(CPU cpu, Instruction instruction) {
-
             exception(cpu,CoprocessorError);
-
         }
 
         private static void cop1(CPU cpu, Instruction instruction) {
-
             exception(cpu,CoprocessorError);
-
         }
 
         private static void xori(CPU cpu, Instruction instruction) {
@@ -836,7 +670,6 @@ namespace PS1_Emulator {
         }
 
         private static void sub(CPU cpu, Instruction instruction) {
-
             Int32 reg1 = (Int32)cpu.GPR[instruction.get_rs()];
             Int32 reg2 = (Int32)cpu.GPR[instruction.get_rt()];
 
@@ -856,12 +689,10 @@ namespace PS1_Emulator {
             Int64 a = (Int64) ((Int32)cpu.GPR[instruction.get_rs()]);
             Int64 b = (Int64) ((Int32)cpu.GPR[instruction.get_rt()]);
 
-
             UInt64 v = (UInt64)(a * b);
 
             cpu.HI = (UInt32)(v >> 32);
             cpu.LO = (UInt32)(v);
-
 
             /*
               __mult_execution_time_____________________________________________________
@@ -870,7 +701,6 @@ namespace PS1_Emulator {
               Slow  (13 cycles)  rs = 00100000h..7FFFFFFFh, or rs = 80000000h..FFF00001h
 
             */
-
             switch (a) {
                 case Int64 x when (a >= 0x00000000 && a <= 0x000007FF) || (a >= 0xFFFFF800 && a <= 0xFFFFFFFF):
                     CPU.cycles += 6;
@@ -883,17 +713,12 @@ namespace PS1_Emulator {
                 case Int64 x when (a >= 0x00100000 && a <= 0x7FFFFFFF) || (a >= 0x80000000 && a <= 0xFFF00001):
                     CPU.cycles += 13;
                     break;
-
             }
-
-
 
         }
 
         private static void break_(CPU cpu, Instruction instruction) {
-
             exception(cpu,Break);
-
         }
 
         private static void xor(CPU cpu, Instruction instruction) {
@@ -902,10 +727,8 @@ namespace PS1_Emulator {
         }
 
         private static void multu(CPU cpu, Instruction instruction) {
-
             UInt64 a = (UInt64)cpu.GPR[instruction.get_rs()];
             UInt64 b = (UInt64)cpu.GPR[instruction.get_rt()];
-
 
             UInt64 v = a * b;
 
@@ -933,9 +756,7 @@ namespace PS1_Emulator {
                 case UInt64 x when a >= 0x00100000 && a <= 0xFFFFFFFF:
                     CPU.cycles += 13;
                     break;
-
             }
-
 
         }
 
@@ -1074,7 +895,6 @@ namespace PS1_Emulator {
         }
 
         private static void div(CPU cpu, Instruction instruction) { // GPR[rs] / GPR[rt] -> (HI, LO) 
-
             Int32 numerator = (Int32)cpu.GPR[instruction.get_rs()];
             Int32 denominator = (Int32)cpu.GPR[instruction.get_rt()];
 
@@ -1089,17 +909,13 @@ namespace PS1_Emulator {
                 return;
             }
             else if ((uint)numerator == 0x80000000 && (uint)denominator == 0xffffffff) {
-
                 cpu.LO = 0x80000000;
                 cpu.HI = 0;
-
                 return;
             }
 
-
             cpu.LO = (UInt32)unchecked(numerator / denominator);
             cpu.HI = (UInt32)unchecked(numerator % denominator);
-
 
             /*
                divu/div_execution_time
@@ -1163,7 +979,6 @@ namespace PS1_Emulator {
         }
 
         private static void lbu(CPU cpu, Instruction instruction) {
-           
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
@@ -1174,16 +989,10 @@ namespace PS1_Emulator {
         }
 
         private static void blez(CPU cpu, Instruction instruction) {
-
             Int32 signedValue = (Int32)cpu.GPR[instruction.get_rs()];
-
             if (signedValue <= 0) {
-
                 branch(cpu,instruction.signed_imm());
-
             }
-
-
         }
 
         private static void bgtz(CPU cpu, Instruction instruction) {     //Branch if > 0
@@ -1198,7 +1007,6 @@ namespace PS1_Emulator {
         }
 
         private static void jalr(CPU cpu, Instruction instruction) {
-
             // Store return address in $rd
             cpu.directWrite.registerNumber = instruction.get_rd();
             cpu.directWrite.value = cpu.next_pc;
@@ -1214,15 +1022,12 @@ namespace PS1_Emulator {
         }
 
         private static void beq(CPU cpu, Instruction instruction) {
-          
             if (cpu.GPR[instruction.get_rs()].Equals(cpu.GPR[instruction.get_rt()])) {
                 branch(cpu,instruction.signed_imm());
             }
-            
         }
 
         private static void lb(CPU cpu, Instruction instruction) {
-
             if ((cpu.SR & 0x10000) != 0) {
                // Debug.WriteLine("loading from memory ignored, cache is isolated");
                 return;
@@ -1237,9 +1042,7 @@ namespace PS1_Emulator {
         }
 
         private static void sb(CPU cpu, Instruction instruction) {
-
             if ((cpu.SR & 0x10000) != 0) {
-
                // Debug.WriteLine("store ignored, cache is isolated");      //Ignore write when cache is isolated 
                 return;
             }
@@ -1263,11 +1066,8 @@ namespace PS1_Emulator {
             cpu.directWrite.value = cpu.next_pc;             //Jump and link, store the PC to return to it later
             jump(cpu,instruction);
         }
-
         private static void sh(CPU cpu, Instruction instruction) {
-
             if ((cpu.SR & 0x10000) != 0) {
-
                // Debug.WriteLine("store ignored, cache is isolated");      //Ignore write, the writing should be on the cache 
                 return;
             }
@@ -1289,7 +1089,6 @@ namespace PS1_Emulator {
         }
 
         private static void addi(CPU cpu, Instruction instruction) {
-
             Int32 imm = (Int32)(instruction.signed_imm());
             Int32 s = (Int32)(cpu.GPR[instruction.get_rs()]);
             try {
@@ -1304,14 +1103,12 @@ namespace PS1_Emulator {
         }
 
         public static void lui(CPU cpu, Instruction instruction) {
-            UInt32 targetReg = instruction.get_rt();
             UInt32 value = instruction.getImmediateValue();
             cpu.directWrite.registerNumber = instruction.get_rt();
             cpu.directWrite.value = value << 16;
         }
 
         public static void ori(CPU cpu, Instruction instruction) {
-            UInt32 targetReg = instruction.get_rt();
             UInt32 value = instruction.getImmediateValue();
             UInt32 rs = instruction.get_rs();
             cpu.directWrite.registerNumber = instruction.get_rt();
@@ -1326,9 +1123,7 @@ namespace PS1_Emulator {
             cpu.directWrite.value = cpu.GPR[instruction.get_rs()] & cpu.GPR[instruction.get_rt()];
         }
         public static void sw(CPU cpu, Instruction instruction) {
-           
             if ((cpu.SR & 0x10000) != 0) {
-
                // Debug.WriteLine("store ignored, cache is isolated");      //Ignore write, the writing should be on the cache 
                 return; 
             }       
@@ -1349,9 +1144,7 @@ namespace PS1_Emulator {
 
         }
         public static void lw(CPU cpu, Instruction instruction) {
-            
-            if ((cpu.SR & 0x10000) != 0) {     //Can be removed?
-
+            if ((cpu.SR & 0x10000) != 0) {
                 //Debug.WriteLine("loading from memory ignored, cache is isolated");      
                 return;
             }
@@ -1399,12 +1192,11 @@ namespace PS1_Emulator {
 
         private static void sltu(CPU cpu, Instruction instruction) {
             cpu.directWrite.registerNumber = instruction.get_rd();
-
-            if (cpu.GPR[instruction.get_rs()] < cpu.GPR[instruction.get_rt()]) { //Int32 ?
-                cpu.directWrite.value = (UInt32) 1;
+            if (cpu.GPR[instruction.get_rs()] < cpu.GPR[instruction.get_rt()]) {
+                cpu.directWrite.value = 1;
             }
             else {
-                cpu.directWrite.value = (UInt32) 0;
+                cpu.directWrite.value = 0;
             }
            
         }
