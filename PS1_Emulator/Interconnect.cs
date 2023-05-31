@@ -77,7 +77,7 @@ namespace PS1_Emulator {
         }
        
 
-        public UInt32 load32(UInt32 address) {
+        public UInt32 loadWord(UInt32 address) {
             uint physical_address = mask(address);
 
             if (BIOS.range.contains(physical_address) != null) {
@@ -176,7 +176,7 @@ namespace PS1_Emulator {
         }
         int CDROM_delay_read;
         int CDROM_delay_write; 
-        public void store32(UInt32 address,UInt32 value) {
+        public void storeWord(UInt32 address,UInt32 value) {
             uint physical_address = mask(address);
 
 
@@ -446,7 +446,7 @@ namespace PS1_Emulator {
 
         }
 
-        public void store16(UInt32 address, UInt16 value) {
+        public void storeHalf(UInt32 address, UInt16 value) {
             uint physical_address = mask(address);
 
             if (this.SPU.range.contains(physical_address) != null) {
@@ -511,7 +511,7 @@ namespace PS1_Emulator {
 
 
         }
-        public void store8(UInt32 address, byte value) {
+        public void storeByte(UInt32 address, byte value) {
             uint physical_address = mask(address);
 
             if (this.expansion2.range.contains(physical_address) != null) {

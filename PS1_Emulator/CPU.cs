@@ -8,19 +8,14 @@ namespace PS1_Emulator {
         private UInt32 pc;           //32-bit program counter
         private UInt32 next_pc;
         private UInt32 current_pc;
-        public  BUS BUS;
-        private UInt32[] regs;
-        private UInt32[] outRegs;
+        public BUS BUS;
+        private UInt32[] GPR;
         private Instruction current;
         private UInt32 SR;           //cop0 reg12 , the status register 
         private UInt32 cause;        //cop0 reg13 , the cause register 
         private UInt32 epc;          //cop0 reg14 , epc
-
-        private (UInt32, UInt32) pendingload; //to emulate the load delay
-
         private UInt32 HI;           //Remainder of devision
         private UInt32 LO;           //Quotient of devision
-
         private bool _branch;
         private bool delay_slot;
 
@@ -44,7 +39,7 @@ namespace PS1_Emulator {
         public bool isPaused = false;
         const uint CYCLES_PER_FRAME = 33868800 / 60;
 
-        private static readonly delegate*<CPU,Instruction, void>[] mainLookUpTable = new delegate*<CPU, Instruction, void>[] {
+        private static readonly delegate*<CPU, Instruction, void>[] mainLookUpTable = new delegate*<CPU, Instruction, void>[] {
                 &special,   &bxx,       &jump,      &jal,       &beq,        &bne,       &blez,      &bgtz,
                 &addi,      &addiu,     &slti,      &sltiu,     &andi,       &ori,       &xori,      &lui,
                 &cop0,      &cop1,      &cop2,      &cop3,      &illegal,    &illegal,   &illegal,   &illegal,
@@ -70,12 +65,15 @@ namespace PS1_Emulator {
             this.pc = 0xbfc00000;   //BIOS initial PC       
             this.next_pc = pc + 4;
             this.BUS = bus;
-            this.regs = new UInt32[32];
-            this.outRegs = new UInt32[32];
-            this.regs[0] = 0;
-            this.outRegs[0] = 0;
+            this.GPR = new UInt32[32];
+            this.GPR[0] = 0;
             this.SR = 0;
-            this.pendingload = (0, 0);
+            this.directWrite.registerNumber = 0;    //Stupid load delay slot
+            this.directWrite.value = 0;
+            this.registerLoad.registerNumber = 0;
+            this.registerLoad.value = 0;
+            this.registerDelayedLoad.registerNumber = 0;
+            this.registerDelayedLoad.value = 0; 
             this.HI = 0xdeadbeef;
             this.LO = 0xdeadbeef;
             this._branch = false;
@@ -83,85 +81,98 @@ namespace PS1_Emulator {
             Console.ForegroundColor = ConsoleColor.Green;   //For TTY Console
             Console.Title = "TTY Console";
         }
+        struct RegisterLoad {
+            public uint registerNumber;
+            public uint value;
+        }
+        
+        RegisterLoad registerLoad;      
+        RegisterLoad registerDelayedLoad;
+        RegisterLoad directWrite;       //Not memory access, will overwrite memory loads
 
-        public void emu_cycle() {   
-              
+        public void emu_cycle() {
+
             current_pc = pc;   //Save current pc In case of an exception
             intercept(pc);     //TTY
 
-           /* if (fastBoot) {       //Skip Sony logo, doesn't work 
-                if (pc == 0x80030000) {
-                     pc = outRegs[31];
-                     next_pc = pc + 4;
-                     fastBoot = false;
-                    return;
-                }
-            }*/
+            /* if (fastBoot) {       //Skip Sony logo, doesn't work 
+                 if (pc == 0x80030000) {
+                      pc = outRegs[31];
+                      next_pc = pc + 4;
+                      fastBoot = false;
+                     return;
+                 }
+             }*/
             //----------------------------------------------------------------------
 
 
             //PC must be 32 bit aligned, can be ignored?
-            if ((current_pc & 0x3) != 0) {  
+            if ((current_pc & 0x3) != 0) {
                 exception(this, LoadAddressError);
                 return;
             }
 
-            current = new Instruction(BUS.load32(pc));
+            current = new Instruction(BUS.loadWord(pc));
 
             delay_slot = _branch;   //Brach delay 
-            _branch = false;       
-                                
+            _branch = false;
+
             pc = next_pc;
-            next_pc = next_pc + 4;  
-
-            outRegs[pendingload.Item1] = pendingload.Item2;     //Load any pending load 
-            pendingload = (0, 0);                              //Reset 
-
-            outRegs[0] = 0;
+            next_pc = next_pc + 4;
 
             if (IRQ_CONTROL.isRequestingIRQ()) {  //Interrupt check 
                 cause |= 1 << 10;
 
                 if (((SR & 1) != 0) && (((SR >> 10) & 1) != 0)) {
-                    exception(this,IRQ);
+                    exception(this, IRQ);
                     return;
                 }
-
             }
 
             executeInstruction(current);
-            outRegs[0] = 0;
-
-            for (int i = 0; i < regs.Length; i++) {
-                regs[i] = outRegs[i];
-            }
-
+            registerTransfer(this);
+           
         }
 
         private void executeInstruction(Instruction instruction) {
-            mainLookUpTable[instruction.getOpcode()](this,instruction);
+            mainLookUpTable[instruction.getOpcode()](this, instruction);
         }
         private static void special(CPU cpu, Instruction instruction) {
             specialLookUpTable[instruction.get_subfunction()](cpu, instruction);
         }
+        private void registerTransfer(CPU cpu){    //Hanlde register transfers and delay slot
+            if (cpu.registerLoad.registerNumber != cpu.registerDelayedLoad.registerNumber) {
+                cpu.GPR[cpu.registerLoad.registerNumber] = cpu.registerLoad.value;
+            }
+            cpu.registerLoad.value = cpu.registerDelayedLoad.value;
+            cpu.registerLoad.registerNumber = cpu.registerDelayedLoad.registerNumber;
 
+            cpu.registerDelayedLoad.value = 0;
+            cpu.registerDelayedLoad.registerNumber = 0;
+
+            //Last step is direct register write, so it can overwrite any memory load on the same register
+            cpu.GPR[cpu.directWrite.registerNumber] = cpu.directWrite.value;
+            cpu.directWrite.registerNumber = 0;
+            cpu.directWrite.value = 0;
+            cpu.GPR[0] = 0;
+        }
         private void intercept(uint pc) {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
-                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gpu\clipping\clipping.exe");
+                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\psxtest_cpu\psxtest_cpu.exe");
                     break;
 
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
                     char character;
 
-                    switch (regs[9]) {
+                    switch (GPR[9]) {
 
 
                         case 0x03:                        //Writes a number of characters to a file, but I just write it to the console 
-                            character = (char)regs[5];      //$a1
-                            uint size = regs[6];            //$a2
-                            outRegs[2] = size;
+                            character = (char)GPR[5];      //$a1
+                            uint size = GPR[6];            //$a2
+                            //outRegs[2] = size;
 
                             //fd?
 
@@ -174,18 +185,18 @@ namespace PS1_Emulator {
 
                         case 0x09:
 
-                            character = (char)regs[4];    //Writes a character to a file
+                            character = (char)GPR[4];    //Writes a character to a file
                                                          
                             break;
 
                         case 0x3C:                       //putchar function (Prints the char in $a0)
-                            character = (char)regs[4];
+                            character = (char)GPR[4];
                             Console.Write(character);
                             break;
 
                         case 0x3E:                        //puts function, similar to printf but differ in dealing with 0 character
 
-                            uint address = regs[4];       //address of the string is in $a0
+                            uint address = GPR[4];       //address of the string is in $a0
                             if (address == 0) {
                                 Console.Write("\\<NULL>");
                             }
@@ -222,13 +233,13 @@ namespace PS1_Emulator {
                         case 0xA2:
                         case 0xA3:
                             if (BUS.debug) {
-                                CDROM_trace(regs[9]);
+                                CDROM_trace(GPR[9]);
                             }
                             break;
 
                         default:
                             if (BUS.debug) {
-                                Console.WriteLine("Function A: " + regs[9].ToString("x"));
+                                Console.WriteLine("Function A: " + GPR[9].ToString("x"));
                             }
 
                             break;
@@ -238,11 +249,11 @@ namespace PS1_Emulator {
                     break;
 
                 case 0xB0:
-                    switch (regs[9]) {
+                    switch (GPR[9]) {
                         case 0x35:                      //Writes a number of characters to a file, but I just write it to the console 
-                            character = (char)regs[5];      //$a1
-                            uint size = regs[6];            //$a2
-                            outRegs[2] = size;
+                            character = (char)GPR[5];      //$a1
+                            uint size = GPR[6];            //$a2
+                            //outRegs[2] = size;
 
                             //fd?
 
@@ -255,19 +266,19 @@ namespace PS1_Emulator {
 
 
                         case 0x3D:                       //putchar function (Prints the char in $a0)
-                            character = (char)regs[4];
+                            character = (char)GPR[4];
                             Console.Write(character);
                             break;
 
                         case 0x3B:
 
-                            character = (char)regs[4];    //Writes a character to a file, but I just write it to the console 
+                            character = (char)GPR[4];    //Writes a character to a file, but I just write it to the console 
                                                           //  Console.Write(character);
                             break;
 
                         case 0x3F:                          //puts function, similar to printf but differ in dealing with 0 character
 
-                            uint address = regs[4];       //address of the string is in $a0
+                            uint address = GPR[4];       //address of the string is in $a0
                             if (address == 0) {
                                 Console.Write("\\<NULL>");
                             }
@@ -286,10 +297,10 @@ namespace PS1_Emulator {
                         case 0xB:
                             if (BUS.debug) {
                                 Console.WriteLine("TestEvent");
-                                Console.WriteLine("$a0: " + regs[4].ToString("X"));
-                                Console.WriteLine("$a1: " + regs[5].ToString("X"));
-                                Console.WriteLine("$a2: " + regs[6].ToString("X"));
-                                Console.WriteLine("$a3: " + regs[7].ToString("X"));
+                                Console.WriteLine("$a0: " + GPR[4].ToString("X"));
+                                Console.WriteLine("$a1: " + GPR[5].ToString("X"));
+                                Console.WriteLine("$a2: " + GPR[6].ToString("X"));
+                                Console.WriteLine("$a3: " + GPR[7].ToString("X"));
                                
 
                             }
@@ -313,7 +324,7 @@ namespace PS1_Emulator {
 
                         default:
                             if (BUS.debug) {
-                                Console.WriteLine("Function B: " + regs[9].ToString("x"));
+                                Console.WriteLine("Function B: " + GPR[9].ToString("x"));
                             }
                             break;
 
@@ -323,7 +334,7 @@ namespace PS1_Emulator {
                     break;
                 case 0xC0:
                     if (BUS.debug) {
-                        Console.WriteLine("Function C: " + regs[9].ToString("x"));
+                        Console.WriteLine("Function C: " + GPR[9].ToString("x"));
                     }
                     break;
             }
@@ -337,7 +348,7 @@ namespace PS1_Emulator {
 
             for (int i = 0x800; i < testRom.Length; i++) {
 
-                BUS.store8((uint)(addressInRAM), testRom[i]);
+                BUS.storeByte((uint)(addressInRAM), testRom[i]);
                 addressInRAM++;
             }
             this.pc = (uint)(testRom[0x10] | (testRom[0x10 + 1] << 8) | (testRom[0x10 + 2] << 16) | (testRom[0x10 + 3] << 24));
@@ -473,7 +484,7 @@ namespace PS1_Emulator {
             Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') + " at PC: " + cpu.pc.ToString("x"));
             Console.ForegroundColor = ConsoleColor.Green;
 
-            //exception(cpu, IllegalInstruction);
+            exception(cpu, IllegalInstruction);
 
         }
 
@@ -482,7 +493,7 @@ namespace PS1_Emulator {
         }
         private static void swc2(CPU cpu, Instruction instruction) {
 
-            uint address = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
+            uint address = cpu.GPR[instruction.get_rs()] + instruction.signed_imm();
 
             if ((address & 0x3) != 0) {
                 exception(cpu,LoadAddressError);
@@ -491,7 +502,7 @@ namespace PS1_Emulator {
 
             uint rt = instruction.get_rt();
             uint word = cpu.gte.read(rt);
-            cpu.BUS.store32(address, word);
+            cpu.BUS.storeWord(address, word);
 
         }
 
@@ -512,14 +523,14 @@ namespace PS1_Emulator {
         private static void lwc2(CPU cpu, Instruction instruction) {
             //TODO add 2 instructions delay
 
-            uint address = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
+            uint address = cpu.GPR[instruction.get_rs()] + instruction.signed_imm();
 
             if ((address & 0x3) != 0) {
                 exception(cpu,LoadAddressError);
                 return;
             }
 
-            uint word = cpu.BUS.load32(address);
+            uint word = cpu.BUS.loadWord(address);
             uint rt = instruction.get_rt();
             cpu.gte.write(rt, word);
 
@@ -538,11 +549,11 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
 
-            UInt32 value = cpu.regs[instruction.get_rt()];                           //Bypass load delay
-            UInt32 current_value = cpu.BUS.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            UInt32 value =  cpu.GPR[instruction.get_rt()];               
+            UInt32 current_value = cpu.BUS.loadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -574,17 +585,17 @@ namespace PS1_Emulator {
                     throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            cpu.BUS.store32((UInt32)(final_address & (~3)), finalValue);
+            cpu.BUS.storeWord((UInt32)(final_address & (~3)), finalValue);
         }
 
         private static void swl(CPU cpu, Instruction instruction) {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
 
-            UInt32 value = cpu.regs[instruction.get_rt()];                           //Bypass load delay
-            UInt32 current_value = cpu.BUS.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            UInt32 value = cpu.GPR[instruction.get_rt()];           
+            UInt32 current_value = cpu.BUS.loadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -616,7 +627,7 @@ namespace PS1_Emulator {
                     throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            cpu.BUS.store32((UInt32)(final_address & (~3)), finalValue);
+            cpu.BUS.storeWord((UInt32)(final_address & (~3)), finalValue);
 
 
         }
@@ -625,61 +636,63 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
 
-            UInt32 current_value = cpu.outRegs[instruction.get_rt()];       //Bypass load delay
-            UInt32 word = cpu.BUS.load32((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            UInt32 current_value = cpu.GPR[instruction.get_rt()];
 
+            if (instruction.get_rt() == cpu.registerLoad.registerNumber) {
+                current_value = cpu.registerLoad.value;             //Bypass load delay
+            }
+
+            UInt32 word = cpu.BUS.loadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
 
             switch (pos) {
 
                 case 0:
-                    finalValue = ((current_value & 0x00000000) | (word >> 0));
 
+                    finalValue = ((current_value & 0x00000000) | (word >> 0));
                     break;
 
                 case 1:
-                    finalValue = ((current_value & 0xff000000) | (word >> 8));
 
+                    finalValue = ((current_value & 0xff000000) | (word >> 8));
                     break;
 
                 case 2:
-                    finalValue = ((current_value & 0xffff0000) | (word >> 16));
 
+                    finalValue = ((current_value & 0xffff0000) | (word >> 16));
                     break;
 
                 case 3:
-                    finalValue = ((current_value & 0xffffff00) | (word >> 24));
 
+                    finalValue = ((current_value & 0xffffff00) | (word >> 24));
                     break;
 
                 default:
 
                     throw new Exception("lwr instruction error, pos:" + pos);
             }
-            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
-                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
-            }
 
-            cpu.pendingload.Item1 = instruction.get_rt();  //Position
-            cpu.pendingload.Item2 = finalValue;           //Value
+            cpu.registerDelayedLoad.registerNumber = instruction.get_rt();   //Position
+            cpu.registerDelayedLoad.value = finalValue;                      //Value
 
         }
 
         private static void lwl(CPU cpu, Instruction instruction) {
-
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
+            UInt32 current_value =  cpu.GPR[instruction.get_rt()];
 
-            UInt32 current_value = cpu.outRegs[instruction.get_rt()];       //Bypass load delay
-            UInt32 word = cpu.BUS.load32((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            if (instruction.get_rt() == cpu.registerLoad.registerNumber) {
+                current_value = cpu.registerLoad.value;             //Bypass load delay
+            }
 
+            UInt32 word = cpu.BUS.loadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
 
@@ -710,14 +723,9 @@ namespace PS1_Emulator {
                     throw new Exception("lwl instruction error, pos:" + pos);
             }
 
-            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
-                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
-            }
-
-            cpu.pendingload.Item1 = instruction.get_rt();  //Position
-            cpu.pendingload.Item2 = finalValue;           //Value
-
+            cpu.registerDelayedLoad.registerNumber = instruction.get_rt();   //Position
+            cpu.registerDelayedLoad.value = finalValue;                      //Value
+            
         }
 
         private static void cop2(CPU cpu, Instruction instruction) {
@@ -734,37 +742,30 @@ namespace PS1_Emulator {
             switch (instruction.get_rs()) {
                 
                 case 0b00000:   //MFC
-                    
-                    cpu.pendingload.Item1 = instruction.get_rt();
-                    cpu.pendingload.Item2 = cpu.gte.read(instruction.get_rd());
+                    //handle loading to a register in a delay slot???
+                    cpu.registerDelayedLoad.registerNumber = instruction.get_rt();
+                    cpu.registerDelayedLoad.value = cpu.gte.read(instruction.get_rd());
                     break;
 
                 case 0b00010:   //CFC
-                    
-                    cpu.pendingload.Item1 = instruction.get_rt();
-                    cpu.pendingload.Item2 = cpu.gte.read(instruction.get_rd() + 32);
+                    cpu.registerDelayedLoad.registerNumber = instruction.get_rt();
+                    cpu.registerDelayedLoad.value = cpu.gte.read(instruction.get_rd() + 32);
                     break;
 
                 case 0b00110:  //CTC 
-
                     uint rd = instruction.get_rd();
-                    uint value = cpu.regs[instruction.get_rt()];
+                    uint value = cpu.GPR[instruction.get_rt()];
                     cpu.gte.write(rd + 32,value);
-
                     break;
 
                 case 0b00100:  //MTC 
-
                     rd = instruction.get_rd();
-                    value = cpu.regs[instruction.get_rt()];
+                    value = cpu.GPR[instruction.get_rt()];
                     cpu.gte.write(rd, value);   //Same as CTC but without adding 32 to the position
-
                     break;
 
 
-                default:
-
-                    throw new Exception("Unhandled GTE opcode: " + instruction.get_rs().ToString("X"));
+                default:  throw new Exception("Unhandled GTE opcode: " + instruction.get_rs().ToString("X"));
             }
         }
 
@@ -782,35 +783,25 @@ namespace PS1_Emulator {
         }
 
         private static void xori(CPU cpu, Instruction instruction) {
-            UInt32 targetReg = instruction.get_rt();
-            UInt32 value = instruction.getImmediateValue();
-            UInt32 rs = instruction.get_rs();
-
-            cpu.outRegs[targetReg] = cpu.regs[rs] ^ value;
+            UInt32 imm = instruction.getImmediateValue();
+            cpu.directWrite.registerNumber = instruction.get_rt();         //Position
+            cpu.directWrite.value = cpu.GPR[instruction.get_rs()] ^ imm;  //Value
         }
 
         private static void lh(CPU cpu, Instruction instruction) {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             //aligned?
-            Int16 hw = (Int16)cpu.BUS.load16(final_address);
+            Int16 halfWord = (Int16)cpu.BUS.load16(final_address);
             if ((final_address & 0x1) == 0) {
-
-                //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-                if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
-                    cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
-                }
-
-                cpu.pendingload.Item1 = instruction.get_rt();  //Position
-                cpu.pendingload.Item2 = (UInt32)(hw);           //Value
-
+                cpu.registerDelayedLoad.registerNumber = instruction.get_rt();         //Position
+                cpu.registerDelayedLoad.value = (UInt32)halfWord;                     //Value
             }
             else {
                 exception(cpu,LoadAddressError);
             }
-
 
         }
 
@@ -818,69 +809,52 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             if ((final_address & 0x1) == 0) {
-                UInt32 hw = (UInt32)cpu.BUS.load16(final_address);
-
-                //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-                if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
-                    cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
-                }
-
-                cpu.pendingload.Item1 = instruction.get_rt();  //Position
-                cpu.pendingload.Item2 = hw;                    //Value
-
+                UInt32 halfWord = (UInt32)cpu.BUS.load16(final_address);
+                cpu.registerDelayedLoad.registerNumber = instruction.get_rt();  //Position
+                cpu.registerDelayedLoad.value = halfWord;                       //Value
+               
             }
-
             else {
                 exception(cpu,LoadAddressError);
             }
 
-
         }
 
         private static void sltiu(CPU cpu, Instruction instruction) {
+            cpu.directWrite.registerNumber = instruction.get_rt();
 
-            if (cpu.regs[instruction.get_rs()] < instruction.signed_imm()) {
-
-                cpu.outRegs[instruction.get_rt()] = 1;
+            if (cpu.GPR[instruction.get_rs()] < instruction.signed_imm()) {
+                cpu.directWrite.value = 1;
             }
             else {
-
-                cpu.outRegs[instruction.get_rt()] = 0;
-
+                cpu.directWrite.value = 0;
             }
-
-
+     
         }
-
-      
 
         private static void sub(CPU cpu, Instruction instruction) {
 
-            Int32 reg1 = (Int32)cpu.regs[instruction.get_rs()];
-            Int32 reg2 = (Int32)cpu.regs[instruction.get_rt()];
+            Int32 reg1 = (Int32)cpu.GPR[instruction.get_rs()];
+            Int32 reg2 = (Int32)cpu.GPR[instruction.get_rt()];
 
             try {
                 Int32 value = checked(reg1 - reg2);        //Check for signed integer overflow 
-
-                cpu.outRegs[instruction.get_rd()] = (UInt32)value;
-
+                cpu.directWrite.registerNumber = instruction.get_rd();
+                cpu.directWrite.value = (UInt32)value;
             }
             catch (OverflowException) {
                 exception(cpu,Overflow);
-
             }
-
-
-
+         
         }
 
         private static void mult(CPU cpu, Instruction instruction) {
             //Sign extend
-            Int64 a = (Int64) ((Int32)cpu.regs[instruction.get_rs()]);
-            Int64 b = (Int64) ((Int32)cpu.regs[instruction.get_rt()]);
+            Int64 a = (Int64) ((Int32)cpu.GPR[instruction.get_rs()]);
+            Int64 b = (Int64) ((Int32)cpu.GPR[instruction.get_rt()]);
 
 
             UInt64 v = (UInt64)(a * b);
@@ -923,16 +897,14 @@ namespace PS1_Emulator {
         }
 
         private static void xor(CPU cpu, Instruction instruction) {
-
-            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] ^ cpu.regs[instruction.get_rt()];
-
-
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.GPR[instruction.get_rs()] ^ cpu.GPR[instruction.get_rt()];
         }
 
         private static void multu(CPU cpu, Instruction instruction) {
 
-            UInt64 a = (UInt64)cpu.regs[instruction.get_rs()];
-            UInt64 b = (UInt64)cpu.regs[instruction.get_rt()];
+            UInt64 a = (UInt64)cpu.GPR[instruction.get_rs()];
+            UInt64 b = (UInt64)cpu.GPR[instruction.get_rt()];
 
 
             UInt64 v = a * b;
@@ -968,43 +940,30 @@ namespace PS1_Emulator {
         }
 
         private static void srlv(CPU cpu, Instruction instruction) {
-
-            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rt()] >> ((Int32)(cpu.regs[instruction.get_rs()] & 0x1f));
-
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.GPR[instruction.get_rt()] >> ((Int32)(cpu.GPR[instruction.get_rs()] & 0x1f));
         }
-
         private static void srav(CPU cpu, Instruction instruction) {
-
-            Int32 val = ((Int32)cpu.regs[instruction.get_rt()]) >> ((Int32)(cpu.regs[instruction.get_rs()] & 0x1f));
-
-            cpu.outRegs[instruction.get_rd()] = (UInt32)val;
-
-
+            Int32 value = ((Int32)cpu.GPR[instruction.get_rt()]) >> ((Int32)(cpu.GPR[instruction.get_rs()] & 0x1f));
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = (UInt32)value;
         }
 
         private static void nor(CPU cpu, Instruction instruction) {
-
-            cpu.outRegs[instruction.get_rd()] = ~(cpu.regs[instruction.get_rs()] | cpu.regs[instruction.get_rt()]);
-
-
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = ~(cpu.GPR[instruction.get_rs()] | cpu.GPR[instruction.get_rt()]);
         }
 
-        private static void sllv(CPU cpu, Instruction instruction) {                             //take 5 bits from register rs
-
-            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rt()] << ((Int32)(cpu.regs[instruction.get_rs()] & 0x1f));
-
+        private static void sllv(CPU cpu, Instruction instruction) {                             
+            cpu.directWrite.registerNumber = instruction.get_rd();             //Take 5 bits from register rs
+            cpu.directWrite.value = cpu.GPR[instruction.get_rt()] << ((Int32)(cpu.GPR[instruction.get_rs()] & 0x1f));
         }
 
         private static void mthi(CPU cpu, Instruction instruction) {
-
-            cpu.HI = cpu.regs[instruction.get_rs()];
-
+            cpu.HI = cpu.GPR[instruction.get_rs()];
         }
-
         private static void mtlo(CPU cpu, Instruction instruction) {
-
-            cpu.LO = cpu.regs[instruction.get_rs()];
-
+            cpu.LO = cpu.GPR[instruction.get_rs()];
         }
 
         private static void syscall(CPU cpu,Instruction instruction) {
@@ -1064,25 +1023,19 @@ namespace PS1_Emulator {
         }
 
         private static void slt(CPU cpu, Instruction instruction) {
-         
-
-                if (((Int32)cpu.regs[instruction.get_rs()]) < ((Int32)cpu.regs[instruction.get_rt()])) {
-
-                    cpu.outRegs[instruction.get_rd()] = 1;
-
-                }
-                else {
-                    cpu.outRegs[instruction.get_rd()] = 0;
-
-                }
-
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            if (((Int32)cpu.GPR[instruction.get_rs()]) < ((Int32)cpu.GPR[instruction.get_rt()])) {
+                cpu.directWrite.value = 1;
             }
-
+            else {
+                cpu.directWrite.value = 0;
+            }
+        }
 
         private static void divu(CPU cpu, Instruction instruction) {
 
-            UInt32 numerator = cpu.regs[instruction.get_rs()];
-            UInt32 denominator = cpu.regs[instruction.get_rt()];
+            UInt32 numerator = cpu.GPR[instruction.get_rs()];
+            UInt32 denominator = cpu.GPR[instruction.get_rt()];
 
             if (denominator == 0) {
                 cpu.LO = 0xffffffff;
@@ -1103,30 +1056,27 @@ namespace PS1_Emulator {
         }
 
         private static void srl(CPU cpu, Instruction instruction) {
-
-
             //Right Shift (Logical)
 
-            UInt32 val = cpu.regs[instruction.get_rt()];
+            UInt32 val = cpu.GPR[instruction.get_rt()];
             UInt32 shift = instruction.get_sa();
-
-            cpu.outRegs[instruction.get_rd()] = (val >> (Int32)shift);
-
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = val >> (Int32)shift;
         }
 
         private static void mflo(CPU cpu, Instruction instruction) { //LO -> GPR[rd]
-
-            cpu.outRegs[instruction.get_rd()] = cpu.LO;
-
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.LO;
         }
         private static void mfhi(CPU cpu, Instruction instruction) {        //HI -> GPR[rd]
-            cpu.outRegs[instruction.get_rd()] = cpu.HI;
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.HI;
         }
 
         private static void div(CPU cpu, Instruction instruction) { // GPR[rs] / GPR[rt] -> (HI, LO) 
 
-            Int32 numerator = (Int32)cpu.regs[instruction.get_rs()];
-            Int32 denominator = (Int32)cpu.regs[instruction.get_rt()];
+            Int32 numerator = (Int32)cpu.GPR[instruction.get_rs()];
+            Int32 denominator = (Int32)cpu.GPR[instruction.get_rt()];
 
             if (numerator >= 0 && denominator == 0) {
                 cpu.LO = 0xffffffff;
@@ -1162,62 +1112,53 @@ namespace PS1_Emulator {
         }
 
         private static void sra(CPU cpu, Instruction instruction) {
-
             //Right Shift (Arithmetic)
 
-
-            Int32 val = (Int32)cpu.regs[instruction.get_rt()];
+            Int32 val = (Int32)cpu.GPR[instruction.get_rt()];
             Int32 shift = (Int32)instruction.get_sa();
-
-            cpu.outRegs[instruction.get_rd()] = ((UInt32)(val >> shift)); 
-
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = (UInt32)(val >> shift);
 
         }
 
         private static void slti(CPU cpu, Instruction instruction) {
 
             Int32 si = (Int32)instruction.signed_imm();
-            Int32 rg = (Int32)cpu.regs[instruction.get_rs()];
-          
-                if (rg<si) {
+            Int32 rg = (Int32)cpu.GPR[instruction.get_rs()];
+            cpu.directWrite.registerNumber = instruction.get_rt();
 
-                cpu.outRegs[instruction.get_rt()] = 1;
-              
-                 }
-            else {
-
-                cpu.outRegs[instruction.get_rt()] = 0;
-              
-
+            if (rg<si) {
+                cpu.directWrite.value = 1;
             }
+            else {
+                cpu.directWrite.value = 0;
+             }
+
         }
 
         private static void bxx(CPU cpu,Instruction instruction) {         //*
             uint value = (uint)instruction.getfull();
             
-            if (((value >> 17) & 0xF) == 0x8) {
-
-                cpu.outRegs[31] = cpu.next_pc;         //Store return address if the value of bits [20:17] == 0x80
-            }
-
-
+            //if rs is $ra, then the value used for the comparison is $ra's value before linking.
             if (((value >> 16) & 1) == 1) {
                 //BGEZ
-
-                if ((Int32)cpu.regs[instruction.get_rs()] >= 0) {
+                if ((Int32)cpu.GPR[instruction.get_rs()] >= 0) {
                     branch(cpu,instruction.signed_imm());
                 }
-
             }
             else {
                 //BLTZ
-
-                if ((Int32)cpu.regs[instruction.get_rs()] < 0) {
+                if ((Int32)cpu.GPR[instruction.get_rs()] < 0) {
                     branch(cpu,instruction.signed_imm());
                 }
 
             }
 
+            if (((value >> 17) & 0xF) == 0x8) {
+               //Store return address if the value of bits [20:17] == 0x8
+                cpu.directWrite.registerNumber = 31;
+                cpu.directWrite.value = cpu.next_pc;
+            }
 
         }
 
@@ -1226,21 +1167,15 @@ namespace PS1_Emulator {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
-            byte b = cpu.BUS.load8(cpu.regs[base_] + addressRegPos);
-
-            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
-                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
-            }
-
-            cpu.pendingload.Item1 = instruction.get_rt();  //Position
-            cpu.pendingload.Item2 = (UInt32)b;    //Value
-
+            byte byte_ = cpu.BUS.load8(cpu.GPR[base_] + addressRegPos);
+            cpu.registerDelayedLoad.registerNumber = instruction.get_rt();  //Position
+            cpu.registerDelayedLoad.value = (UInt32)byte_;                     //Value
+            
         }
 
         private static void blez(CPU cpu, Instruction instruction) {
 
-            Int32 signedValue = (Int32)cpu.regs[instruction.get_rs()];
+            Int32 signedValue = (Int32)cpu.GPR[instruction.get_rs()];
 
             if (signedValue <= 0) {
 
@@ -1252,44 +1187,38 @@ namespace PS1_Emulator {
         }
 
         private static void bgtz(CPU cpu, Instruction instruction) {     //Branch if > 0
-
-            Int32 signedValue = (Int32)cpu.regs[instruction.get_rs()];      
-
+            Int32 signedValue = (Int32)cpu.GPR[instruction.get_rs()];      
             if (signedValue > 0) {
-
                 branch(cpu,instruction.signed_imm());
-
             }
-
-          
         }
-
-
         private static void subu(CPU cpu, Instruction instruction) {
-
-            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] - cpu.regs[instruction.get_rt()];
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.GPR[instruction.get_rs()] - cpu.GPR[instruction.get_rt()];
         }
 
         private static void jalr(CPU cpu, Instruction instruction) {
 
-            // Store return address in reg rd
-            cpu.outRegs[instruction.get_rd()] = cpu.next_pc;
-
-            // Jump to address in reg rs
-            cpu.next_pc = cpu.regs[instruction.get_rs()];
-
-            if ((cpu.next_pc & 0x3) != 0) {
+            if ((cpu.GPR[instruction.get_rs()] & 0x3) != 0) {
                 exception(cpu, LoadAddressError);
+                return;
             }
 
+            // Store return address in $rd
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.next_pc;
+
+            // Jump to address in $rs
+            cpu.next_pc = cpu.GPR[instruction.get_rs()];
+
             cpu._branch = true;
+
         }
 
         private static void beq(CPU cpu, Instruction instruction) {
           
-            if (cpu.regs[instruction.get_rs()].Equals(cpu.regs[instruction.get_rt()])) {
+            if (cpu.GPR[instruction.get_rs()].Equals(cpu.GPR[instruction.get_rt()])) {
                 branch(cpu,instruction.signed_imm());
-               
             }
             
         }
@@ -1297,23 +1226,15 @@ namespace PS1_Emulator {
         private static void lb(CPU cpu, Instruction instruction) {
 
             if ((cpu.SR & 0x10000) != 0) {
-
                // Debug.WriteLine("loading from memory ignored, cache is isolated");
                 return;
             }
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-
-            sbyte sb = (sbyte)cpu.BUS.load8(cpu.regs[base_] + addressRegPos);
-
-            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
-                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
-            }
-
-            cpu.pendingload.Item1 = instruction.get_rt();  //Position
-            cpu.pendingload.Item2 = (UInt32)sb;           //Value
+            sbyte sb = (sbyte)cpu.BUS.load8(cpu.GPR[base_] + addressRegPos);
+            cpu.registerDelayedLoad.registerNumber = instruction.get_rt();  //Position
+            cpu.registerDelayedLoad.value = (UInt32)sb;                     //Value
 
         }
 
@@ -1326,30 +1247,22 @@ namespace PS1_Emulator {
             }
 
             UInt32 targetReg = instruction.get_rt();
-
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-
-            cpu.BUS.store8(cpu.regs[base_] + addressRegPos, (byte)cpu.regs[targetReg]);
-
-
-
+            cpu.BUS.storeByte(cpu.GPR[base_] + addressRegPos, (byte)cpu.GPR[targetReg]);
         }
 
         private static void andi(CPU cpu,Instruction instruction) {
             UInt32 targetReg = instruction.get_rt();
-            UInt32 value = instruction.getImmediateValue();
+            UInt32 imm = instruction.getImmediateValue();
             UInt32 rs = instruction.get_rs();
-
-
-            cpu.outRegs[targetReg] = cpu.regs[rs] & value;
-            
+            cpu.directWrite.registerNumber = targetReg;
+            cpu.directWrite.value = cpu.GPR[rs] & imm;
         }
 
         private static void jal(CPU cpu, Instruction instruction) {
-
-            cpu.outRegs[31] = cpu.next_pc;             //Jump and link, store the PC to return to it later
-
+            cpu.directWrite.registerNumber = 31;
+            cpu.directWrite.value = cpu.next_pc;             //Jump and link, store the PC to return to it later
             jump(cpu,instruction);
         }
 
@@ -1365,11 +1278,11 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             //Address must be 16 bit aligned
             if ((final_address & 1) == 0) {
-                cpu.BUS.store16(final_address, (UInt16)cpu.regs[targetReg]);
+                cpu.BUS.storeHalf(final_address, (UInt16)cpu.GPR[targetReg]);
             }
             else {
                 exception(cpu,StoreAddressError);
@@ -1380,45 +1293,39 @@ namespace PS1_Emulator {
         private static void addi(CPU cpu, Instruction instruction) {
 
             Int32 imm = (Int32)(instruction.signed_imm());
-            Int32 s = (Int32)(cpu.regs[instruction.get_rs()]);
+            Int32 s = (Int32)(cpu.GPR[instruction.get_rs()]);
             try {
                 Int32 value = checked(imm + s);        //Check for signed integer overflow 
-
-                cpu.outRegs[instruction.get_rt()] = (UInt32)value;
+                cpu.directWrite.registerNumber = instruction.get_rt();
+                cpu.directWrite.value = (UInt32)value;
             }
             catch (OverflowException) {
                 exception(cpu, Overflow);
             }
-
+           
         }
 
         public static void lui(CPU cpu, Instruction instruction) {
             UInt32 targetReg = instruction.get_rt();
             UInt32 value = instruction.getImmediateValue();
-
-
-            cpu.outRegs[targetReg] = value << 16;
-         
+            cpu.directWrite.registerNumber = instruction.get_rt();
+            cpu.directWrite.value = value << 16;
         }
 
         public static void ori(CPU cpu, Instruction instruction) {
             UInt32 targetReg = instruction.get_rt();
             UInt32 value = instruction.getImmediateValue();
             UInt32 rs = instruction.get_rs();
-
-            cpu.outRegs[targetReg] = cpu.regs[rs] | value;
-           
-
+            cpu.directWrite.registerNumber = instruction.get_rt();
+            cpu.directWrite.value = cpu.GPR[rs] | value;
         }
         public static void or(CPU cpu, Instruction instruction) {
-
-            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] | cpu.regs[instruction.get_rt()];
-           
-
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.GPR[instruction.get_rs()] | cpu.GPR[instruction.get_rt()];
         }
         private static void and(CPU cpu, Instruction instruction) {
-            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] & cpu.regs[instruction.get_rt()];
-           
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.GPR[instruction.get_rs()] & cpu.GPR[instruction.get_rt()];
         }
         public static void sw(CPU cpu, Instruction instruction) {
            
@@ -1432,14 +1339,11 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             //Address must be 32 bit aligned
             if ((final_address & 0x3) == 0) {
-
-                //if (final_address == 0x80083C58) {Debug.WriteLine("loaded " + regs[targetReg].ToString("x") + " from reg: " + targetReg); }
-
-                cpu.BUS.store32(final_address, cpu.regs[targetReg]);
+                cpu.BUS.storeWord(final_address, cpu.GPR[targetReg]);
             }
             else {
                 exception(cpu,StoreAddressError);
@@ -1456,21 +1360,12 @@ namespace PS1_Emulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            UInt32 final_address = cpu.regs[base_] + addressRegPos;
-
+            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             //Address must be 32 bit aligned
             if ((final_address & 0x3) == 0) {
-
-                //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-                if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
-                    cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
-                }
-
-                cpu.pendingload.Item1 = instruction.get_rt();          //Position
-                cpu.pendingload.Item2 = cpu.BUS.load32(final_address);    //Value
-
-              
+                 cpu.registerDelayedLoad.registerNumber = instruction.get_rt();              //Position
+                 cpu.registerDelayedLoad.value = cpu.BUS.loadWord(final_address);           //Value
             }
             else {
                 exception(cpu,LoadAddressError);
@@ -1479,20 +1374,20 @@ namespace PS1_Emulator {
         }
         
         private static void add(CPU cpu, Instruction instruction) {
-            Int32 reg1 = (Int32)cpu.regs[instruction.get_rs()];       
-            Int32 reg2 = (Int32)cpu.regs[instruction.get_rt()];
+            Int32 reg1 = (Int32)cpu.GPR[instruction.get_rs()];       
+            Int32 reg2 = (Int32)cpu.GPR[instruction.get_rt()];
             try {
                 Int32 value = checked(reg1 + reg2);        //Check for signed integer overflow, can be ignored as no games rely on this 
-                cpu.outRegs[instruction.get_rd()] = (UInt32)value;
+                cpu.directWrite.registerNumber = instruction.get_rd();
+                cpu.directWrite.value = (UInt32)value;
             }
             catch (OverflowException) {
                 exception(cpu,Overflow);    
             }
-
         }
 
         private static void jr(CPU cpu, Instruction instruction) {
-            cpu.next_pc = cpu.regs[instruction.get_rs()];      //Return or Jump to address in register 
+            cpu.next_pc = cpu.GPR[instruction.get_rs()];      //Return or Jump to address in register 
             if ((cpu.next_pc & 0x3) != 0) {
                 exception(cpu, LoadAddressError);
             }
@@ -1500,23 +1395,29 @@ namespace PS1_Emulator {
         }
 
         private static void addu(CPU cpu, Instruction instruction) {
-            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rs()] + cpu.regs[instruction.get_rt()];
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.GPR[instruction.get_rs()] + cpu.GPR[instruction.get_rt()];
         }
 
         private static void sltu(CPU cpu, Instruction instruction) {
-            if (cpu.regs[instruction.get_rs()] < cpu.regs[instruction.get_rt()]) { //Int32 ?
-                cpu.outRegs[instruction.get_rd()] = (UInt32) 1;
+            cpu.directWrite.registerNumber = instruction.get_rd();
+
+            if (cpu.GPR[instruction.get_rs()] < cpu.GPR[instruction.get_rt()]) { //Int32 ?
+                cpu.directWrite.value = (UInt32) 1;
             }
             else {
-                cpu.outRegs[instruction.get_rd()] = (UInt32) 0;
+                cpu.directWrite.value = (UInt32) 0;
             }
-
+           
         }
         public static void sll(CPU cpu,Instruction instruction) {
-            cpu.outRegs[instruction.get_rd()] = cpu.regs[instruction.get_rt()] << (Int32)instruction.get_sa();
+            cpu.directWrite.registerNumber = instruction.get_rd();
+            cpu.directWrite.value = cpu.GPR[instruction.get_rt()] << (Int32)instruction.get_sa();
+
         }
         private static void addiu(CPU cpu, Instruction instruction) {
-            cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rs()] + instruction.signed_imm();
+            cpu.directWrite.registerNumber = instruction.get_rt();
+            cpu.directWrite.value = cpu.GPR[instruction.get_rs()] + instruction.signed_imm();
         }
 
         private static void jump(CPU cpu, Instruction instruction) {
@@ -1533,34 +1434,31 @@ namespace PS1_Emulator {
             UInt32 mode = cpu.SR & 0x3f;                   //Enable interrupts
             cpu.SR = (uint)(cpu.SR & ~0x3f);
             cpu.SR = cpu.SR | (mode >> 2);
+
         }
 
         private static void mfc0(CPU cpu, Instruction instruction) {
-            //If we are loading to a register which was loaded in a delay slot, the first load is completely calnceled 
-            if (cpu.regs[instruction.get_rt()] != cpu.outRegs[instruction.get_rt()]) {
-                cpu.outRegs[instruction.get_rt()] = cpu.regs[instruction.get_rt()];
-            }
+            //MFC has load delay
 
-            cpu.pendingload.Item1 = instruction.get_rt();
+            cpu.registerDelayedLoad.registerNumber = instruction.get_rt();
 
             switch (instruction.get_rd()) {
-                //MFC has load delay
 
                 case 12:
 
-                    cpu.pendingload.Item2 = cpu.SR;
+                    cpu.registerDelayedLoad.value = cpu.SR;
 
                     break;
 
                 case 13:
 
-                    cpu.pendingload.Item2 = cpu.cause;
+                    cpu.registerDelayedLoad.value = cpu.cause;
 
                     break;
 
                 case 14:
 
-                    cpu.pendingload.Item2 = cpu.epc;
+                    cpu.registerDelayedLoad.value = cpu.epc;
 
                     break;
 
@@ -1583,21 +1481,21 @@ namespace PS1_Emulator {
                 case 9:
                 case 11:
 
-                    if (cpu.regs[instruction.get_rt()] != 0) {
+                    if (cpu.GPR[instruction.get_rt()] != 0) {
                         throw new Exception("Unhandled write to cop0 register: " + instruction.get_rd());
                     }
 
                     break;
 
                 case 12:
-                    cpu.SR = cpu.regs[instruction.get_rt()];            //Setting the status register's 16th bit
+                    cpu.SR = cpu.GPR[instruction.get_rt()];            //Setting the status register's 16th bit
                     break;
 
                 case 13:
                     //cause register, mostly read-only data describing the
                     //cause of an exception. Apparently only bits[9:8] are writable
-                    if (cpu.regs[instruction.get_rt()] != 0) { 
-                        throw new Exception("Unhandled write to CAUSE register: " + instruction.get_rd());
+                    if (cpu.GPR[instruction.get_rt()] != 0) { 
+                        //throw new Exception("Unhandled write to CAUSE register: " + instruction.get_rd());
                     }
                     break;
 
@@ -1610,7 +1508,7 @@ namespace PS1_Emulator {
 
         }
         private static void bne(CPU cpu, Instruction instruction) {
-            if (!cpu.regs[instruction.get_rs()].Equals(cpu.regs[instruction.get_rt()])) {
+            if (!cpu.GPR[instruction.get_rs()].Equals(cpu.GPR[instruction.get_rt()])) {
                 branch(cpu,instruction.signed_imm());
             }
         }
