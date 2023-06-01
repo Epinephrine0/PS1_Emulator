@@ -575,8 +575,8 @@ namespace PS1_Emulator {
         }
 
         public void modifyAspectRatio() {
-            float disp_x = CPU.BUS.GPU.hrez.getHR();
-            float disp_y = CPU.BUS.GPU.vrez == 0 ? 240f : 480f;
+            float disp_x = CPU.BUS.GPU.horizontalRes.getHR();
+            float disp_y = CPU.BUS.GPU.verticalRes == GPU.VerticalRes.Y240Lines ? 240f : 480f;
 
 
             if (!showTextures) {

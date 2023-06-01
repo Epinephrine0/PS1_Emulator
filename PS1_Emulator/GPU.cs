@@ -34,40 +34,29 @@ namespace PS1_Emulator {
         UInt16 vram_img_w;
         UInt16 vram_img_h;
 
-        //Depth of the pixel values in a texture page
-        public Dictionary<string, byte> TextureDepth = new Dictionary<string, byte>{
-         { "T4Bit", 0 },
-         { "T8Bit", 1 },
-         { "T15Bit",2 }
-        };
+        public enum VerticalRes {
+            Y240Lines = 0,
+            Y480Lines = 1
+        }
+        enum VMode {
+            NTSC = 0,
+            PAL = 1
+        }
+        enum DisplayDepth {
+            D15Bits = 0,
+            D24Bits = 1
+        }
+        enum DmaDirection {
+            Off = 0,
+            Fifo = 1,
+            CpuToGp0 = 2,
+            VRamToCpu = 3
+        }
 
-        //Interlaced splits each frame into 2 fields 
-        public Dictionary<string, byte> Field = new Dictionary<string, byte>{
-         { "Top", 1 }, //Odd lines
-         { "Bottom",0 } //Even lines
-        };
-
-        public Dictionary<string, byte> VerticalRes = new Dictionary<string, byte>{
-         { "Y240Lines", 0 },
-         { "Y480Lines", 1 } //Only available for interlaced output
-        };
-
-        public Dictionary<string, byte> VMode = new Dictionary<string, byte>{
-         { "Ntsc", 0 }, //480i 60H
-         { "Pal", 1 }  //576i 50H
-        };
-
-        public Dictionary<string, byte> DisplayDepth = new Dictionary<string, byte>{
-         { "D15Bits", 0 },
-         { "D24Bits", 1 }
-        };
-        public Dictionary<string, byte> DmaDirection = new Dictionary<string, byte>{
-         { "Off", 0 },
-         { "Fifo", 1 },
-         { "CpuToGp0",2 },
-         { "VRamToCpu",3 }
-        };
-
+        public VerticalRes verticalRes;
+        VMode vmode;
+        DisplayDepth displayDepth;
+        DmaDirection dmaDirection;
  
 
         readonly byte[] NoBlendColors = new[] {      //Colors to blend with if the command does not use blending 
@@ -94,14 +83,10 @@ namespace PS1_Emulator {
         bool preserve_masked_pixels;
         byte field;
         bool texture_disable;
-        public HorizontalRes hrez;
-        public byte vrez;
-        byte vmode;
-        byte display_depth;
+        public HorizontalRes horizontalRes;
         bool interlaced;
         bool display_disabled;
         bool interrupt;
-        byte dma_direction;
 
         bool rectangle_texture_x_flip;
         bool rectangle_texture_y_flip;
@@ -130,21 +115,19 @@ namespace PS1_Emulator {
             this.page_base_x = 0;
             this.page_base_y = 0;
             this.semi_transparency = 0;
-            this.texture_depth = TextureDepth["T4Bit"];
             this.dithering = false;
             this.force_set_mask_bit = false;
             this.draw_to_display = false;
             this.preserve_masked_pixels = false;
-            this.field = Field["Top"];
             this.texture_disable = false;
-            this.hrez = new HorizontalRes(0, 0);
-            this.vrez = VerticalRes["Y240Lines"];
-            this.vmode = VMode["Ntsc"];
-            this.display_depth = DisplayDepth["D15Bits"];
+            this.horizontalRes = new HorizontalRes(0, 0);
+            this.verticalRes = VerticalRes.Y240Lines;
+            this.vmode = VMode.NTSC;
+            this.displayDepth = DisplayDepth.D15Bits;
             this.interlaced = false;
             this.display_disabled = true;
             this.interrupt = false;
-            this.dma_direction = DmaDirection["Off"];
+            this.dmaDirection = DmaDirection.Off;
             this.window = rederingWindow;
             this.TIMER1 = timer1;
 
@@ -168,13 +151,13 @@ namespace PS1_Emulator {
             //Bit 14 is not supported 
 
             value |= ((Convert.ToUInt32(this.texture_disable)) << 15);
-            value |= this.hrez.intoStatus();
+            value |= this.horizontalRes.intoStatus();
 
             //Bit 19 locks the bios currently
             //value |= (((UInt32)this.vrez) << 19); 
 
             value |= (((UInt32)this.vmode) << 20);
-            value |= (((UInt32)this.display_depth) << 21);
+            value |= (((UInt32)this.displayDepth) << 21);
             value |= ((Convert.ToUInt32(this.interlaced)) << 22);
             value |= ((Convert.ToUInt32(this.display_disabled)) << 23);
             value |= ((Convert.ToUInt32(this.interrupt)) << 24);
@@ -185,30 +168,30 @@ namespace PS1_Emulator {
             value |= 1 << 27;   //Ready to send VRam to CPU
             value |= 1 << 28;   //Ready to recive DMA block
 
-            value |= (((UInt32)this.dma_direction) << 29);
+            value |= (((UInt32)this.dmaDirection) << 29);
 
             value |= 0 << 31;   //Depends on the current line...
 
 
             UInt32 dma_request;
-            switch (this.dma_direction) {
-                case 0: //Off
+            switch (this.dmaDirection) {
+                case DmaDirection.Off: 
                     dma_request = 0;
                     break;
 
-                case 1: //Fifo (if full it should be 0)
+                case DmaDirection.Fifo: //(if full it should be 0)
                     dma_request = 1;
                     break;
-                case 2: //CpuToGp0
+                case DmaDirection.CpuToGp0:
                     dma_request = (value >> 28) & 1;
                     break;
 
-                case 3: //VRam to CPU
+                case DmaDirection.VRamToCpu: 
                     dma_request = (value >> 27) & 1;
                     break;
 
                 default:
-                    throw new Exception("Invalid DMA direction: " + this.dma_direction);
+                    throw new Exception("Invalid DMA direction: " + this.dmaDirection);
             }
 
             value |= ((UInt32)dma_request) << 25;
@@ -1171,86 +1154,27 @@ namespace PS1_Emulator {
         }
 
         private void gp1_dma_direction(UInt32 value) {
-            switch (value & 3) {
-                case 0:
-                    this.dma_direction = DmaDirection["Off"];
-
-                    break;
-                case 1:
-                    this.dma_direction = DmaDirection["Fifo"];
-
-                    break;
-                case 2:
-                    this.dma_direction = DmaDirection["CpuToGp0"];
-
-                    break;
-
-                case 3:
-                    this.dma_direction = DmaDirection["VRamToCpu"];
-
-                    break;
-
-                default:
-                    throw new Exception("Unkown DMA direction: " + (value & 3));
-            }
-
-
-
-
+            dmaDirection = (DmaDirection)(value & 3);
         }
 
         private void gp1_display_mode(UInt32 value) {
             byte hr1 = ((byte)(value & 3));
             byte hr2 = ((byte)((value >> 6) & 1));
 
-            this.hrez = new HorizontalRes(hr1, hr2);
-            
-            switch ((value&0x4)!= 0) {
+            horizontalRes = new HorizontalRes(hr1, hr2);
+            verticalRes = (VerticalRes)((value >> 2) & 1);
+            vmode = (VMode)((value >> 3) & 1);
+            displayDepth = (DisplayDepth)((value >> 4) & 1);
 
-                case true:
-
-                    this.vrez = VerticalRes["Y480Lines"];
-                    break;
-
-                case false:
-
-                    this.vrez = VerticalRes["Y240Lines"];
-                    break;
+            if (vmode == VMode.PAL) {
+                scanlines_per_frame = 314;
+                video_cycles_per_scanline = 3406.1;
+            }
+            else {
+                scanlines_per_frame = 263;
+                video_cycles_per_scanline = 3413.6;
             }
            
-
-            switch ((value & 0x8) != 0) {
-
-                case true:
-
-                    this.vmode = VMode["Pal"];
-                    scanlines_per_frame = 314;
-                    video_cycles_per_scanline = 3406.1;
-
-                    break;
-
-                case false:
-
-                    this.vmode = VMode["Ntsc"];
-                    scanlines_per_frame = 263;
-                    video_cycles_per_scanline = 3413.6;
-                    
-                    break;
-            }
-
-            switch ((value & 0x10) != 0) {
-
-                case true:
-
-                    this.display_depth = DisplayDepth["D15Bits"];
-                    break;
-
-                case false:
-
-                    this.display_depth = DisplayDepth["D24Bits"];
-                    break;
-            }
-
             this.interlaced = (value & 0x20) != 0;
 
             if ((value & 0x80) !=0) {
@@ -1280,7 +1204,6 @@ namespace PS1_Emulator {
             this.page_base_x = 0;
             this.page_base_y = 0;
             this.semi_transparency = 0;
-            this.texture_depth = TextureDepth["T4Bit"];
             this.texture_window_x_mask = 0;
             this.texture_window_y_mask = 0;
             this.texture_window_x_offset = 0;
@@ -1298,13 +1221,13 @@ namespace PS1_Emulator {
             this.drawing_y_offset = 0;
             this.force_set_mask_bit = false;
             this.preserve_masked_pixels = false;
-            this.dma_direction = DmaDirection["Off"];
+            this.dmaDirection = DmaDirection.Off;
             this.display_disabled = true;
             this.display_vram_x_start = 0;
             this.display_vram_y_start = 0;
-            this.hrez = new HorizontalRes(0, 0);
-            this.vrez = VerticalRes["Y240Lines"];
-            this.vmode = VMode["Ntsc"];
+            this.horizontalRes = new HorizontalRes(0, 0);
+            this.verticalRes = VerticalRes.Y240Lines;
+            this.vmode = VMode.NTSC;
             this.interlaced = true;
 
             this.display_horiz_start = 0x200;
@@ -1313,7 +1236,7 @@ namespace PS1_Emulator {
             this.display_line_start = 0x10;
             this.display_line_end = 0x100;
 
-            this.display_depth = DisplayDepth["D15Bits"];
+            this.displayDepth = DisplayDepth.D15Bits;
 
 
             //...clear Fifo
