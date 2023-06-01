@@ -9,7 +9,7 @@ using System.Drawing.Drawing2D;
 namespace PS1_Emulator {
     internal class GTE {
 
-        public command currentCommand;
+        public Command currentCommand;
 
        
         private readonly byte[] unr_table = {
@@ -319,126 +319,126 @@ namespace PS1_Emulator {
 
                 case 0x01:
 
-                    currentCommand = new command(instruction, 15);
+                    currentCommand = new Command(instruction, 15);
                     break;
 
                 case 0x10:
 
-                    currentCommand = new command(instruction, 8);
+                    currentCommand = new Command(instruction, 8);
                     break;
 
                 case 0x11:
 
-                    currentCommand = new command(instruction, 11);
+                    currentCommand = new Command(instruction, 11);
                     break;
                 case 0x12:
 
-                    currentCommand = new command(instruction, 8);
+                    currentCommand = new Command(instruction, 8);
                     break;
 
                  case 0x30:
 
-                     currentCommand = new command(instruction, 23);
+                     currentCommand = new Command(instruction, 23);
                      break;
                 
 
                 case 0x13:
 
-                    currentCommand = new command(instruction, 19);
+                    currentCommand = new Command(instruction, 19);
                     break;
 
                 case 0x14:
 
-                    currentCommand = new command(instruction, 13);
+                    currentCommand = new Command(instruction, 13);
                     break;
 
                 case 0x16:
 
-                    currentCommand = new command(instruction, 44);
+                    currentCommand = new Command(instruction, 44);
                     break;
 
 
                 case 0x6:
 
-                    currentCommand = new command(instruction, 8);
+                    currentCommand = new Command(instruction, 8);
 
                     break;
 
                 case 0xC:
 
-                    currentCommand = new command(instruction, 6);
+                    currentCommand = new Command(instruction, 6);
 
                     break;
 
                 case 0x1B:
 
-                    currentCommand = new command(instruction, 17);
+                    currentCommand = new Command(instruction, 17);
 
                     break;
 
                 case 0x1C:
 
-                    currentCommand = new command(instruction, 11);
+                    currentCommand = new Command(instruction, 11);
 
                     break;
 
                 case 0x1E:
 
-                    currentCommand = new command(instruction, 14);
+                    currentCommand = new Command(instruction, 14);
 
                     break;
 
                 case 0x20:
 
-                    currentCommand = new command(instruction, 30);
+                    currentCommand = new Command(instruction, 30);
 
                     break;
 
                 case 0x28:
 
-                    currentCommand = new command(instruction, 5);
+                    currentCommand = new Command(instruction, 5);
 
                     break;
 
                 case 0x29:
 
-                    currentCommand = new command(instruction, 8);
+                    currentCommand = new Command(instruction, 8);
 
                     break;
 
                 case 0x2A:
 
-                    currentCommand = new command(instruction, 17);
+                    currentCommand = new Command(instruction, 17);
 
                     break;
 
                  case 0x2D:
 
-                     currentCommand = new command(instruction, 5);
+                     currentCommand = new Command(instruction, 5);
 
                      break;
 
                 case 0x2E:
 
-                    currentCommand = new command(instruction, 6);
+                    currentCommand = new Command(instruction, 6);
 
                     break;
 
                 case 0x3D:
 
-                    currentCommand = new command(instruction, 5);
+                    currentCommand = new Command(instruction, 5);
 
                     break;
 
                 case 0x3E:
 
-                    currentCommand = new command(instruction, 5);
+                    currentCommand = new Command(instruction, 5);
 
                     break;
 
                 case 0x3F:
 
-                    currentCommand = new command(instruction, 39);
+                    currentCommand = new Command(instruction, 39);
 
                     break;
 
@@ -650,7 +650,6 @@ namespace PS1_Emulator {
                Color FIFO = [MAC1/16,MAC2/16,MAC3/16,CODE], [IR1,IR2,IR3] = [MAC1,MAC2,MAC3]
              * 
              */
-
 
 
             MAC[1] = MAC[2] = MAC[3] = 0;
@@ -910,11 +909,6 @@ namespace PS1_Emulator {
             Color[2] = RGB_Check(1, MAC[1] >> 4) | RGB_Check(2, MAC[2] >> 4) << 8 | RGB_Check(3, MAC[3] >> 4) << 16 | ((uint)(RGBC >> 24)) << 24;
         }
 
-
-    
-       
-        
-
         private void MVMVA(uint mx, uint vx, uint tx) {
 
             //Calculate the 44 bits (43 + 1 sign) products and detect overflow
@@ -1028,7 +1022,7 @@ namespace PS1_Emulator {
             IR_Check(2, Math.Clamp((int)(MAC2_ >> (int)sf * 12), -0x8000, +0x7FFF), (int)(MAC2_ >> (int)sf * 12));
             IR_Check(3, Math.Clamp((int)(MAC3_ >> (int)sf * 12), -0x8000, +0x7FFF), (int)(MAC3_ >> (int)sf * 12));
 
-            //Now calculate the real (buggy) values, and check for errors of course
+            //Now calculate the real (buggy) values, and check for errors ofcourse
 
              MAC1_ = MAC_Check(1, MAC_Check(1, (long)matrix.getElement(1, 2) * vector[vx].Y) + 
                      (long)matrix.getElement(1, 3) * vector[vx].Z);
@@ -1284,12 +1278,10 @@ namespace PS1_Emulator {
 
 
         private void NCLIP() {
-
             MAC[0] = (int)MAC_Check(0,
              ((long)S[0].X * S[1].Y + (long)S[1].X * S[2].Y + 
              (long)S[2].X * S[0].Y - (long)S[0].X * S[2].Y - 
              (long)S[1].X * S[0].Y - (long)S[2].X * S[1].Y)); 
-
         }
 
         //RTPS - Perspective Transformation Single
@@ -1416,8 +1408,6 @@ namespace PS1_Emulator {
                 uint IR0_Saturated = (uint)Math.Clamp(MAC0_ >> 12, 0, 0x1000);
                 IR[0] = (short)IR0_Saturated;
                 IR_Check(0, (int)IR0_Saturated, MAC0_ >> 12);
-       
-
             }
 
 
@@ -1460,11 +1450,11 @@ namespace PS1_Emulator {
 
     }
 
-    class command {
+    class Command {
         public int delay;
         public Instruction value;
 
-        public command(Instruction value, int delay) {
+        public Command(Instruction value, int delay) {
             this.delay = delay;
             this.value = value;
         }
