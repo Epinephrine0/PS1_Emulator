@@ -613,7 +613,7 @@ namespace PS1_Emulator {
 
         private void dma_transfer(ref DMAChannel activeCH) {
             DMAChannel ch = activeCH;
-            int arrPtr = 0;
+            int dataPtr = 0;
             int step;
 
             if (ch.get_step() == ch.Step["Increment"]) {
@@ -671,14 +671,13 @@ namespace PS1_Emulator {
                             break;
 
                         case 2:
-                            
-                            UInt16 pixel0 = GPU.TexData[arrPtr];
-                            UInt16 pixel1 = GPU.TexData[arrPtr + 1]; 
-                            
+                            UInt16 pixel0 = GPU.gpuTransfer.data[dataPtr++];
+                            UInt16 pixel1 = GPU.gpuTransfer.data[dataPtr++];
+                            //UInt16 pixel0 = GPU.TexData[dataPtr++];
+                            //UInt16 pixel1 = GPU.TexData[dataPtr++];
+
                             UInt32 merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
-
                             this.RAM.write(current_address, merged_Pixels);
-
                             break;
 
                       case 3:
@@ -727,7 +726,6 @@ namespace PS1_Emulator {
 
                 base_address = (UInt32)(base_address + step);
                 transfer_size -= 1;
-                arrPtr+=2;
             }
             
             ch.done();

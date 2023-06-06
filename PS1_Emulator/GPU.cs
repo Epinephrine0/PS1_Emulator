@@ -8,16 +8,17 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection.Emit;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
+using static PS1_Emulator.GPU;
 
 namespace PS1_Emulator {
     public class GPU {
         public Range range = new Range(0x1f801810, 5);            //Assumption  
 
         GP0_Command? currentCommand = null;
-        private readonly int[] numberOfParameters = new int[0x3E];
-
         Renderer window;
 
         ushort[] dummy = null;
@@ -38,6 +39,19 @@ namespace PS1_Emulator {
             Y240Lines = 0,
             Y480Lines = 1
         }
+        public enum DmaDirection {
+            Off = 0,
+            Fifo = 1,
+            CpuToGp0 = 2,
+            VRamToCpu = 3
+        }
+        public enum TransferType {//My own states, because the CPU fucks up the main DMA direction above in the middle of a transfer
+            Off = 0,
+            CpuToGp0 = 0xA0,
+            VRamToCpu = 0xC0,
+            VramToVram = 0x80,
+            VramFill = 0x02        //Does it really belong here? ask nocash
+        }
         enum VMode {
             NTSC = 0,
             PAL = 1
@@ -46,12 +60,7 @@ namespace PS1_Emulator {
             D15Bits = 0,
             D24Bits = 1
         }
-        enum DmaDirection {
-            Off = 0,
-            Fifo = 1,
-            CpuToGp0 = 2,
-            VRamToCpu = 3
-        }
+        
 
         public VerticalRes verticalRes;
         VMode vmode;
@@ -107,7 +116,41 @@ namespace PS1_Emulator {
         public UInt16 display_horiz_end;
         public UInt16 display_line_start;
         public UInt16 display_line_end;
+        Primitive primitive = null;
+        enum GPUState {
+            LoadingPrimitive,
+            ReadyToDecode,
+            Transferring
+        }
+        public struct GPUTransfer {
+            public uint[] parameters;
+            public ushort[] data;
+            public int dataPtr;
+            public int paramPtr;
+            public bool paramsReady => paramPtr == parameters.Length;
+            private uint resolution => parameters[2];
 
+
+            //Xsiz=((Xsiz AND 3FFh)+0Fh) AND (NOT 0Fh) for vram fill?
+            public ushort width => (ushort)(transferType == TransferType.VramFill?
+                (resolution & 0x3FF) : ((((resolution & 0xFFFF) - 1) & 0x3FF) + 1));
+
+            public ushort height => (ushort)(transferType == TransferType.VramFill?
+              ((resolution >> 16) & 0x1FF) : ((((resolution >> 16) - 1) & 0x1FF) + 1));
+
+            public ushort size => (ushort)(((width * height) + 1) & ~1);
+            public bool dataReady => size == dataPtr;
+            public ushort destination_X => (ushort)(parameters[1] & (transferType == TransferType.VramFill ? 0x3F0 : 0x3FF));
+            public ushort destination_Y => (ushort)((parameters[1] >> 16) & 0x1FF);
+            public float fillColor_R => (float)((parameters[0] & 0xFF) / 255.0);
+            public float fillColor_G => (float)(((parameters[0] >> 8) & 0xFF) / 255.0);
+            public float fillColor_B => (float)(((parameters[0] >> 16) & 0xFF) / 255.0);
+
+            public TransferType transferType;        //CPU seems to set the main direction to off in the middle
+                                                   //of the transfer, this should keep the direction saved
+        }
+        public GPUTransfer gpuTransfer;
+        GPUState currentState = GPUState.ReadyToDecode;
 
         TIMER1 TIMER1;
 
@@ -130,7 +173,6 @@ namespace PS1_Emulator {
             this.dmaDirection = DmaDirection.Off;
             this.window = rederingWindow;
             this.TIMER1 = timer1;
-
 
         }
 
@@ -161,8 +203,6 @@ namespace PS1_Emulator {
             value |= ((Convert.ToUInt32(this.interlaced)) << 22);
             value |= ((Convert.ToUInt32(this.display_disabled)) << 23);
             value |= ((Convert.ToUInt32(this.interrupt)) << 24);
-
-
 
             value |= 1 << 26;   //Ready to recive command
             value |= 1 << 27;   //Ready to send VRam to CPU
@@ -235,12 +275,188 @@ namespace PS1_Emulator {
 
             }
 
+        }       
+        public void write_GP0(UInt32 value) {
+           // Console.WriteLine("C: " + value.ToString("X"));
 
+            switch (currentState) {
+                case GPUState.ReadyToDecode: 
+                    gp0_decode(value);
+                    break;
+
+                case GPUState.LoadingPrimitive:
+                    primitive.add(value);
+                    if (primitive.isReady()) {
+                        primitive.draw(ref window);
+                        currentState = GPUState.ReadyToDecode;
+                    }
+                    break;
+
+                case GPUState.Transferring:
+                    if (gpuTransfer.paramsReady) {
+                        handleTransfer(value);
+                    }
+                    else {
+                        gpuTransfer.parameters[gpuTransfer.paramPtr++] = value;
+                        if (gpuTransfer.paramsReady) {
+                            gpuTransfer.data = new ushort[gpuTransfer.size];
+                            if (gpuTransfer.transferType != TransferType.CpuToGp0) {
+                                handleTransfer(value);
+                            }
+                        }
+                    }
+                    break;
+            }
         }
 
-        public void write_GP0(UInt32 value) {
+        /*private static int[] CommandSizeTable = new int[] {
+            //0  1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+             1,  1,  3,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, //0
+             1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, //1
+             4,  4,  4,  4,  7,  7,  7,  7,  5,  5,  5,  5,  9,  9,  9,  9, //2
+             6,  6,  6,  6,  9,  9,  9,  9,  8,  8,  8,  8, 12, 12, 12, 12, //3
+             3,  3,  3,  3,  3,  3,  3,  3, 16, 16, 16, 16, 16, 16, 16, 16, //4
+             4,  4,  4,  4,  4,  4,  4,  4, 16, 16, 16, 16, 16, 16, 16, 16, //5
+             3,  3,  3,  1,  4,  4,  4,  4,  2,  1,  2,  1,  3,  3,  3,  3, //6
+             2,  1,  2,  1,  3,  3,  3,  3,  2,  1,  2,  2,  3,  3,  3,  3, //7
+             4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4, //8
+             4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4, //9
+             3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, //A
+             3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, //B
+             3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, //C
+             3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, //D
+             1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, //E
+             1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1  //F
+        };*/
+       
 
+        private void gp0_decode(uint value) {
+            UInt32 opcode = value >> 24;
+            switch (opcode) {
+                case 0x00: //NOP
+                case 0xE0: //NOP
+                case uint when opcode >= 0x04 && opcode <= 0x1E: //NOP
+                case uint when opcode >= 0xE7 && opcode <= 0xEF: //NOP
+                case 0x1: break;  //Clear cache
+
+                //Polygon Commands
+                case uint when opcode >= 0x20 && opcode <= 0x3E:
+                    primitive = new Polygon(value, semi_transparency);
+                    currentState = GPUState.LoadingPrimitive;
+                    break;
+
+                //Rectangle Commands
+                case uint when opcode >= 0x60 && opcode <= 0x7F:
+                    ushort page = (ushort)(page_base_x | (((uint)page_base_y) << 4) | (((uint)texture_depth) << 7));
+
+                    primitive = new Rectangle(value, page, semi_transparency);
+                    currentState = GPUState.LoadingPrimitive;
+                    break;
+                
+                //Line Commands
+                case uint when opcode >> 5 == 2:
+                    primitive = new Line(value, semi_transparency);
+                    currentState = GPUState.LoadingPrimitive;
+                    break;
+
+                //Environment commands
+                case 0xE1: gp0_draw_mode(value); break;
+                case 0xE2: gp0_texture_window(value); break;
+                case 0xE3: gp0_drawing_area_TopLeft(value); break;
+                case 0xE4: gp0_drawing_area_BottomRight(value); break;
+                case 0xE5: gp0_drawing_offset(value); break;
+                case 0xE6: gp0_mask_bit(value); break;
+
+                //Transfer Commands
+                case 0x02:  //Vram Fill
+                case 0xA0:  //CPU to GP0
+                case 0xC0:  //Vram to CPU
+                case 0x80:  //Vram to Vram
+                    currentState = GPUState.Transferring;
+                    gpuTransfer.transferType = (TransferType)opcode;
+                    gpuTransfer.paramPtr = 0;
+                    gpuTransfer.dataPtr = 0;
+                    gpuTransfer.parameters = new uint[gpuTransfer.transferType == TransferType.VramToVram ? 4 : 3];
+                    gpuTransfer.parameters[gpuTransfer.paramPtr++] = value;
+                    break;
+
+                default:
+                    throw new Exception(opcode.ToString("x") + " - " + (value >> 29));
+            }
+        }
+
+        private void handleTransfer(uint value) {
+            switch (gpuTransfer.transferType) {
+                case TransferType.CpuToGp0:
+                    gpuTransfer.data[gpuTransfer.dataPtr++] = (ushort)(value & 0xFFFF);
+                    gpuTransfer.data[gpuTransfer.dataPtr++] = (ushort)((value >> 16) & 0xFFFF);
+                    if (gpuTransfer.dataReady) {
+                        window.update_vram(gpuTransfer.destination_X, gpuTransfer.destination_Y,
+                            gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
+                        currentState = GPUState.ReadyToDecode;
+                        gpuTransfer.transferType = TransferType.Off;
+                    }
+                    break;
+
+                case TransferType.VRamToCpu:
+                    window.readBackTexture(gpuTransfer.destination_X, gpuTransfer.destination_Y,
+                        gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
+                    gpuTransfer.transferType = TransferType.Off;
+                    currentState = GPUState.ReadyToDecode;
+                    break;
+
+                case TransferType.VramToVram:
+                    //Console.WriteLine("Vram to Vram");
+                    //window.VramToVramCopy();
+                    gpuTransfer.transferType = TransferType.Off;
+                    currentState = GPUState.ReadyToDecode;
+                    break;
+
+                case TransferType.VramFill:
+                    window.disableBlending();
+                    window.vramFill(gpuTransfer.fillColor_R, gpuTransfer.fillColor_G, gpuTransfer.fillColor_B,
+                        gpuTransfer.destination_X, gpuTransfer.destination_Y, gpuTransfer.width, gpuTransfer.height);
+                    gpuTransfer.transferType = TransferType.Off;
+                    currentState = GPUState.ReadyToDecode;
+
+                    break;
+
+                default:
+                    Console.WriteLine(value.ToString("x"));
+
+                    Console.WriteLine(gpuTransfer.transferType);
+                    Console.WriteLine(gpuTransfer.paramsReady);
+                    Console.WriteLine(gpuTransfer.dataReady);
+
+
+                    throw new NotImplementedException();
+
+            }
+        }
+
+        public void write_GP0_(UInt32 value) {
             UInt32 opcode = (value >> 24) & 0xff;
+
+            /*if (primitive != null) {
+                primitive.add(value);
+                if (primitive.isReady()) {
+                    primitive.draw(ref window); 
+                    primitive = null;
+                    currentState = GPUState.ReadyToDecode;
+                }
+                return;
+            }
+
+            if (currentState == GPUState.ReadyToDecode) {
+                if ((value >> 29) == 1 && currentCommand == null) {
+                    primitive = new Polygon(value, numberOfParameters[opcode],semi_transparency);
+                    currentState = GPUState.LoadingPrimitive;
+                    //Console.WriteLine(counter);
+                    return;
+                }
+            }*/
+            
+
             if (currentCommand != null) {
                 opcode = currentCommand.opcode;
 
@@ -259,15 +475,18 @@ namespace PS1_Emulator {
                 img_count--;
 
                 if(img_count == 0) {
-                    window.update_vram(vram_x, vram_y, vram_img_w, vram_img_h, vramData.ToArray());
+                    ushort[] d = vramData.ToArray();
+                    window.update_vram(vram_x, vram_y, vram_img_w, vram_img_h, ref d);
                     ClearMemory(ref vramData);
                 }
 
                 return;
 
             }
-            
+           
             switch (opcode) {
+          
+
                 case 0x00:
                     //NOP
                     break;
@@ -497,6 +716,7 @@ namespace PS1_Emulator {
 
                     if (currentCommand == null) {
                         currentCommand = new GP0_Command(opcode, 6);
+                        Console.WriteLine("Polygon: " + opcode.ToString("x"));
                     }
 
                     currentCommand.add_parameter(value);
@@ -537,10 +757,11 @@ namespace PS1_Emulator {
                     }
 
                     currentCommand.add_parameter(value);
-
                     if (currentCommand.num_of_parameters == currentCommand.parameters_ptr) {
+                        Console.WriteLine("Transfer: " + opcode.ToString("x"));
 
                         gp0_fill_rectangle();
+
                         currentCommand = null;
 
                     }
@@ -707,7 +928,7 @@ namespace PS1_Emulator {
             }
             
             
-            window.drawLines(ref vertices, ref colors);
+            //window.drawLines(ref vertices, ref colors);
 
         }
 
@@ -732,7 +953,7 @@ namespace PS1_Emulator {
 
             }
             
-            window.drawLines(ref vertices,ref colors);
+            //window.drawLines(ref vertices,ref colors);
 
         }
 
@@ -993,13 +1214,15 @@ namespace PS1_Emulator {
 
             window.draw(ref vertices, ref colors, ref dummy, 0, 0, -1);
 
+           
+           
         }
 
         private void gp0_mask_bit(UInt32 value) {
 
             this.force_set_mask_bit = ((value & 1) != 0);
             this.preserve_masked_pixels = ((value & 2) != 0);
-
+           
         }
 
         private void gp0_texture_window(UInt32 value) {
@@ -1007,13 +1230,14 @@ namespace PS1_Emulator {
             value &= 0xfffff;   //20 bits
 
             //in 8 pixel steps
-            this.texture_window_x_mask = (value & 0x1f) * 8;
-            this.texture_window_y_mask = ((value >> 5) & 0x1f) * 8;
+            this.texture_window_x_mask = (value & 0x1f);
+            this.texture_window_y_mask = ((value >> 5) & 0x1f);
 
-            this.texture_window_x_offset = ((value >> 10) & 0x1f) * 8;
-            this.texture_window_y_offset = ((value >> 15) & 0x1f) * 8;
+            this.texture_window_x_offset = ((value >> 10) & 0x1f);
+            this.texture_window_y_offset = ((value >> 15) & 0x1f);
 
-            window.setTextureWindow((ushort)~texture_window_x_mask, (ushort)~texture_window_y_mask, (ushort)(texture_window_x_offset & texture_window_x_mask), (ushort)(texture_window_y_offset & texture_window_y_mask));
+            window.setTextureWindow((ushort)texture_window_x_mask, (ushort)texture_window_y_mask, 
+                (ushort)texture_window_x_offset, (ushort)texture_window_y_offset);
 
         }
    
@@ -1196,7 +1420,6 @@ namespace PS1_Emulator {
             this.texture_disable = (((value >> 11) & 1) != 0);
             this.rectangle_texture_x_flip = (((value >> 12) & 1) != 0);
             this.rectangle_texture_y_flip = (((value >> 13) & 1) != 0);
-
 
         }
         private void gp1_reset(UInt32 value) {
@@ -1385,6 +1608,9 @@ namespace PS1_Emulator {
                     width = (ushort)(currentCommand.buffer[2] & 0x3FF);
                     height = (ushort)((currentCommand.buffer[2] >> 16) & 0x1FF);
                     window.vramFill(r/255.0f, g/255.0f, b/255.0f, x, y, width, height);
+                    Console.WriteLine("W: " + width.ToString("X"));
+                    Console.WriteLine("H: " + height.ToString("X"));
+
                     break;
 
                 default:
@@ -1629,6 +1855,7 @@ namespace PS1_Emulator {
                     (byte)currentCommand.buffer[4], (byte)(currentCommand.buffer[4] >> 8) , (byte)(currentCommand.buffer[4] >> 16)
 
                     };
+
                     break;
 
                 default:

@@ -8,7 +8,6 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp;
 using System;
 using System.Threading;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -18,7 +17,7 @@ namespace PS1_Emulator {
         public PSX_EMU() {
 
             var nativeWindowSettings = new NativeWindowSettings() {
-                Size = new Vector2i(1280, 720),
+                Size = new Vector2i(1024, 512),
                 Title = "PS1 Emulator",
                 // This is needed to run on macos
                 Flags = ContextFlags.ForwardCompatible,
@@ -77,21 +76,21 @@ namespace PS1_Emulator {
         private int display_area_X_Offset_Loc;
         private int display_area_Y_Offset_Loc;
         private int vramFrameBuffer;
-
+        private int transparencyModeLoc;
         Int16 offset_x;
         Int16 offset_y;
 
         public bool isUsingMouse = false;
-        public bool showTextures = false;
+        public bool showTextures = true;
         public bool isFullScreen = false;
 
         Shader shader;
         string vertixShader = @"
             #version 330 
 
-            layout(location = 0) in ivec3 aPosition;
+            layout(location = 0) in ivec2 aPosition;
             layout(location = 1) in uvec3 vColors;
-            layout (location = 2) in vec2 inUV;
+            layout(location = 2) in vec2 inUV;
 
 
             out vec3 color_in;
@@ -176,14 +175,17 @@ namespace PS1_Emulator {
             flat in ivec2 texpageBase;
             uniform int TextureMode;
 
+            uniform int transparencyMode;
+
             flat in int isScreenQuad;
 
             uniform ivec4 u_texWindow;
-            uniform vec4 u_blendFactors;
 
             uniform sampler2D u_vramTex;
 
-            out vec4 outputColor;
+            //out vec4 outputColor;
+            layout(location = 0, index = 0) out vec4 outputColor;
+            layout(location = 0, index = 1) out vec4 outputBlendColor;
 
             vec4 grayScale(vec4 color) {
                    float x = 0.299*(color.r) + 0.587*(color.g) + 0.114*(color.b);
@@ -213,7 +215,7 @@ namespace PS1_Emulator {
                         ret.a = 1.0;
                         return ret;
                     }
-
+    
 
             void main()
             {
@@ -221,19 +223,41 @@ namespace PS1_Emulator {
 	            if(isScreenQuad == 1){		//Drawing a full screen quad case 
 	  
 	              ivec2 coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
-                    outputColor = texelFetch(u_vramTex, coords, 0);
+                  outputColor = texelFetch(u_vramTex, coords, 0);
     		
 	  
 	              return;
 
 	            }
 
-                // Fix up UVs and apply texture window
+                //Fix up UVs and apply texture window
                   ivec2 UV = ivec2(floor(texCoords + vec2(0.0001, 0.0001))) & ivec2(0xff);
-                  UV = (UV & u_texWindow.xy) | u_texWindow.zw;
-  
+                  UV = (UV & ~(u_texWindow.xy * 8)) | ((u_texWindow.xy & u_texWindow.zw) * 8); //XY contain Mask, ZW contain Offset  
+
+
   	            if(TextureMode == -1){		//No texture, for now i am using my own flag (TextureMode) instead of (inTexpage & 0x8000) 
-    		             outputColor = vec4(color_in.r, color_in.g,color_in.b, 1.0);
+    		             outputColor.rgb = vec3(color_in.r, color_in.g,color_in.b);
+                         
+                            switch (transparencyMode) {
+                            case 0:
+                                outputColor.a = 0.5;
+                                outputBlendColor.a = 0.5;
+                                break;
+
+                            case 1: 
+                            case 2:
+
+                                outputColor.a = 1.0;
+                                outputBlendColor.a = 1.0;
+                                break;
+
+                            case 3:
+                                outputColor.a = 0.25;
+                                outputBlendColor.a = 1.0;
+                                break;
+                            
+                              }
+
    	 	             return;
 
                  }else if(TextureMode == 0){  //4 Bit texture
@@ -241,17 +265,45 @@ namespace PS1_Emulator {
  		               ivec2 texelCoord = ivec2(UV.x >> 2, UV.y) + texpageBase;
                
        	               int sample = sample16(texelCoord);
-                           int shift = (UV.x & 3) << 2;
-                           int clutIndex = (sample >> shift) & 0xf;
+                       int shift = (UV.x & 3) << 2;
+                       int clutIndex = (sample >> shift) & 0xf;
 
-                           ivec2 sampleCoords = ivec2(clutBase.x + clutIndex, clutBase.y);
+                       ivec2 sampleCoords = ivec2(clutBase.x + clutIndex, clutBase.y);
 
-                           outputColor = texelFetch(u_vramTex, sampleCoords, 0);
+                       outputColor = texelFetch(u_vramTex, sampleCoords, 0);
 
 
 		               if (outputColor.rgb == vec3(0.0, 0.0, 0.0)) discard;
                            outputColor = texBlend(outputColor, vec4(color_in,1.0));
-		
+
+                            
+                        int transparent = (sample16(sampleCoords) >> 15) & 1;     //Get the FINAL clut color including alpha
+
+                        if(transparent == 1){
+                            switch (transparencyMode) {
+                            case 0:
+                                outputColor.a = 0.5;
+                                outputBlendColor.a = 0.5;
+                                break;
+
+                            case 1:
+                            case 2:
+
+                                outputColor.a = 1.0;
+                                outputBlendColor.a = 1.0;
+                                break;
+
+                            case 3:
+                                outputColor.a = 0.25;
+                                outputBlendColor.a = 1.0;
+                                break;
+                            
+                              }
+                        }else{
+                              outputColor.a = 1.0;
+                              outputBlendColor.a = 0.0;
+                        }
+		                  
 
 	            }else if (TextureMode == 1) { // 8 bit texture
                            ivec2 texelCoord = ivec2(UV.x >> 1, UV.y) + texpageBase;
@@ -264,6 +316,35 @@ namespace PS1_Emulator {
                            if (outputColor.rgb == vec3(0.0, 0.0, 0.0)) discard;
 
                            outputColor = texBlend(outputColor, vec4(color_in,1.0));
+
+                         int transparent = (sample16(sampleCoords) >> 15) & 1;     //Get the FINAL clut color including alpha
+                        if(transparent == 1){
+                            switch (transparencyMode) {
+                            case 0:
+                                outputColor.a = 0.5;
+                                outputBlendColor.a = 0.5;
+                                break;
+
+                            case 1:
+                            case 2:
+
+                                outputColor.a = 1.0;
+                                outputBlendColor.a = 1.0;
+                                break;
+
+                            case 3:
+                                outputColor.a = 0.25;
+                                outputBlendColor.a = 1.0;
+                                break;
+                            
+                              }
+                        }else{
+                              outputColor.a = 1.0;
+                              outputBlendColor.a = 0.0;
+                        }
+                            
+
+
                        }
 
 	            else {  //16 Bit texture
@@ -274,6 +355,33 @@ namespace PS1_Emulator {
                            if (outputColor.rgb == vec3(0.0, 0.0, 0.0)) discard;
 
                            outputColor = texBlend(outputColor, vec4(color_in,1.0));	
+                            
+                        int transparent = (sample16(texelCoord) >> 15) & 1;     //Get the FINAL clut color including alpha
+                        if(transparent == 1){
+                            switch (transparencyMode) {
+                            case 0:
+                                outputColor.a = 0.5;
+                                outputBlendColor.a = 0.5;
+                                break;
+
+                            case 1:
+                            case 2:
+
+                                outputColor.a = 1.0;
+                                outputBlendColor.a = 1.0;
+                                break;
+
+                            case 3:
+                                outputColor.a = 0.25;
+                                outputBlendColor.a = 1.0;
+                                break;
+                            
+                              }
+                        }else{
+                              outputColor.a = 1.0;
+                              outputBlendColor.a = 0.0;
+                        }
+                    
 
 	            }
 
@@ -322,6 +430,8 @@ namespace PS1_Emulator {
             texModeLoc = GL.GetUniformLocation(shader.Handle, "TextureMode");
             clutLoc = GL.GetUniformLocation(shader.Handle, "inClut");
             texPageLoc = GL.GetUniformLocation(shader.Handle, "inTexpage");
+
+            transparencyModeLoc = GL.GetUniformLocation(shader.Handle, "transparencyMode");
 
             display_areay_X_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x");
             display_areay_Y_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y");
@@ -376,13 +486,13 @@ namespace PS1_Emulator {
             GL.Uniform4(texWindow, x, y, z, w);
         }
 
-        int scissorBox_x;
-        int scissorBox_y;
-        int scissorBox_w;
-        int scissorBox_h;
+        int scissorBox_x = 0;
+        int scissorBox_y = 0;
+        int scissorBox_w = VRAM_WIDTH;
+        int scissorBox_h = VRAM_HEIGHT;
 
         public void setScissorBox(int x,int y,int width,int height) {
-
+     
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
 
             scissorBox_x = x;
@@ -392,11 +502,143 @@ namespace PS1_Emulator {
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
 
-            // GL.Enable(EnableCap.ScissorTest);
+            //GL.Enable(EnableCap.ScissorTest);
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
 
         }
 
+        short[] vertices;
+        byte[] colors;
+        ushort[] uv;
+
+        public void drawTrinangle(
+            short x1, short y1, 
+            short x2, short y2,
+            short x3, short y3,
+            byte r1, byte g1, byte b1,
+            byte r2, byte g2, byte b2,
+            byte r3, byte g3, byte b3,
+            ushort tx1, ushort ty1,
+            ushort tx2, ushort ty2,
+            ushort tx3, ushort ty3,
+            bool isTextured, ushort clut, ushort page
+            ) {
+
+            GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+
+            vertices = new short[]{
+             x1,  y1,
+             x2,  y2,
+             x3,  y3
+            };
+            colors = new byte[]{
+             r1,  g1,  b1,
+             r2,  g2,  b2,
+             r3,  g3,  b3,
+            };
+            uv = new ushort[] {
+             tx1, ty1,
+             tx2, ty2,
+             tx3, ty3
+            };
+
+            GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
+            GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(short), vertices, BufferUsageHint.StreamDraw);
+            GL.VertexAttribIPointer(0, 2, VertexAttribIntegerType.Short, 0, (IntPtr)null);  //size: 2 for x,y only!
+            GL.EnableVertexAttribArray(0);
+
+            GL.BindBuffer(BufferTarget.ArrayBuffer, colorsBuffer);
+            GL.BufferData(BufferTarget.ArrayBuffer, colors.Length * sizeof(byte), colors, BufferUsageHint.StreamDraw);
+            GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
+            GL.EnableVertexAttribArray(1);
+
+            if (isTextured) {
+                GL.Uniform1(clutLoc, clut);
+                GL.Uniform1(texPageLoc, page);
+                GL.Uniform1(texModeLoc, (page >> 7) & 3);
+                GL.BindBuffer(BufferTarget.ArrayBuffer, texCoords);
+                GL.BufferData(BufferTarget.ArrayBuffer, uv.Length * sizeof(ushort), uv, BufferUsageHint.StreamDraw);
+                GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
+                GL.EnableVertexAttribArray(2);
+            }
+            else {
+                GL.Uniform1(texModeLoc, -1);
+                GL.Uniform1(clutLoc, 0);
+                GL.Uniform1(texPageLoc, 0);
+                GL.DisableVertexAttribArray(2);
+            }
+
+            GL.DrawArrays(PrimitiveType.Triangles, 0, vertices.Length / 2);
+            //Lets hope there is no need to sync and wait for the GPU 
+        }
+        public void drawRectangle(
+            short x1, short y1,
+            short x2, short y2,
+            short x3, short y3,
+            short x4, short y4,
+            byte r1, byte g1, byte b1,
+            byte r2, byte g2, byte b2,
+            byte r3, byte g3, byte b3,
+            byte r4, byte g4, byte b4,
+            ushort tx1, ushort ty1,
+            ushort tx2, ushort ty2,
+            ushort tx3, ushort ty3,
+            ushort tx4, ushort ty4,
+
+            bool isTextured, ushort clut, ushort page
+            ) {
+            GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+            
+            vertices = new short[]{
+             x1,  y1,
+             x2,  y2,
+             x3,  y3,
+             x4,  y4
+            };
+            colors = new byte[]{
+             r1,  g1,  b1,
+             r2,  g2,  b2,
+             r3,  g3,  b3,
+             r4,  g4,  b4,
+            };
+            uv = new ushort[] {
+             tx1, ty1,
+             tx2, ty2,
+             tx3, ty3,
+             tx4, ty4
+            };
+
+            GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
+            GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(short), vertices, BufferUsageHint.StreamDraw);
+            GL.VertexAttribIPointer(0, 2, VertexAttribIntegerType.Short, 0, (IntPtr)null);  //size: 2 for x,y only!
+            GL.EnableVertexAttribArray(0);
+
+            GL.BindBuffer(BufferTarget.ArrayBuffer, colorsBuffer);
+            GL.BufferData(BufferTarget.ArrayBuffer, colors.Length * sizeof(byte), colors, BufferUsageHint.StreamDraw);
+            GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
+            GL.EnableVertexAttribArray(1);
+
+            if (isTextured) {
+                GL.Uniform1(clutLoc, clut);
+                GL.Uniform1(texPageLoc, page);
+                GL.Uniform1(texModeLoc, (page >> 7) & 3);
+                GL.BindBuffer(BufferTarget.ArrayBuffer, texCoords);
+                GL.BufferData(BufferTarget.ArrayBuffer, uv.Length * sizeof(ushort), uv, BufferUsageHint.StreamDraw);
+                GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
+                GL.EnableVertexAttribArray(2);
+            }
+            else {
+                GL.Uniform1(texModeLoc, -1);
+                GL.Uniform1(clutLoc, 0);
+                GL.Uniform1(texPageLoc, 0);
+                GL.DisableVertexAttribArray(2);
+            }
+
+            GL.DrawArrays(PrimitiveType.TriangleFan, 0, vertices.Length / 2);
+
+        }
         public void draw(ref short[] vertices, ref byte[] colors, ref ushort[] uv, ushort clut, ushort page, int texMode) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
             GL.Uniform1(texModeLoc, texMode);
@@ -431,16 +673,13 @@ namespace PS1_Emulator {
 
         }
 
-
-        internal void drawLines(ref short[] vertices, ref byte[] colors) {
-
+        internal void drawLines(ref short[] vertices, ref byte[] colors, bool isPolyLine) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-
             GL.Uniform1(texModeLoc, -1);
 
             GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
             GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(short), vertices, BufferUsageHint.StreamDraw);
-            GL.VertexAttribIPointer(0, 3, VertexAttribIntegerType.Short, 0, (IntPtr)null);
+            GL.VertexAttribIPointer(0, 2, VertexAttribIntegerType.Short, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(0);
 
             GL.BindBuffer(BufferTarget.ArrayBuffer, colorsBuffer);
@@ -448,7 +687,7 @@ namespace PS1_Emulator {
             GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(1);
 
-            GL.DrawArrays(PrimitiveType.Lines, 0, vertices.Length / 3);
+            GL.DrawArrays(isPolyLine? PrimitiveType.LineStrip : PrimitiveType.Lines, 0, vertices.Length / 2);
 
         }
 
@@ -490,16 +729,26 @@ namespace PS1_Emulator {
 
         }
         public void vramFill(float r, float g, float b, int x, int y, int width, int height) {
+            //Fill does NOT occur when Xsiz=0 or Ysiz=0 (unlike as for Copy commands).
+            if (width == 0x400 || width == 0 || height == 0) {
+                return;
+            }
+            if (width >= 0x3F1 && width <= 0x3FF) {
+                width = 0x400;
+            }
+
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
             GL.ClearColor(r,g,b,1.0f);
-
-
             GL.Scissor(x,y, width, height);
             GL.Clear(ClearBufferMask.ColorBufferBit);
-           
+
+            GL.BindTexture(TextureTarget.Texture2D, sample_texture);
+            GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT);
+
             //After that reset the Scissor box to the drawing area
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+            GL.ClearColor(0, 0, 0, 1.0f);
 
         }
         public void rectFill(byte r, byte g, byte b, int x, int y, int width, int height) { 
@@ -535,9 +784,10 @@ namespace PS1_Emulator {
 
 
 
-        public void update_vram(int x, int y , int width, int height, ushort[] textureData) {
+        public void update_vram(int x, int y , int width, int height, ref ushort[] textureData) {
             if (width == 0) { width = VRAM_WIDTH; }
             if (height == 0) { height = VRAM_HEIGHT; }
+
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
             GL.BindTexture(TextureTarget.Texture2D, vram_texture);
             GL.TexSubImage2D(TextureTarget.Texture2D,0,x,y,width,height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
@@ -706,35 +956,45 @@ namespace PS1_Emulator {
             GL.BlendEquation(BlendEquationMode.FuncAdd);
         }
         internal void setBlendingFunction(uint function) {
+            GL.Uniform1(transparencyModeLoc, (int)function);
 
             GL.Enable(EnableCap.Blend);
-            
-            switch (function) {
-                case 0:
-                    GL.BlendColor(1f, 1f, 1f,0.5f);
-                    GL.BlendFunc(BlendingFactor.ConstantAlpha , BlendingFactor.ConstantAlpha);
-                    GL.BlendEquation(BlendEquationMode.FuncAdd);
-                    break;
+            //B = Destination
+            //F = Source
+            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.Src1Alpha);
+            if (function == 2) {
+                GL.BlendEquation(BlendEquationMode.FuncReverseSubtract);
 
-                case 1:
-                    GL.BlendFunc(BlendingFactor.One, BlendingFactor.One);
-                    GL.BlendEquation(BlendEquationMode.FuncAdd);
-                    break;
-
-                case 2:
-                    GL.BlendFunc(BlendingFactor.One, BlendingFactor.One);
-                    GL.BlendEquation(BlendEquationMode.FuncReverseSubtract);
-                    break;
-
-                case 3:
-                    GL.BlendColor(1f, 1f, 1f, 0.25f);
-                    GL.BlendFunc(BlendingFactor.ConstantAlpha, BlendingFactor.One);
-                    GL.BlendEquation(BlendEquationMode.FuncAdd);
-                    break;
-
-                default:
-                    throw new Exception("Unknown blend function: " + function);
             }
+            else {
+                GL.BlendEquation(BlendEquationMode.FuncAdd);
+            }
+            /* switch (function) {
+                 case 0:
+                     GL.BlendColor(1f, 1f, 1f,0.5f);
+                     GL.BlendFunc(BlendingFactor.ConstantAlpha , BlendingFactor.ConstantAlpha);
+                     GL.BlendEquation(BlendEquationMode.FuncAdd);
+                     break;
+
+                 case 1:
+                     GL.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+                     GL.BlendEquation(BlendEquationMode.FuncAdd);
+                     break;
+
+                 case 2:
+                     GL.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+                     GL.BlendEquation(BlendEquationMode.FuncReverseSubtract);
+                     break;
+
+                 case 3:
+                     GL.BlendColor(1f, 1f, 1f, 0.25f);
+                     GL.BlendFunc(BlendingFactor.ConstantAlpha, BlendingFactor.One);
+                     GL.BlendEquation(BlendEquationMode.FuncAdd);
+                     break;
+
+                 default:
+                     throw new Exception("Unknown blend function: " + function);
+             }*/
         }
     }
 

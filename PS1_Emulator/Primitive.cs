@@ -5,10 +5,11 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    public interface GP0_Command_ss {
-        bool isReady { get; }
+    public interface Primitive {
         public void add(uint value);
-        public void execute(ref Renderer window);
+        public void draw(ref Renderer window);
+
+        public bool isReady();
 
     }
 }

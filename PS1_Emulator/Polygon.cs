@@ -1,11 +1,13 @@
-﻿using System;
+﻿using OpenTK.Graphics.OpenGL;
+using OpenTK.Windowing.GraphicsLibraryFramework;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace PS1_Emulator {
-    public class Polygon : GP0_Command_ss {
+    public unsafe class Polygon : Primitive {
         /*
         GPU Render Polygon Commands
 
@@ -27,28 +29,20 @@ namespace PS1_Emulator {
         bool isSemiTransparent;
         bool isRawTextured;
 
-        short[] vertices;
-        byte[] colors;
-        ushort[] uv;
+        uint[] vertices;
+        uint[] colors;
+        uint[] uv;
         List<uint> buffer = new List<uint>();
         uint pointer;
         uint opcode;
         ushort clut;
         ushort page;
         int texMode;
-
-        int[] numberOfParameters = {
-            -1, -1, -1, -1, -1, -1, -1, -1, 
-            -1, -1, -1, -1, -1, -1, -1, -1, 
-            -1, -1, -1, -1, -1, -1, -1, -1, 
-            -1, -1, -1, -1, -1, -1, -1, -1,
-            4, -1, 4, -1, 7, 7, 7, 7, 5, -1,
-            5, -1, 9, 9, 9, 9, 6, -1, 6, -1, 
-            9, -1, 9, -1, 8, -1, 8, -1, 12, 
-            -1, 12};
-
-        readonly byte[] NoBlendColors = new[] {          //Colors to blend with if the command does not use blending 
-                                                        //The 0x80 will be cancelled in the bledning formula, so they don't change anything
+        int numOfParameters = -1;
+        int numberOfVertices = 0;
+        uint semi_transparency = 0;
+        readonly byte[] NoBlendColors = new[] {       //Colors to blend with if the command does not use blending 
+                                                    //The 0x80 will be cancelled in the bledning formula, so they don't change anything
 
                 (byte)0x80, (byte)0x80 , (byte)0x80,
                 (byte)0x80, (byte)0x80 , (byte)0x80,
@@ -59,136 +53,117 @@ namespace PS1_Emulator {
                 (byte)0x80, (byte)0x80 , (byte)0x80,
 
         };
-
-        public bool isReady => buffer.Count == numberOfParameters[opcode];
-
-        public Polygon(uint value) {
-            opcode = (value >> 24) & 0xff; 
+        
+        public Polygon(uint value , uint semi_transparency) {
+            opcode = (value >> 24);
             isGouraud = (value >> 28 & 1) == 1;
             isQuad = (value >> 27 & 1) == 1;
             isTextured = (value >> 26 & 1) == 1;
             isSemiTransparent = (value >> 25 & 1) == 1;
             isRawTextured = (value >> 24 & 1) == 1;
-
-            vertices = new short[3 * (isQuad ? 6 : 3)];
-            colors = new byte[3 * (isQuad ? 6 : 3)];
-            uv = isTextured ? new ushort[2 * (isQuad ? 6 : 3)] : null;
+            this.semi_transparency = semi_transparency;
+            numberOfVertices = isQuad ? 4 : 3;
+            vertices = new uint[numberOfVertices];
+            colors = new uint[numberOfVertices];
+            uv = new uint[numberOfVertices];
 
             buffer.Add(value);
 
-        }
+            numOfParameters = numberOfVertices;     //I hope this works for all polygons
 
-      
+            if (isTextured) {
+                numOfParameters += numberOfVertices;
+            }
+            if (isGouraud) {
+                numOfParameters += numberOfVertices;
+            }
+            else {
+                numOfParameters += 1;
+            }
+
+        }
         public void add(uint value) {
             buffer.Add(value);
         }
-        public void setup() {
-            switch (opcode) {
+        public bool isReady() {
+            return buffer.Count == numOfParameters;
+        }
 
-                case uint x when opcode >= 0x20 && opcode <= 0x2A:
+        public void draw(ref Renderer window) {
+            int ptr = 0; 
+            bool onlyOneColor = true;
 
-                    for (int i = 0; i < colors.Length; i += 3) {
-                        colors[i] = (byte)buffer[0];
-                        colors[i + 1] = (byte)(buffer[0] >> 8);
-                        colors[i + 2] = (byte)(buffer[0] >> 16);
+            if (isGouraud) {
+                for (int i = 0; i < numberOfVertices; i++) {
+                    colors[i] = buffer[ptr++];
+                    vertices[i] = buffer[ptr++];
+                    if (isTextured) {
+                        uv[i] = buffer[ptr++];
                     }
-                    loadVertices(1, 4, 1, 0);
-
-                    if (isQuad) {
-                        loadVertices(2,5,1,9);
-
+                }
+            }
+            else {
+                for (int i = 0; i < numberOfVertices; i++) {
+                    colors[i] = buffer[0];
+                    if (onlyOneColor) {
+                        ptr++;
+                        onlyOneColor = false;
                     }
-                    texMode = -1;
-                    break;
-
-
-                case uint x when opcode >= 0x24 && opcode <= 0x2F:
-
-                    if (isRawTextured) {
-                        for (int i = 0; i < colors.Length; i++) {
-                            colors[i] = 0x80;
+                    vertices[i] = buffer[ptr++];
+                    if (isTextured) {
+                        uv[i] = buffer[ptr++];
+                        if (isRawTextured) {
+                            colors[i] = 0x808080;
                         }
                     }
-                    else {
-                        for (int i = 0; i < colors.Length; i += 3) {
-                            colors[i] = (byte)buffer[0];
-                            colors[i + 1] = (byte)(buffer[0] >> 8);
-                            colors[i + 2] = (byte)(buffer[0] >> 16);
-                        }
-                    }
-
-                    loadVertices(1,6,2,0);
-                    loadUV(2,7,2,0);
-
-                    if (isQuad) {
-                        loadVertices(3,8,2,9);
-                        loadUV(4,9,2,6);
-                    }
-
-                    clut = (ushort)(buffer[2] >> 16);
-                    page = (ushort)((buffer[4] >> 16) & 0x3fff);
-                    texMode = (page >> 7) & 3;
-                    break;
-
-                case uint x when opcode >= 0x30 && opcode <= 0x3A:
-                    loadColors(0,5,2,0);
-                    loadVertices(1,6,2,0);
-
-                    if (isQuad) {
-                        loadColors(2,7,2,9);
-                        loadVertices(3,8,2,9);
-                    }
-                    texMode = -1;
-                    break;
-
-                case uint x when opcode >= 0x34 && opcode <= 0x3E:
-                    loadColors(0,7,3,0);
-                    loadVertices(1,8,3,0);
-                    loadUV(2,9,3,0);
-
-                    if (isQuad) {
-                        loadColors(3,9,3,9);
-                        loadVertices(4, 11, 3, 9);
-                        loadUV(5, 12, 3, 6);
-                    }
-                    clut = (ushort)(buffer[2] >> 16);
-                    page = (ushort)((buffer[5] >> 16) & 0x3fff);
-                    texMode = (page >> 7) & 3;
-                    break;
-
-                default : throw new Exception("ugh");
+                }
             }
 
-        }
-        public void loadVertices(int start, int end, int step, int pointer) {
-            for (int i = start; i < end ; i += step) {
-                vertices[pointer++] = (short)buffer[i];
-                vertices[pointer++] = (short)(buffer[i] >> 16);
-                vertices[pointer++] = 0;
+            clut = (ushort)(uv[0] >> 16);
+            page = (ushort)(uv[1] >> 16);
+
+            if (isSemiTransparent) {
+                window.setBlendingFunction(isTextured ? (uint)((page >> 5) & 3) : semi_transparency);
+            }
+            else {
+                window.disableBlending();
             }
 
-        }
-        public void loadColors(int start, int end, int step, int pointer) {
-            for (int i = start; i < end; i += step) {
-                colors[pointer++] = (byte)buffer[i];
-                colors[pointer++] = (byte)(buffer[i] >> 8);
-                colors[pointer++] = (byte)(buffer[i] >> 16);
+            window.drawTrinangle(
+                (short)vertices[0], (short)(vertices[0] >> 16),
+                (short)vertices[1], (short)(vertices[1] >> 16),
+                (short)vertices[2], (short)(vertices[2] >> 16),
+
+                (byte)colors[0], (byte)(colors[0] >> 8), (byte)(colors[0] >> 16),
+                (byte)colors[1], (byte)(colors[1] >> 8), (byte)(colors[1] >> 16),
+                (byte)colors[2], (byte)(colors[2] >> 8), (byte)(colors[2] >> 16),
+
+                (ushort)(uv[0] & 0xFF), (ushort)((uv[0] >> 8) & 0xFF),
+                (ushort)(uv[1] & 0xFF), (ushort)((uv[1] >> 8) & 0xFF),
+                (ushort)(uv[2] & 0xFF), (ushort)((uv[2] >> 8) & 0xFF),
+
+                isTextured, clut,page
+            );
+            if (isQuad) {
+                window.drawTrinangle(
+                (short)vertices[1], (short)(vertices[1] >> 16),
+                (short)vertices[2], (short)(vertices[2] >> 16),
+                (short)vertices[3], (short)(vertices[3] >> 16),
+
+
+                (byte)colors[1], (byte)(colors[1] >> 8), (byte)(colors[1] >> 16),
+                (byte)colors[2], (byte)(colors[2] >> 8), (byte)(colors[2] >> 16),
+                (byte)colors[3], (byte)(colors[3] >> 8), (byte)(colors[3] >> 16),
+
+                (ushort)(uv[1] & 0xFF), (ushort)((uv[1] >> 8) & 0xFF),
+                (ushort)(uv[2] & 0xFF), (ushort)((uv[2] >> 8) & 0xFF),
+                (ushort)(uv[3] & 0xFF), (ushort)((uv[3] >> 8) & 0xFF),
+
+                isTextured, clut, page
+                );
+
             }
-
         }
-        public void loadUV(int start, int end, int step, int pointer) {
-            for (int i = start; i < end; i += step) {
-                uv[pointer++] = (byte)buffer[i];
-                uv[pointer++] = (byte)(buffer[i] >> 8);
-            }
-
-        }
-        public void execute(ref Renderer window) {
-            setup();
-
-            window.draw(ref vertices,ref colors,ref uv,clut,page,texMode);
-        }
-
-      
+     
     }
 }

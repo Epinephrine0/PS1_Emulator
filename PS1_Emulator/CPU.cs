@@ -95,12 +95,15 @@ namespace PS1_Emulator {
             current_pc = pc;   //Save current pc In case of an exception
             intercept(pc);     //TTY
 
-            /* if (fastBoot) {       //Skip Sony logo, doesn't work 
+             /*if (fastBoot) {       //Skip Sony logo, doesn't work 
                  if (pc == 0x80030000) {
-                      pc = outRegs[31];
-                      next_pc = pc + 4;
-                      fastBoot = false;
-                     return;
+                    pc = GPR[31];
+                    next_pc = pc + 4;
+                    fastBoot = false;
+                    registerLoad.value = 0;
+                    registerLoad.registerNumber = 0;
+                    registerDelayedLoad = registerLoad;
+                    return;
                  }
              }*/
             //----------------------------------------------------------------------
@@ -160,7 +163,7 @@ namespace PS1_Emulator {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
-                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\timers\timers.exe");
+                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gpu\transparency\transparency.exe");
                     break;
 
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 

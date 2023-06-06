@@ -85,9 +85,9 @@ namespace PS1_Emulator {
 
         public byte padding;
         public byte currentCommand;
-        public bool hasDisk = true;       //A game disk, audio disks are not supported yet 
+        public bool hasDisk = false;       //A game disk, audio disks are not supported yet 
         public bool ledOpen = false;
-        public string path = @"C:\Users\Old Snake\Desktop\PS1\ROMS\Metal Gear Solid (USA) (Disc 1) (v1.0)\Metal Gear Solid (USA) (Disc 1).bin";
+        public string path = @"C:\Users\Old Snake\Desktop\PS1\ROMS\Crash Bandicoot 2 - Cortex Strikes Back\Crash Bandicoot 2 - Cortex Strikes Back.bin";
         byte[] disk;
         private delegate*<CD_ROM, void>[] lookUpTable = new delegate*<CD_ROM, void>[0xFF + 1];
 
