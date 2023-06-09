@@ -67,6 +67,7 @@ namespace PS1_Emulator {
         bool interlaced;
         bool display_disabled;
         bool interrupt;
+        int currentLine = 0; //Even/Odd flipping
 
         bool rectangle_texture_x_flip;
         bool rectangle_texture_y_flip;
@@ -149,43 +150,53 @@ namespace PS1_Emulator {
 
 
         public UInt32 read_GPUSTAT() { //TODO make this more accurite depending on GPU state
-            UInt32 value = 0;
+            UInt32 status = 0;
 
-            value |= (((UInt32)this.page_base_x) << 0);
-            value |= (((UInt32)this.page_base_y) << 4);
-            value |= (((UInt32)this.semi_transparency) << 5);
-            value |= (((UInt32)this.texture_depth) << 7);
-            value |= ((Convert.ToUInt32(this.dithering)) << 9);
-            value |= ((Convert.ToUInt32(this.draw_to_display)) << 10);
-            value |= ((Convert.ToUInt32(this.force_set_mask_bit)) << 11);
-            value |= ((Convert.ToUInt32(this.preserve_masked_pixels)) << 12);
-            value |= (((UInt32)this.field) << 13);
+            status |= ((uint)page_base_x) << 0;
+            status |= ((uint)page_base_y) << 4;
+            status |= ((uint)semi_transparency) << 5;
+            status |= ((uint)texture_depth) << 7;
+            status |= ((uint)(dithering ? 1 : 0)) << 9;
+            status |= ((uint)(draw_to_display ? 1 : 0)) << 10;
+            status |= ((uint)(force_set_mask_bit ? 1 : 0)) << 11;
+            status |= ((uint)(preserve_masked_pixels ? 1 : 0)) << 12;
+            status |= ((uint)field) << 13;
 
-            //Bit 14 is not supported 
+            //Bit 14 "Reverseflag" is not supported, or is it? [Insert Vsauce music]
 
-            value |= ((Convert.ToUInt32(this.texture_disable)) << 15);
-            value |= this.horizontalRes.intoStatus();
+            status |= ((uint)(texture_disable ? 1 : 0)) << 15;
+            status |= horizontalRes.intoStatus();
 
-            //Bit 19 locks the bios currently
-            //value |= (((UInt32)this.vrez) << 19); 
+            //Bit 19 locks the bios if we don't emulate bit 31
+            status |= ((uint)verticalRes) << 19; 
 
-            value |= (((UInt32)this.vmode) << 20);
-            value |= (((UInt32)this.displayDepth) << 21);
-            value |= ((Convert.ToUInt32(this.interlaced)) << 22);
-            value |= ((Convert.ToUInt32(this.display_disabled)) << 23);
-            value |= ((Convert.ToUInt32(this.interrupt)) << 24);
+            status |= ((uint)vmode) << 20;
+            status |= (((uint)displayDepth) << 21);
+            status |= ((uint)(interlaced ? 1 : 0)) << 22;
+            status |= ((uint)(display_disabled ? 1 : 0)) << 23;
+            status |= ((uint)(interrupt ? 1 : 0)) << 24;
 
-            value |= 1 << 26;   //Ready to recive command
-            value |= 1 << 27;   //Ready to send VRam to CPU; via GPUREAD
-            value |= 1 << 28;   //Ready to recive DMA block
+            //Ready to recive command
+            status |= ((uint)(currentState == GPUState.ReadyToDecode ? 1 : 0)) << 26;   
 
-            value |= (((UInt32)this.dmaDirection) << 29);
+            //Ready to send VRam to CPU; via GPUREAD
+            status |= ((uint)((gpuTransfer.transferType == TransferType.VRamToCpu && gpuTransfer.paramsReady) ? 1 : 0)) << 27;
 
-            value |= 0 << 31;   //Depends on the current line...
+            /*
+             Bit28: Normally, this bit gets cleared when the command execution is busy (ie. once when the command and all of its parameters are received), however, for Polygon and Line Rendering commands, the bit gets cleared immediately after receiving the command word (ie. before receiving the vertex parameters).
+             */
+
+            bool notReady = currentState == GPUState.LoadingPrimitive || (gpuTransfer.transferType != TransferType.Off && gpuTransfer.paramsReady);
+
+            status |= ((uint)(notReady ? 0 : 1)) << 28;   //Ready to recive DMA block
+
+            status |= ((uint)dmaDirection) << 29;
+
+            status |= ((uint)currentLine) << 31;
 
 
             UInt32 dma_request;
-            switch (this.dmaDirection) {
+            switch (dmaDirection) {
                 case DmaDirection.Off: 
                     dma_request = 0;
                     break;
@@ -194,22 +205,22 @@ namespace PS1_Emulator {
                     dma_request = 1;
                     break;
                 case DmaDirection.CpuToGp0:
-                    dma_request = (value >> 28) & 1;
+                    dma_request = (status >> 28) & 1;
                     break;
 
                 case DmaDirection.VRamToCpu: 
-                    dma_request = (value >> 27) & 1;
+                    dma_request = (status >> 27) & 1;
                     break;
 
                 default:
                     throw new Exception("Invalid DMA direction: " + this.dmaDirection);
             }
 
-            value |= ((UInt32)dma_request) << 25;
+            status |= ((uint)dma_request) << 25;
 
 
             //return 0b01011110100000000000000000000000;
-            return value;
+            return status;
 
         }
 
@@ -232,6 +243,9 @@ namespace PS1_Emulator {
                     if (!display_disabled) {
                         window.display();
                     }
+                    if (verticalRes == VerticalRes.Y480Lines) {
+                        currentLine = (currentLine + 1) & 1;
+                    }
 
                     IRQ_CONTROL.IRQsignal(0);     //VBLANK
                     interrupt = true;
@@ -242,6 +256,9 @@ namespace PS1_Emulator {
 
                 if (!TIMER1.isUsingSystemClock()) {
                     TIMER1.tick(1);
+                }
+                if (verticalRes == VerticalRes.Y240Lines) {
+                    currentLine = (currentLine + 1) & 1;
                 }
 
             }
@@ -513,7 +530,7 @@ namespace PS1_Emulator {
            
             this.interlaced = (value & 0x20) != 0;
 
-            if ((value & 0x80) !=0) {
+            if ((value & 0x80) != 0) {
                 throw new Exception("Unsupported display mode: " + value.ToString("X"));
             }
 
@@ -575,7 +592,8 @@ namespace PS1_Emulator {
             this.currentState = GPUState.ReadyToDecode;
             this.gpuTransfer.dataPtr = 0;
             this.gpuTransfer.paramPtr = 0;
-            
+            this.currentLine = 0;
+
             //...clear Fifo
 
         }
