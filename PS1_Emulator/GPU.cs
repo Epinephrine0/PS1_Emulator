@@ -31,11 +31,11 @@ namespace PS1_Emulator {
             VRamToCpu = 3
         }
         public enum TransferType { //My own states, because the CPU fucks up the main DMA direction above in the middle of a transfer
-            Off = 0,
-            CpuToGp0 = 0xA0,
-            VRamToCpu = 0xC0,
-            VramToVram = 0x80,
-            VramFill = 0x02        //Does it really belong here? ask nocash
+            Off = 0x0,
+            VramToVram = 0x4,     
+            CpuToGp0 = 0x5,
+            VRamToCpu = 0x6,
+            VramFill                //Does it really belong here? ask nocash
         }
         enum VMode {
             NTSC = 0,
@@ -266,9 +266,7 @@ namespace PS1_Emulator {
         }       
         public void write_GP0(UInt32 value) {
             switch (currentState) {
-                case GPUState.ReadyToDecode: 
-                    gp0_decode(value);
-                    break;
+                case GPUState.ReadyToDecode: gp0_decode(value); break;
 
                 case GPUState.LoadingPrimitive:
                     primitive.add(value);
@@ -296,47 +294,31 @@ namespace PS1_Emulator {
         }
 
         private void gp0_decode(uint value) {
-            UInt32 opcode = value >> 24;
-            switch (opcode) {
-                case 0x00: //NOP
-                case 0xE0: //NOP
-                case uint when opcode >= 0x04 && opcode <= 0x1E: //NOP
-                case uint when opcode >= 0xE7 && opcode <= 0xEF: //NOP
-                case 0x1: break;  //Clear cache
+            //Depending on the value of these 3 bits, further decoding of the other bits can be done.
+            UInt32 opcode = value >> 29;
 
-                //Polygon Commands
-                case uint when opcode >= 0x20 && opcode <= 0x3E:
+            switch (opcode) {
+                case 0x00: misc(value); break;
+
+                case 0x01:      //Polygon Commands
                     primitive = new Polygon(value, semi_transparency);
                     currentState = GPUState.LoadingPrimitive;
                     break;
 
-                //Rectangle Commands
-                case uint when opcode >= 0x60 && opcode <= 0x7F:
-                    ushort page = (ushort)(page_base_x | (((uint)page_base_y) << 4) | (((uint)texture_depth) << 7));
-
-                    primitive = new Rectangle(value, page, semi_transparency);
-                    currentState = GPUState.LoadingPrimitive;
-                    break;
-                
-                //Line Commands
-                case uint when opcode >> 5 == 2:
+                case 0x02:      //Line Commands
                     primitive = new Line(value, semi_transparency);
                     currentState = GPUState.LoadingPrimitive;
                     break;
 
-                //Environment commands
-                case 0xE1: gp0_draw_mode(value); break;
-                case 0xE2: gp0_texture_window(value); break;
-                case 0xE3: gp0_drawing_area_TopLeft(value); break;
-                case 0xE4: gp0_drawing_area_BottomRight(value); break;
-                case 0xE5: gp0_drawing_offset(value); break;
-                case 0xE6: gp0_mask_bit(value); break;
+                case 0x03:      //Rectangle Commands
+                    ushort page = (ushort)(page_base_x | (((uint)page_base_y) << 4) | (((uint)texture_depth) << 7));
+                    primitive = new Rectangle(value, page, semi_transparency);
+                    currentState = GPUState.LoadingPrimitive;
+                    break;
 
-                //Transfer Commands
-                case 0x02:  //Vram Fill
-                case 0xA0:  //CPU to GP0
-                case 0xC0:  //Vram to CPU
-                case 0x80:  //Vram to Vram
+                case 0x04:      //Transfer Commands
+                case 0x05:
+                case 0x06:
                     currentState = GPUState.Transferring;
                     gpuTransfer.transferType = (TransferType)opcode;
                     gpuTransfer.paramPtr = 0;
@@ -345,8 +327,10 @@ namespace PS1_Emulator {
                     gpuTransfer.parameters[gpuTransfer.paramPtr++] = value;
                     break;
 
-                default:
-                    throw new Exception(opcode.ToString("x") + " - " + (value >> 29));
+                            //Environment commands
+                case 0x07: environment(value); break;
+
+                default: throw new Exception("GP0: " + opcode.ToString("x") + " - " + (value >> 29));
             }
         }
 
@@ -400,6 +384,45 @@ namespace PS1_Emulator {
                     throw new NotImplementedException();
 
             }
+        }
+        private void misc(uint command) {
+            uint opcode = command >> 24;
+
+            switch (opcode) {
+                case 0x00:        //NOP
+                case 0x01:       //Clear Cache
+                    break;
+
+                case 0x02:  //Vram Fill
+                    currentState = GPUState.Transferring;
+                    gpuTransfer.transferType = TransferType.VramFill;
+                    gpuTransfer.paramPtr = 0;
+                    gpuTransfer.dataPtr = 0;
+                    gpuTransfer.parameters = new uint[gpuTransfer.transferType == TransferType.VramToVram ? 4 : 3];
+                    gpuTransfer.parameters[gpuTransfer.paramPtr++] = command;
+                    break;
+
+                case uint when opcode >= 0x04 && opcode <= 0x1E: break; //NOP
+
+                default: throw new Exception("Unknown GP0 misc command: " + opcode.ToString("x"));
+
+            }
+
+        }
+        private void environment(uint command) {
+            uint opcode = command >> 24 ;
+            switch (opcode) {
+                case 0xE0: break; //NOP
+                case 0xE1: gp0_draw_mode(command); break;
+                case 0xE2: gp0_texture_window(command); break;
+                case 0xE3: gp0_drawing_area_TopLeft(command); break;
+                case 0xE4: gp0_drawing_area_BottomRight(command); break;
+                case 0xE5: gp0_drawing_offset(command); break;
+                case 0xE6: gp0_mask_bit(command); break;
+                case uint when opcode >= 0xE7 && opcode <= 0xEF: break; //NOP
+                default: throw new Exception("Unknown GP0 Environment command: " + opcode.ToString("x"));
+            }
+
         }
 
         public void ClearMemory<T>(ref List<T> list) {
