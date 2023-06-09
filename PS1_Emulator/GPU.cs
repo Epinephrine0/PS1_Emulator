@@ -403,11 +403,9 @@ namespace PS1_Emulator {
         }
 
         public void ClearMemory<T>(ref List<T> list) {
-
             list.Clear();
             list.Capacity = 0;
             list.TrimExcess();
-            
         }
        
         private void gp0_mask_bit(UInt32 value) {
@@ -439,7 +437,6 @@ namespace PS1_Emulator {
             this.drawing_y_offset = (Int16)(((Int16)(y << 5)) >> 5);
 
             window.setOffset(drawing_x_offset, drawing_y_offset,0);
-           
         }
 
         private void gp0_drawing_area_BottomRight(UInt32 value) {
@@ -542,12 +539,11 @@ namespace PS1_Emulator {
             this.page_base_y = (byte)((value >> 4) & 1);
             this.semi_transparency = (byte)((value >> 5) & 3);
             this.texture_depth = (byte)((value >> 7) & 3);
-
-            this.dithering = (((value >> 9) & 1) != 0);
-            this.draw_to_display = (((value >> 10) & 1) != 0);
-            this.texture_disable = (((value >> 11) & 1) != 0);
-            this.rectangle_texture_x_flip = (((value >> 12) & 1) != 0);
-            this.rectangle_texture_y_flip = (((value >> 13) & 1) != 0);
+            this.dithering = ((value >> 9) & 1) != 0;
+            this.draw_to_display = ((value >> 10) & 1) != 0;
+            this.texture_disable = ((value >> 11) & 1) != 0;
+            this.rectangle_texture_x_flip = ((value >> 12) & 1) != 0;
+            this.rectangle_texture_y_flip = ((value >> 13) & 1) != 0;
 
         }
         private void gp1_reset() {
@@ -594,7 +590,7 @@ namespace PS1_Emulator {
             this.gpuTransfer.paramPtr = 0;
             this.currentLine = 0;
 
-            //...clear Fifo
+            //...Clear Fifo
 
         }
 
@@ -623,8 +619,8 @@ namespace PS1_Emulator {
                     return lastGPURead;
 
                 case 0x2: 
-                    lastGPURead = (texture_window_x_mask | (texture_window_y_mask << 5) | 
-                        (texture_window_x_offset << 10) | (texture_window_y_offset << 15));
+                    lastGPURead = texture_window_x_mask | (texture_window_y_mask << 5) | 
+                        (texture_window_x_offset << 10) | (texture_window_y_offset << 15);
                     break;
                 
                 case 0x3: lastGPURead = (uint)(drawing_area_left | drawing_area_top << 10); break;
@@ -674,8 +670,8 @@ namespace PS1_Emulator {
             return 0f;  
 
         }
-        public UInt32 intoStatus() {      //Bits [18:16] of GPUSTAT
-            return ((UInt32)this.HR) << 16;
+        public uint intoStatus() {      //Bits [18:16] of GPUSTAT
+            return ((uint)this.HR) << 16;
         }
 
     }
