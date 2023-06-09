@@ -110,7 +110,7 @@ namespace PS1_Emulator {
               ((resolution >> 16) & 0x1FF) : ((((resolution >> 16) - 1) & 0x1FF) + 1));
 
             public ushort size => (ushort)(((width * height) + 1) & ~1);
-            public bool dataReady => size == dataPtr;
+            public bool dataEnd => size == dataPtr;
             public ushort destination_X => (ushort)(parameters[1] & (transferType == TransferType.VramFill ? 0x3F0 : 0x3FF));
             public ushort destination_Y => (ushort)((parameters[1] >> 16) & 0x1FF);
             public float fillColor_R => (float)((parameters[0] & 0xFF) / 255.0);
@@ -339,7 +339,7 @@ namespace PS1_Emulator {
                     gpuTransfer.data[gpuTransfer.dataPtr++] = (ushort)(value & 0xFFFF);
                     gpuTransfer.data[gpuTransfer.dataPtr++] = (ushort)((value >> 16) & 0xFFFF);
 
-                    if (gpuTransfer.dataReady) {
+                    if (gpuTransfer.dataEnd) {
                         window.update_vram(gpuTransfer.destination_X, gpuTransfer.destination_Y,
                             gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
                         currentState = GPUState.ReadyToDecode;
@@ -350,7 +350,7 @@ namespace PS1_Emulator {
                 case TransferType.VRamToCpu:
                     window.readBackTexture(gpuTransfer.destination_X, gpuTransfer.destination_Y,
                         gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
-                    gpuTransfer.transferType = TransferType.Off;
+                    //gpuTransfer.transferType = TransferType.Off;
                     currentState = GPUState.ReadyToDecode;
                     break;
 
@@ -377,7 +377,7 @@ namespace PS1_Emulator {
 
                     Console.WriteLine(gpuTransfer.transferType);
                     Console.WriteLine(gpuTransfer.paramsReady);
-                    Console.WriteLine(gpuTransfer.dataReady);
+                    Console.WriteLine(gpuTransfer.dataEnd);
 
 
                     throw new NotImplementedException();
@@ -581,7 +581,18 @@ namespace PS1_Emulator {
         }
 
         uint lastGPURead = 0x0;
-        internal uint gpuReadReg() { //TODO handle responding to GP0(C0h) via this register
+        internal uint gpuReadReg() {
+            //Handle responding to GP0(C0h) (Vram to CPU), if it exists 
+            if (gpuTransfer.transferType == TransferType.VRamToCpu) {
+                ushort pixel0 = gpuTransfer.data[gpuTransfer.dataPtr++];
+                ushort pixel1 = gpuTransfer.data[gpuTransfer.dataPtr++];
+                uint merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
+                if (gpuTransfer.dataEnd) {
+                    gpuTransfer.transferType = TransferType.Off;
+                }
+                return merged_Pixels;
+            }
+
             int start = 0;
             int end = 0x8;  //Excluded
             uint final = (uint)(start + ((gpuInfoSelcted - start) % (end - start)));

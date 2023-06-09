@@ -110,21 +110,12 @@ namespace PS1_Emulator {
             }
             else if (GPU.range.contains(physical_address) != null) {
 
-
                 offset = (UInt32)GPU.range.contains(physical_address);
 
                 switch (offset) {
-                    case 0:
-                        //Skip for now
-                        //Debug.WriteLine("Ignoring GPU read offset: " + offset);
-                        return this.GPU.gpuReadReg();
-                       
-                    case 4:
-
-                        return this.GPU.read_GPUSTAT();
-     
-                    default:
-                        throw new Exception("Unhandled read to offset " + offset);
+                    case 0: return this.GPU.gpuReadReg();
+                    case 4: return this.GPU.read_GPUSTAT();
+                    default: throw new Exception("Unhandled read to offset " + offset);
                 }
 
             }
@@ -616,7 +607,6 @@ namespace PS1_Emulator {
 
         private void dma_transfer(ref DMAChannel activeCH) {
             DMAChannel ch = activeCH;
-            int dataPtr = 0;
             int step;
 
             if (ch.get_step() == ch.Step["Increment"]) {
@@ -642,44 +632,35 @@ namespace PS1_Emulator {
                     UInt32 data = this.RAM.read(current_address);
 
                     switch (ch.get_portnum()) {
-                        case 0: //MDECin  (RAM to MDEC)
-                            break;
+                        case 0: break;   //MDECin  (RAM to MDEC)
 
+                        case 2: this.GPU.write_GP0(data); break;
 
-                        case 2:
-
-                            this.GPU.write_GP0(data);
-
-                            break;
                         case 4:
                             this.SPU.DMAtoSPU(data);
 
                             if(transfer_size - 1 <= 0) {
                                 this.SPU.DMA_Read_Request = 0;
-                                
                             }
 
                             break;
 
-                        default:
-
-                            throw new Exception("Unhandled DMA destination port: " + ch.get_portnum());
+                        default: throw new Exception("Unhandled DMA destination port: " + ch.get_portnum());
 
                     }
                 }
 
                 else {
                     switch (ch.get_portnum()) {
-                        case 1: //MDECout (MDEC to RAM)
-                            break;
+                        case 1: break; //MDECout (MDEC to RAM)
 
                         case 2:
-                            UInt16 pixel0 = GPU.gpuTransfer.data[dataPtr++];
-                            UInt16 pixel1 = GPU.gpuTransfer.data[dataPtr++];
-                            //UInt16 pixel0 = GPU.TexData[dataPtr++];
-                            //UInt16 pixel1 = GPU.TexData[dataPtr++];
-
+                            UInt16 pixel0 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
+                            UInt16 pixel1 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
                             UInt32 merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
+                            if (GPU.gpuTransfer.dataEnd) {
+                                GPU.gpuTransfer.transferType = GPU.TransferType.Off;
+                            }
                             this.RAM.write(current_address, merged_Pixels);
                             break;
 
