@@ -49,6 +49,9 @@ namespace PS1_Emulator {
         public void add(uint value) {
             buffer.Add(value);  
         }
+        public bool isReady() {
+            return buffer.Count == numOfParameters;
+        }
 
         public void draw(ref Renderer window) {
             //...and, of course, the GPU does render Rectangles as a single entity, without splitting them into two triangles.
@@ -144,8 +147,6 @@ namespace PS1_Emulator {
                 );*/
         }
 
-        public bool isReady() {
-            return buffer.Count == numOfParameters;
-        }
+       
     }
 }

@@ -163,7 +163,7 @@ namespace PS1_Emulator {
 
             switch (pc) {
                case 0x80030000:   //For executing EXEs
-                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PS1\tests\gpu\transparency\transparency.exe");
+                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PSX-master\GPU\16BPP\RenderTextureRectangle\CLUT8BPP\RenderTextureRectangleCLUT8BPP.exe");
                     break;
 
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
@@ -1313,7 +1313,8 @@ namespace PS1_Emulator {
             cpu._branch = true;
                  
         }
-
+        int[] step = { 1 , 2 };
+        int ptr = 0;
         internal void tick() {
 
             if (isPaused) { return; }
@@ -1330,12 +1331,12 @@ namespace PS1_Emulator {
                 }*/
 
                 emu_cycle();
-                cycles += 2;
+                cycles += step[ptr];
+                ptr = (ptr + 1) & 1;
 
-                //TIMERS are the source of a lots of FPS drops, especially timer 1 as it needs gpu clock
                 if (BUS.TIMER1.isUsingSystemClock()) { BUS.TIMER1.tick(cycles); }
                 BUS.TIMER2.tick(cycles);
-                // 
+
                 BUS.SPU.SPU_Tick(cycles);
                 BUS.GPU.tick(cycles * (double)11 / 7);
                 BUS.IO_PORTS.tick(cycles);

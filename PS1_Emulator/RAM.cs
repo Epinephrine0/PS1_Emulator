@@ -19,7 +19,7 @@ namespace PS1_Emulator {
 
         public UInt32 read(UInt32 offset) {
 
-            CPU.cycles++;
+            //CPU.cycles++;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));
@@ -32,7 +32,7 @@ namespace PS1_Emulator {
             return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
         }
         public void write(UInt32 offset, UInt32 value) {
-            CPU.cycles++;
+            //CPU.cycles++;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));
@@ -51,7 +51,7 @@ namespace PS1_Emulator {
         }
 
         internal void store8(UInt32 offset, byte value) {
-            CPU.cycles++;
+            //CPU.cycles++;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));
@@ -59,7 +59,7 @@ namespace PS1_Emulator {
             data[final] = value;
         }
         internal void store16(UInt32 offset, UInt16 value) {
-            CPU.cycles++;
+            //CPU.cycles++;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));
@@ -72,7 +72,7 @@ namespace PS1_Emulator {
         }
         internal byte load8(UInt32 offset) {
 
-            CPU.cycles++;
+            //CPU.cycles++;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));
@@ -82,7 +82,7 @@ namespace PS1_Emulator {
 
         internal UInt16 load16(UInt32 offset) {
 
-            CPU.cycles++;
+            //CPU.cycles++;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));

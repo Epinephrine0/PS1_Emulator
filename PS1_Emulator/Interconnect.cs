@@ -56,7 +56,7 @@ namespace PS1_Emulator {
                 Console.WriteLine("ERROR: PSX BIOS WAS NOT FOUND!");
                 Console.WriteLine("Press any key to exit");
                 Console.ReadKey();
-                mainWindow.Close();
+                throw e;
             }
             this.memoryControl = new MemoryControl();   
             this.ram_size = new RAM_SIZE(); 
@@ -79,7 +79,7 @@ namespace PS1_Emulator {
 
         public UInt32 loadWord(UInt32 address) {
             uint physical_address = mask(address);
-
+            CPU.cycles++;
             if (BIOS.range.contains(physical_address) != null) {
 
                 offset = (UInt32) BIOS.range.contains(physical_address);
@@ -117,7 +117,7 @@ namespace PS1_Emulator {
                     case 0:
                         //Skip for now
                         //Debug.WriteLine("Ignoring GPU read offset: " + offset);
-                        return 0xFF; // this.GPU.gpuReadReg();
+                        return this.GPU.gpuReadReg();
                        
                     case 4:
 
@@ -178,6 +178,7 @@ namespace PS1_Emulator {
         int CDROM_delay_write; 
         public void storeWord(UInt32 address,UInt32 value) {
             uint physical_address = mask(address);
+            CPU.cycles++;
 
 
             if (memoryControl.range.contains(physical_address) != null) {
@@ -326,7 +327,7 @@ namespace PS1_Emulator {
 
         internal byte load8(UInt32 address) {
             uint physical_address = mask(address);
-
+            CPU.cycles++;
             if (debug) {
                // Debug.WriteLine("ADDR:" + address.ToString("x"));
             }
@@ -378,7 +379,7 @@ namespace PS1_Emulator {
 
         internal UInt16 load16(UInt32 address) {
             uint physical_address = mask(address);
-
+            CPU.cycles++;
 
             if (this.SPU.range.contains(physical_address) != null) {
 
@@ -448,6 +449,7 @@ namespace PS1_Emulator {
 
         public void storeHalf(UInt32 address, UInt16 value) {
             uint physical_address = mask(address);
+            CPU.cycles++;
 
             if (this.SPU.range.contains(physical_address) != null) {
                 offset = (UInt32)SPU.range.contains(physical_address);
@@ -513,6 +515,7 @@ namespace PS1_Emulator {
         }
         public void storeByte(UInt32 address, byte value) {
             uint physical_address = mask(address);
+            CPU.cycles++;
 
             if (this.expansion2.range.contains(physical_address) != null) {
                 Debug.WriteLine("Unhandled write to EXPANTION2 at address : " + address.ToString("x"));
@@ -681,12 +684,6 @@ namespace PS1_Emulator {
                             break;
 
                       case 3:
-
-                          /*  if (CD_ROM.currentSector.Count == 0) {
-                                this.ram.write(current_address, (uint)((CD_ROM.padding) | (CD_ROM.padding << 8) | (CD_ROM.padding << 16) | (CD_ROM.padding << 24)));
-                                break;
-                            }
-                          */
 
                             uint byte0 = CD_ROM.currentSector.Dequeue();
                             uint byte1 = CD_ROM.currentSector.Dequeue();

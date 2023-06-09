@@ -38,14 +38,14 @@ namespace PS1_Emulator {
         }
 
         public byte load8(UInt32 offset) {
-            CPU.cycles += 20;
+            CPU.cycles++;
 
 
             return data[offset];
         }
 
         internal UInt16 load16(uint offset) {
-            CPU.cycles += 20;
+            CPU.cycles += 2;
 
             UInt32 b0 = data[offset + 0];
             UInt32 b1 = data[offset + 1];

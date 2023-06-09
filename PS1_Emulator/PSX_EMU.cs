@@ -10,6 +10,7 @@ using System;
 using System.Threading;
 using System.IO;
 using System.Linq;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace PS1_Emulator {
     public class PSX_EMU {
@@ -69,6 +70,7 @@ namespace PS1_Emulator {
         private int texCoords;
         private int texWindow;
         private int texModeLoc;
+        private int maskBitSettingLoc;
         private int clutLoc;
         private int texPageLoc;
         private int display_areay_X_Loc;
@@ -176,6 +178,7 @@ namespace PS1_Emulator {
             uniform int TextureMode;
 
             uniform int transparencyMode;
+            uniform int maskBitSetting;
 
             flat in int isScreenQuad;
 
@@ -215,7 +218,29 @@ namespace PS1_Emulator {
                         ret.a = 1.0;
                         return ret;
                     }
-    
+
+              vec4 handleAlphaValues() {
+                        vec4 alpha;
+
+                        switch (transparencyMode) {
+                            case 0:                     // B/2 + F/2
+                                alpha.xyzw = vec4(0.5, 0.5, 0.5, 0.5);      
+                                break;
+
+                            case 1:                     // B + F
+                            case 2:                     // B - F (Function will change to reverse subtract)
+                                alpha.xyzw = vec4(1.0, 1.0, 1.0, 1.0);      
+                                break;
+
+                            case 3:                     // B + F/4
+                                alpha.xyzw = vec4(0.25, 0.25, 0.25, 1.0);      
+                                break; 
+
+                              }
+
+                        return alpha;
+
+                    }
 
             void main()
             {
@@ -236,27 +261,15 @@ namespace PS1_Emulator {
 
 
   	            if(TextureMode == -1){		//No texture, for now i am using my own flag (TextureMode) instead of (inTexpage & 0x8000) 
-    		             outputColor.rgb = vec3(color_in.r, color_in.g,color_in.b);
-                         
-                            switch (transparencyMode) {
-                            case 0:
-                                outputColor.a = 0.5;
-                                outputBlendColor.a = 0.5;
-                                break;
+    		             outputColor.rgb = vec3(color_in.r, color_in.g, color_in.b);
+                         outputBlendColor = handleAlphaValues();
 
-                            case 1: 
-                            case 2:
-
-                                outputColor.a = 1.0;
-                                outputBlendColor.a = 1.0;
-                                break;
-
-                            case 3:
-                                outputColor.a = 0.25;
-                                outputBlendColor.a = 1.0;
-                                break;
-                            
-                              }
+                         /*if(((maskBitSetting >> 1) & 1) == 1){
+                            int currentPixel = sample16(ivec2((gl_FragCoord.xy - vec2(0.5,0.5)) * vec2(1024.0, 512.0)));
+                            if(((currentPixel >> 15) & 1) == 1){
+                                discard;
+                            }
+                         }*/
 
    	 	             return;
 
@@ -276,33 +289,29 @@ namespace PS1_Emulator {
 		               if (outputColor.rgb == vec3(0.0, 0.0, 0.0)) discard;
                            outputColor = texBlend(outputColor, vec4(color_in,1.0));
 
-                            
-                        int transparent = (sample16(sampleCoords) >> 15) & 1;     //Get the FINAL clut color including alpha
+                        //Check if pixel is transparent depending on bit 15 of the final color value
 
-                        if(transparent == 1){
-                            switch (transparencyMode) {
-                            case 0:
-                                outputColor.a = 0.5;
-                                outputBlendColor.a = 0.5;
-                                break;
+                        bool isTransparent = ((sample16(sampleCoords) >> 15) & 1) == 1;     
 
-                            case 1:
-                            case 2:
+                        if(isTransparent){
+                           outputBlendColor = handleAlphaValues();
 
-                                outputColor.a = 1.0;
-                                outputBlendColor.a = 1.0;
-                                break;
-
-                            case 3:
-                                outputColor.a = 0.25;
-                                outputBlendColor.a = 1.0;
-                                break;
-                            
-                              }
                         }else{
-                              outputColor.a = 1.0;
-                              outputBlendColor.a = 0.0;
+                              outputBlendColor = vec4(1.0, 1.0, 1.0, 0.0);
                         }
+
+                        //Handle Mask Bit setting
+
+                            /*if(((maskBitSetting >> 1) & 1) == 1){
+                                int currentPixel = sample16(ivec2((gl_FragCoord.xy - vec2(0.5,0.5)) * vec2(1024.0, 512.0)));
+                                if(((currentPixel >> 15) & 1) == 1){
+                                    discard;
+                                }
+                            }
+
+                            if((maskBitSetting & 1) == 1){
+                                outputColor.a = 1.0;
+                            }*/
 		                  
 
 	            }else if (TextureMode == 1) { // 8 bit texture
@@ -317,35 +326,32 @@ namespace PS1_Emulator {
 
                            outputColor = texBlend(outputColor, vec4(color_in,1.0));
 
-                         int transparent = (sample16(sampleCoords) >> 15) & 1;     //Get the FINAL clut color including alpha
-                        if(transparent == 1){
-                            switch (transparencyMode) {
-                            case 0:
-                                outputColor.a = 0.5;
-                                outputBlendColor.a = 0.5;
-                                break;
+                           //Check if pixel is transparent depending on bit 15 of the final color value
 
-                            case 1:
-                            case 2:
+                           bool isTransparent = ((sample16(sampleCoords) >> 15) & 1) == 1;     
+                        
+                            if(isTransparent){
+                                 outputBlendColor = handleAlphaValues();
 
+                            }else{
+                                outputBlendColor = vec4(1.0, 1.0, 1.0, 0.0);
+                            }
+
+                        
+                            //Handle Mask Bit setting
+
+                              /*if(((maskBitSetting >> 1) & 1) == 1){
+                                int currentPixel = sample16(ivec2((gl_FragCoord.xy - vec2(0.5,0.5)) * vec2(1024.0, 512.0)));
+                                if(((currentPixel >> 15) & 1) == 1){
+                                    discard;
+                                }
+                            }
+                             if((maskBitSetting & 1) == 1){
                                 outputColor.a = 1.0;
-                                outputBlendColor.a = 1.0;
-                                break;
-
-                            case 3:
-                                outputColor.a = 0.25;
-                                outputBlendColor.a = 1.0;
-                                break;
-                            
-                              }
-                        }else{
-                              outputColor.a = 1.0;
-                              outputBlendColor.a = 0.0;
-                        }
-                            
+                            }*/
 
 
-                       }
+                    }
 
 	            else {  //16 Bit texture
  		               ivec2 texelCoord = UV + texpageBase;
@@ -356,30 +362,26 @@ namespace PS1_Emulator {
 
                            outputColor = texBlend(outputColor, vec4(color_in,1.0));	
                             
-                        int transparent = (sample16(texelCoord) >> 15) & 1;     //Get the FINAL clut color including alpha
-                        if(transparent == 1){
-                            switch (transparencyMode) {
-                            case 0:
-                                outputColor.a = 0.5;
-                                outputBlendColor.a = 0.5;
-                                break;
+                           //Check if pixel is transparent depending on bit 15 of the final color value
 
-                            case 1:
-                            case 2:
+                           bool isTransparent = ((sample16(texelCoord) >> 15) & 1) == 1;
 
-                                outputColor.a = 1.0;
-                                outputBlendColor.a = 1.0;
-                                break;
+                            if(isTransparent){
+                                outputBlendColor = handleAlphaValues();
 
-                            case 3:
-                                outputColor.a = 0.25;
-                                outputBlendColor.a = 1.0;
-                                break;
-                            
-                              }
                         }else{
-                              outputColor.a = 1.0;
-                              outputBlendColor.a = 0.0;
+                               outputBlendColor  = vec4(1.0, 1.0, 1.0, 0.0);
+                        }
+
+                        //Handle Mask Bit setting
+                        if(((maskBitSetting >> 1) & 1) == 1){
+                                int currentPixel = sample16(ivec2((gl_FragCoord.xy - vec2(0.5,0.5)) * vec2(1024.0, 512.0)));
+                                if(((currentPixel >> 15) & 1) == 1){
+                                    discard;
+                                }
+                        }
+                            if((maskBitSetting & 1) == 1){
+                                outputColor.a = 1.0;
                         }
                     
 
@@ -397,9 +399,15 @@ namespace PS1_Emulator {
             GL.Clear(ClearBufferMask.ColorBufferBit);
             SwapBuffers();
 
-           
-            BUS bus = new BUS(this);
-            CPU = new CPU(bus);     //The Renderer will handle the CPU clock
+
+            try {
+                BUS bus = new BUS(this);
+                CPU = new CPU(bus);     //The Renderer will handle the CPU clock
+            }
+            catch (FileNotFoundException e) {
+                Close();
+                return;
+            }
 
             if (CPU.BUS.CD_ROM.hasDisk) {
                 string gameName = Path.ChangeExtension(CPU.BUS.CD_ROM.path, null);
@@ -423,7 +431,7 @@ namespace PS1_Emulator {
             GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);      //This can be ignored as the PS1 BIOS will initially draw a black quad clearing the buffer anyway
             GL.Clear(ClearBufferMask.ColorBufferBit);  
             SwapBuffers();
-
+            
             uniform_offset = GL.GetUniformLocation(shader.Handle, "offset");
             fullVram = GL.GetUniformLocation(shader.Handle, "fullVram");
             texWindow = GL.GetUniformLocation(shader.Handle, "u_texWindow");
@@ -432,6 +440,7 @@ namespace PS1_Emulator {
             texPageLoc = GL.GetUniformLocation(shader.Handle, "inTexpage");
 
             transparencyModeLoc = GL.GetUniformLocation(shader.Handle, "transparencyMode");
+            maskBitSettingLoc = GL.GetUniformLocation(shader.Handle, "maskBitSetting");
 
             display_areay_X_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x");
             display_areay_Y_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y");
@@ -639,6 +648,8 @@ namespace PS1_Emulator {
             GL.DrawArrays(PrimitiveType.TriangleFan, 0, vertices.Length / 2);
 
         }
+
+        //Not needed
         public void draw(ref short[] vertices, ref byte[] colors, ref ushort[] uv, ushort clut, ushort page, int texMode) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
             GL.Uniform1(texModeLoc, texMode);
@@ -918,7 +929,7 @@ namespace PS1_Emulator {
             base.OnUpdateFrame(args);
             //Clock the CPU
             CPU.tick();
-           
+
             //Read controller input 
             CPU.BUS.IO_PORTS.controller1.readInput(JoystickStates[0]);
             //cpu.bus.IO_PORTS.controller2.readInput(JoystickStates[1]);
@@ -961,7 +972,7 @@ namespace PS1_Emulator {
             GL.Enable(EnableCap.Blend);
             //B = Destination
             //F = Source
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.Src1Alpha);
+            GL.BlendFunc(BlendingFactor.Src1Color, BlendingFactor.Src1Alpha);        //Alpha values are handled in GLSL
             if (function == 2) {
                 GL.BlendEquation(BlendEquationMode.FuncReverseSubtract);
 
@@ -995,6 +1006,10 @@ namespace PS1_Emulator {
                  default:
                      throw new Exception("Unknown blend function: " + function);
              }*/
+        }
+
+        internal void maskBitSetting(int setting) {
+            GL.Uniform1(maskBitSettingLoc, setting);
         }
     }
 
