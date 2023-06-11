@@ -301,7 +301,7 @@ namespace PSXEmulator {
                 case 0x00: misc(value); break;
 
                 case 0x01:      //Polygon Commands
-                    primitive = new Polygon(value, semi_transparency);
+                    primitive = new Polygon(value, semi_transparency, dithering);
                     currentState = GPUState.LoadingPrimitive;
                     break;
 

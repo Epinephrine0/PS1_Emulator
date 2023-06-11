@@ -41,6 +41,7 @@ namespace PSXEmulator {
         int numOfParameters = -1;
         int numberOfVertices = 0;
         uint semi_transparency = 0;
+        bool isDithered = false;
         readonly byte[] NoBlendColors = new[] {       //Colors to blend with if the command does not use blending 
                                                     //The 0x80 will be cancelled in the bledning formula, so they don't change anything
 
@@ -54,7 +55,7 @@ namespace PSXEmulator {
 
         };
         
-        public Polygon(uint value , uint semi_transparency) {
+        public Polygon(uint value , uint semi_transparency, bool ditherEnabled) {
             opcode = (value >> 24);
             isGouraud = (value >> 28 & 1) == 1;
             isQuad = (value >> 27 & 1) == 1;
@@ -81,6 +82,8 @@ namespace PSXEmulator {
                 numOfParameters += 1;
             }
 
+            isDithered = ditherEnabled && (isGouraud || !isRawTextured);
+            
         }
         public void add(uint value) {
             buffer.Add(value);
@@ -142,7 +145,7 @@ namespace PSXEmulator {
                 (ushort)(uv[1] & 0xFF), (ushort)((uv[1] >> 8) & 0xFF),
                 (ushort)(uv[2] & 0xFF), (ushort)((uv[2] >> 8) & 0xFF),
 
-                isTextured, clut,page
+                isTextured, clut, page, false
             );
             if (isQuad) {
                 window.drawTrinangle(
@@ -159,7 +162,7 @@ namespace PSXEmulator {
                 (ushort)(uv[2] & 0xFF), (ushort)((uv[2] >> 8) & 0xFF),
                 (ushort)(uv[3] & 0xFF), (ushort)((uv[3] >> 8) & 0xFF),
 
-                isTextured, clut, page
+                isTextured, clut, page, false
                 );
 
             }

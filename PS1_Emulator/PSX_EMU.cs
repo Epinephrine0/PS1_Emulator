@@ -78,6 +78,8 @@ namespace PSXEmulator {
         private int display_area_Y_Offset_Loc;
         private int vramFrameBuffer;
         private int transparencyModeLoc;
+        private int isDitheredLoc;
+
         Int16 offset_x;
         Int16 offset_y;
 
@@ -176,6 +178,7 @@ namespace PSXEmulator {
             flat in ivec2 texpageBase;
             uniform int TextureMode;
 
+            uniform int isDithered;
             uniform int transparencyMode;
             uniform int maskBitSetting;
 
@@ -188,6 +191,20 @@ namespace PSXEmulator {
             //out vec4 outputColor;
             layout(location = 0, index = 0) out vec4 outputColor;
             layout(location = 0, index = 1) out vec4 outputBlendColor;
+
+            vec4 ditheringTable[4] = vec4[](
+                vec4(-4, 0, -3, 1),
+                vec4(2, -2, 3, -1),
+                vec4(-3, 1, -4, 0),
+                vec4(3, -1, 2, -2)
+            );
+
+                vec3 dither(vec2 poistion) {
+                    int x = int(poistion.x * 1024.0) % 4;
+                    int y = int(poistion.y * 512.0) % 4;
+                    int ditherOffset = int(ditheringTable[y][x]);
+                   return vec3(ditherOffset, ditherOffset ,ditherOffset);
+              }
 
             vec4 grayScale(vec4 color) {
                    float x = 0.299*(color.r) + 0.587*(color.g) + 0.114*(color.b);
@@ -270,6 +287,9 @@ namespace PSXEmulator {
                             }
                          }*/
 
+                         if(isDithered == 1){
+                              outputColor.rgb = (((outputColor.rgb) * vec3(255.0,255.0,255.0)) + dither(vec2(gl_FragCoord.xy - vec2(0.5,0.5)))) / vec3(255.0, 255.0, 255.0);
+                         }
    	 	             return;
 
                  }else if(TextureMode == 0){  //4 Bit texture
@@ -372,7 +392,7 @@ namespace PSXEmulator {
                                outputBlendColor  = vec4(1.0, 1.0, 1.0, 0.0);
                         }
 
-                        //Handle Mask Bit setting
+                        /*//Handle Mask Bit setting
                         if(((maskBitSetting >> 1) & 1) == 1){
                                 int currentPixel = sample16(ivec2((gl_FragCoord.xy - vec2(0.5,0.5)) * vec2(1024.0, 512.0)));
                                 if(((currentPixel >> 15) & 1) == 1){
@@ -381,9 +401,9 @@ namespace PSXEmulator {
                         }
                             if((maskBitSetting & 1) == 1){
                                 outputColor.a = 1.0;
-                        }
-                    
+                        }*/
 
+                          
 	            }
 
 	
@@ -440,6 +460,7 @@ namespace PSXEmulator {
 
             transparencyModeLoc = GL.GetUniformLocation(shader.Handle, "transparencyMode");
             maskBitSettingLoc = GL.GetUniformLocation(shader.Handle, "maskBitSetting");
+            isDitheredLoc = GL.GetUniformLocation(shader.Handle, "isDithered");
 
             display_areay_X_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x");
             display_areay_Y_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y");
@@ -529,7 +550,7 @@ namespace PSXEmulator {
             ushort tx1, ushort ty1,
             ushort tx2, ushort ty2,
             ushort tx3, ushort ty3,
-            bool isTextured, ushort clut, ushort page
+            bool isTextured, ushort clut, ushort page, bool isDithered
             ) {
 
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
@@ -575,6 +596,13 @@ namespace PSXEmulator {
                 GL.Uniform1(clutLoc, 0);
                 GL.Uniform1(texPageLoc, 0);
                 GL.DisableVertexAttribArray(2);
+            }
+
+            if (isDithered) {
+                GL.Uniform1(isDitheredLoc, 1);
+            }
+            else {
+                GL.Uniform1(isDitheredLoc, 0);
             }
 
             GL.DrawArrays(PrimitiveType.Triangles, 0, vertices.Length / 2);
@@ -644,44 +672,12 @@ namespace PSXEmulator {
                 GL.DisableVertexAttribArray(2);
             }
 
+            GL.Uniform1(isDitheredLoc, 0);  //RECTs are NOT dithered
+
             GL.DrawArrays(PrimitiveType.TriangleFan, 0, vertices.Length / 2);
 
         }
 
-        //Not needed
-        public void draw(ref short[] vertices, ref byte[] colors, ref ushort[] uv, ushort clut, ushort page, int texMode) {
-            GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-            GL.Uniform1(texModeLoc, texMode);
-
-            // GL.Enable(EnableCap.ScissorTest);
-            //GL.Enable(EnableCap.Blend);
-
-            GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
-            GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(short), vertices, BufferUsageHint.StreamDraw);
-            GL.VertexAttribIPointer(0, 3, VertexAttribIntegerType.Short, 0, (IntPtr)null);
-            GL.EnableVertexAttribArray(0);
-
-            GL.BindBuffer(BufferTarget.ArrayBuffer, colorsBuffer);
-            GL.BufferData(BufferTarget.ArrayBuffer, colors.Length * sizeof(byte), colors, BufferUsageHint.StreamDraw);
-            GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
-            GL.EnableVertexAttribArray(1);
-
-
-            if (uv != null) {
-                GL.Uniform1(clutLoc, clut);
-                GL.Uniform1(texPageLoc, page);
-
-                GL.BindBuffer(BufferTarget.ArrayBuffer, texCoords);
-                GL.BufferData(BufferTarget.ArrayBuffer, uv.Length * sizeof(ushort), uv, BufferUsageHint.StreamDraw);
-                GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 2 * sizeof(ushort), (IntPtr)null);
-                GL.EnableVertexAttribArray(2);
-            }
-
-            GL.DrawArrays(PrimitiveType.Triangles, 0, vertices.Length / 3);
-            
-            //Lets hope there is no need to sync and wait for the GPU 
-
-        }
 
         internal void drawLines(ref short[] vertices, ref byte[] colors, bool isPolyLine) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
@@ -696,6 +692,8 @@ namespace PSXEmulator {
             GL.BufferData(BufferTarget.ArrayBuffer, colors.Length * sizeof(byte), colors, BufferUsageHint.StreamDraw);
             GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(1);
+
+            GL.Uniform1(isDitheredLoc, 1);  //LINEs are dithered
 
             GL.DrawArrays(isPolyLine? PrimitiveType.LineStrip : PrimitiveType.Lines, 0, vertices.Length / 2);
 
@@ -761,38 +759,7 @@ namespace PSXEmulator {
             GL.ClearColor(0, 0, 0, 1.0f);
 
         }
-        public void rectFill(byte r, byte g, byte b, int x, int y, int width, int height) { 
-
-            GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
-
-            //Define the quad 
-            Int16[] vertices = {
-                (short)(x),(short)y,0,
-                (short)(x+width),(short)y,0,
-                (short)x,(short)(y+height),0,
-
-                 (short)(x+width),(short)y,0,
-                 (short)x,(short)(y+height),0,
-                 (short)(x+width),(short)(y+height),0,
-
-            };
-            byte[] colors = {
-                r,g,b,
-                r,g,b,
-                r,g,b,
-                r,g,b,
-                r,g,b,
-                r,g,b
-            };
-            ushort[] uv = null; //Dummy
-            draw(ref vertices,ref colors,ref uv,0,0,-1);
-
-
-        }
-
-
-
+       
 
         public void update_vram(int x, int y , int width, int height, ref ushort[] textureData) {
             if (width == 0) { width = VRAM_WIDTH; }
