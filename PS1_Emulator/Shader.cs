@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class Shader {
         public readonly int Handle;
 

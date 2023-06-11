@@ -1,8 +1,8 @@
 ﻿using NAudio.Wave;
 using System;
-using static PS1_Emulator.Voice.ADSR;
+using static PSXEmulator.Voice.ADSR;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class SPU {                            //Thanks to BlueStorm 
         const uint baseAddress = 0x1f801c00;
         public Range range = new Range(baseAddress, 640);

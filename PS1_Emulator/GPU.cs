@@ -1,5 +1,5 @@
 ﻿using OpenTK.Graphics.ES20;
-using PS1_Emulator.PS1_Emulator;
+using PSXEmulator.PS1_Emulator;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -12,10 +12,10 @@ using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
-using static PS1_Emulator.GPU;
+using static PSXEmulator.GPU;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class GPU {
         public Range range = new Range(0x1f801810, 5);            //Assumption  
         Renderer window;

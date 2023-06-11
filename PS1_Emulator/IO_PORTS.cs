@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class IO_PORTS {
         //TODO:
         //Baudrate timer

@@ -10,12 +10,11 @@ using System;
 using System.Threading;
 using System.IO;
 using System.Linq;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
-namespace PS1_Emulator {
-    public class PSX_EMU {
+namespace PSXEmulator {
+    public class PSX_OpenTK {
         public Renderer mainWindow;
-        public PSX_EMU() {
+        public PSX_OpenTK() {
 
             var nativeWindowSettings = new NativeWindowSettings() {
                 Size = new Vector2i(1024, 512),

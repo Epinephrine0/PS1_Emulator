@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public unsafe class CPU {
         private UInt32 pc;           //32-bit program counter
         private UInt32 next_pc;

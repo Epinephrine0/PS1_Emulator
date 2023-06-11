@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     internal class Rectangle : Primitive {
         List<uint> buffer = new List<uint>();
         int numOfParameters = -1;

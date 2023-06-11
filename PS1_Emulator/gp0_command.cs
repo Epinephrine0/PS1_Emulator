@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     internal class GP0_Command {
         public int num_of_parameters;
         public uint opcode;

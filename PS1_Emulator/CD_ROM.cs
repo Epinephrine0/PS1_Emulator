@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public unsafe class CD_ROM {
         public Range range = new Range(0x1F801800, 4);  
 

@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class Matrix3 {
         public Vector3[] vectors; 
         public Matrix3() {

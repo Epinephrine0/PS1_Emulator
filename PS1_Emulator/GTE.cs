@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Drawing.Drawing2D;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     internal class GTE {
 
         public Command currentCommand;

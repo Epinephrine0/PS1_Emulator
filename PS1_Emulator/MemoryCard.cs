@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class MemoryCard {       
         byte[] data;
         byte FLAG = 0x8;

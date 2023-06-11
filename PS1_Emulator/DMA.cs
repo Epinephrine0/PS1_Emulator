@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class DMA {
         public Range range = new Range(0x1f801080, 0x80);
         UInt32 control = 0x07654321;

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class Vector3{
         public Vector3() {
 

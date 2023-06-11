@@ -5,7 +5,7 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class RAM {
                     
         public Range range = new Range(0x00000000, 8*1024*1024);        //2MB RAM can be mirrored to the first 8MB (strangely, enabled by default)

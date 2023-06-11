@@ -1,4 +1,4 @@
-﻿using PS1_Emulator.PS1_Emulator;
+﻿using PSXEmulator.PS1_Emulator;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
 
     public class BUS {      //Main BUS, connects the CPU to everything
         UInt32 offset;

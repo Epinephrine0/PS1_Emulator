@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     public class Voice {
         public Int16 volumeLeft;
         public Int16 volumeRight;

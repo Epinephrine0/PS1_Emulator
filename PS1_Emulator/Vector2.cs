@@ -1,4 +1,4 @@
-﻿namespace PS1_Emulator {
+﻿namespace PSXEmulator {
     public class Vector2 {
 
         public short X {

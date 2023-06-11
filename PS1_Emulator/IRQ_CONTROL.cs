@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
-namespace PS1_Emulator {
+namespace PSXEmulator {
     internal class IRQ_CONTROL {
         public static Range range = new Range(0x1f801070, 8);
 
