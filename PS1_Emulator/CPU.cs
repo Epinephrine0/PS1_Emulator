@@ -1313,8 +1313,7 @@ namespace PSXEmulator {
             cpu._branch = true;
                  
         }
-        int[] step = { 1 , 2 };
-        int ptr = 0;
+     
         internal void tick() {
 
             if (isPaused) { return; }
@@ -1331,8 +1330,9 @@ namespace PSXEmulator {
                 }*/
 
                 emu_cycle();
-                cycles += step[ptr];
-                ptr = (ptr + 1) & 1;
+                emu_cycle();
+
+                cycles += 2;
 
                 if (BUS.TIMER1.isUsingSystemClock()) { BUS.TIMER1.tick(cycles); }
                 BUS.TIMER2.tick(cycles);
