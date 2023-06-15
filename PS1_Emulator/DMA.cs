@@ -1,9 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PSXEmulator {
     public class DMA {
@@ -28,8 +23,10 @@ namespace PSXEmulator {
             }   
         }
 
-    public UInt32 read_dma_reg(UInt32 offset) {
-            UInt32 ch = (offset & 0x70) >> 4;       //Bits [7:5] for the channel number
+    public UInt32 loadWord(UInt32 address) {
+            uint offset = address - range.start;
+
+            UInt32 ch = (offset & 0x70) >> 4;           //Bits [7:5] for the channel number
             UInt32 field = (offset & 0xf);              //Bits [3:0] for the field number
 
 
@@ -79,8 +76,8 @@ namespace PSXEmulator {
 
 
         }
-        public void set_dma_reg(UInt32 offset, UInt32 value) {
-
+        public void storeWord(UInt32 address, UInt32 value) {
+            uint offset = address - range.start;
 
             UInt32 ch = (offset & 0x70) >> 4;       //Bits [7:5] for the channel number
             UInt32 field = (offset & 0xf);              //Bits [3:0] for the field number

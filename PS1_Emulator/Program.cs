@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Windows;
-using System.Threading;
 
 namespace PSXEmulator {
-        internal class Program {
+    internal class Program {
 
         [STAThread]
         static void Main(string[] args) {

@@ -3,9 +3,10 @@ using System;
 using static PSXEmulator.Voice.ADSR;
 
 namespace PSXEmulator {
-    public class SPU {                            //Thanks to BlueStorm 
+    public class SPU {                            //Thanks to BlueStorm, lots of things are here "inspired" :D
         const uint baseAddress = 0x1f801c00;
         public Range range = new Range(baseAddress, 640);
+
         byte[] RAM = new byte[512*1024];
 
         UInt16 SPUCNT;
@@ -85,21 +86,17 @@ namespace PSXEmulator {
         //private WaveFileWriter waveFileWriter = new WaveFileWriter("output.wav", new WaveFormat());     //For audio dumping
 
         public SPU() {
-
-
            voices = new Voice[24];
            for (int i = 0; i < voices.Length; i++) { 
                 voices[i] = new Voice();
-            
            }
 
             bufferedWaveProvider.DiscardOnBufferOverflow = true;
             bufferedWaveProvider.BufferDuration = new TimeSpan(0, 0, 0, 0, 300);
             waveOutEvent.Init(bufferedWaveProvider);
-
         }
-        public void store16(uint offset, UInt16 value) {
-
+        public void storeHalf(uint address, UInt16 value) {
+            uint offset = address - range.start;
             switch (offset) {
 
                 case uint when ((offset + baseAddress) >= 0x1F801C00 && (offset + baseAddress) <= 0x1F801D7F):        //Voice 0...23 
@@ -208,140 +205,59 @@ namespace PSXEmulator {
                 case 0x1FC: vLIN = (short)value; break;
                 case 0x1FE: vRIN = (short)value; break;
 
-                default:
-                    throw new NotImplementedException("Offset: " +offset.ToString("x")+ "\n" 
+                default: throw new NotImplementedException("Offset: " +offset.ToString("x")+ "\n" 
                                                       +"Full address: 0x" + (offset+0x1f801c00).ToString("x"));
-
             }
-
-
-
-
         }
-    
-
-        public UInt16 load16(uint offset) {
+        public UInt16 loadHalf(uint address) {
+            uint offset = address - range.start;
 
             switch (offset) {
-                case 0x1aa:
-                    return SPUCNT;
-                case 0x1ae:
-                    return readStat();
-
-                case 0x180:
-                    return (ushort)mainVolumeLeft;
-                case 0x182:
-                    return (ushort)mainVolumeRight;
-
-                case 0x184:
-                    return (ushort)vLOUT;
-
-                case 0x186:
-                    return (ushort)vROUT;
-
-                case 0x188:
-
-                    return (ushort)KON;
-
-                case 0x18a:
-
-                    return (ushort)(KON>>16);
-
-                case 0x18c:
-
-                    return (ushort)KOFF;
-
-                case 0x18e:
-
-                    return (ushort)(KOFF>>16);
-
-                case 0x1ac:
-                    return transfer_Control;
+                case 0x1aa: return SPUCNT;
+                case 0x1ae: return readStat();
+                case 0x180: return (ushort)mainVolumeLeft;
+                case 0x182: return (ushort)mainVolumeRight;
+                case 0x184: return (ushort)vLOUT;
+                case 0x186: return (ushort)vROUT;
+                case 0x188: return (ushort)KON;
+                case 0x18a: return (ushort)(KON>>16);
+                case 0x18c: return (ushort)KOFF;
+                case 0x18e: return (ushort)(KOFF>>16);
+                case 0x1ac: return transfer_Control;
 
                 case uint when ((offset + baseAddress) >= 0x1F801C00 && (offset + baseAddress) <= 0x1F801D7F):        //Voice 0...23 
                     uint index = (((offset + baseAddress) & 0xFF0) >> 4) - 0xC0;         //index = offset/16 - 0xC0    (Inverse of the equation in psx-spx)
 
-
                     switch ((offset + baseAddress) & 0xf) {
 
-                        case 0x0:
-                            
-                            return (ushort)voices[index].volumeLeft;
+                        case 0x0: return (ushort)voices[index].volumeLeft;
+                        case 0x2: return (ushort)voices[index].volumeRight;
+                        case 0x4: return voices[index].ADPCM_Pitch;
+                        case 0x6: return voices[index].ADPCM;
+                        case 0x8: return voices[index].adsr.adsrLOW;
+                        case 0xA: return voices[index].adsr.adsrHI;
+                        case 0xC: return voices[index].adsr.adsrVolume;
+                        case 0xE: return voices[index].ADPCM_RepeatAdress;
 
-                        case 0x2:
-                            return (ushort)voices[index].volumeRight;
-
-                        case 0x4: 
-
-                            return voices[index].ADPCM_Pitch;
-
-                        case 0x6:
-
-                            return voices[index].ADPCM;
-
-                        case 0x8:
-
-                            return voices[index].adsr.adsrLOW;
-
-                        case 0xA:
-
-                            return voices[index].adsr.adsrHI;
-
-
-                        case 0xC:
-
-                            return voices[index].adsr.adsrVolume;
-
-                        case 0xE:
-
-                            return voices[index].ADPCM_RepeatAdress;
-
-                        default:
-
-                            throw new Exception("unknown voice register: " + (offset & 0xf).ToString("x"));
+                        default: throw new Exception("unknown voice register: " + (offset & 0xf).ToString("x"));
 
                     }
 
                 // 1F801E00h..1F801E5Fh - Voice 0..23 Internal Registers
 
                 case uint when ((offset + baseAddress) >= 0x1F801E00 && (offset + baseAddress) <= 0x1F801E5F):
-
-                    //Console.WriteLine("[SPU] ignored read from " + (offset + baseAddress).ToString("x"));
                     return 0;
 
                 //1F801D98h - Voice 0..23 Reverb mode aka Echo On (EON) (R/W)
-                case 0x19a: 
-                    return (ushort)(EON >> 16);
-                case 0x198: 
-                    return (ushort)EON;
-
-                case 0x1b8:
-
-                    return (ushort)mainVolumeLeft;  
-
-                case 0x1ba:
-
-                    return (ushort)mainVolumeRight;  
-
-                case 0x1a6:
-
-                    return (ushort)transfer_address;
-
-                case 0x190:
-
-                    return (ushort)PMON;
-
-                case 0x192:
-
-                    return (ushort)(PMON >> 16);
-
-                case 0x194:
-
-                    return (ushort)NON;
-
-                case 0x196:
-
-                    return (ushort)(NON >> 16);
+                case 0x19a: return (ushort)(EON >> 16);
+                case 0x198: return (ushort)EON;
+                case 0x1b8: return (ushort)mainVolumeLeft;  
+                case 0x1ba: return (ushort)mainVolumeRight;  
+                case 0x1a6: return (ushort)transfer_address;
+                case 0x190: return (ushort)PMON;
+                case 0x192: return (ushort)(PMON >> 16);
+                case 0x194: return (ushort)NON;
+                case 0x196: return (ushort)(NON >> 16);
 
                 /*case 0x1b0: //1F801DB0h - CD Audio Input Volume (for normal CD-DA, and compressed XA-ADPCM)
                 case 0x1b2:
@@ -350,36 +266,28 @@ namespace PSXEmulator {
 
                     return 0;*/
 
-                default:
-                    throw new NotImplementedException("Offset: " + offset.ToString("x") + "\n"
+                default: throw new NotImplementedException("Offset: " + offset.ToString("x") + "\n"
                                                       + "Full address: 0x" + (offset + 0x1f801c00).ToString("x"));
-
-
             }
-
         }
 
-
-
         private ushort readStat() {
-            ushort status = 0;
+            uint status = 0;
 
-            status = (ushort)((status << 0) | SPU_Mode);
-            status = (ushort)((status << 6) | IRQ_Flag);
-            status = (ushort)((status << 7) | DMA_Read_Write_Request);
-            status = (ushort)((status << 8) | DMA_Write_Request);
-            status = (ushort)((status << 9) | DMA_Read_Request);
-            status = (ushort)((status << 10) | Data_transfer_busy);
-            status = (ushort)((status << 11) | Writing_Capture_Buffers);
+            status |= SPU_Mode;
+            status |= ((uint)IRQ_Flag) << 6;
+            status |= ((uint)DMA_Read_Write_Request) << 7;
+            status |= ((uint)DMA_Write_Request) << 8;
+            status |= ((uint)DMA_Read_Request) << 9;
+            status |= ((uint)Data_transfer_busy) << 10;
+            status |= ((uint)Writing_Capture_Buffers) << 11;
 
             //12-15 are uknown/unused (seems to be usually zero)
 
-            return status;
-
+            return (ushort)status;
         }
 
         public void setCtrl(UInt16 value) {
-
             SPUCNT = value;
 
             SPU_Enable = ((SPUCNT >> 15) & 1) == 1;
@@ -387,7 +295,6 @@ namespace PSXEmulator {
             SPU_Mode = (byte)(value & 0x3F);
             DMA_Read_Write_Request = (byte)((value >> 5) & 0x1);
             reverbEnabled = ((value >> 7) & 1) == 1;        //Only affects Reverb bufffer write, SPU can still read from reverb area
-
 
             if (!SPU_Enable) {
                 for (int i = 0; i < voices.Length; i++) {
@@ -408,10 +315,8 @@ namespace PSXEmulator {
         int sumLeft;
         int sumRight;
         private int reverbCounter = 0;
-
-        int i = 0;
         public void SPU_Tick(int cycles) {        //SPU Clock
-            
+           
             clk_counter += cycles;
             if (clk_counter < CYCLES_PER_SAMPLE) { return; }
             reverbCounter = (reverbCounter + 1) & 1;    //For half the frequency
@@ -452,7 +357,7 @@ namespace PSXEmulator {
                 if ((NON & (1 << i)) == 0) {
 
                     if (!voices[i].isLoaded) {
-                        voices[i].getSamples(ref RAM, SPU_IRQ_Address);
+                        voices[i].loadSamples(ref RAM, SPU_IRQ_Address);
                         voices[i].decodeADPCM();
                         voiceHitAddress = voiceHitAddress || voices[i].hit_IRQ_Address;
                         voices[i].hit_IRQ_Address = false;
@@ -486,10 +391,12 @@ namespace PSXEmulator {
 
             captureBuffers();
 
-            (reverbLeft, reverbRight) = processReverb(reverbLeft_Input, reverbRight_Input);
+            if(reverbCounter == 1) {
+                (reverbLeft, reverbRight) = processReverb(reverbLeft_Input, reverbRight_Input);
+            }
 
-            sumLeft += (reverbLeft * reverbCounter);
-            sumRight += (reverbRight * reverbCounter);
+            sumLeft += reverbLeft;
+            sumRight += reverbRight;
             
             sumLeft = (Math.Clamp(sumLeft, -0x8000, 0x7FFE) * mainVolumeLeft) >> 15;
             sumRight = (Math.Clamp(sumRight, -0x8000, 0x7FFE) * mainVolumeRight) >> 15;
@@ -506,16 +413,12 @@ namespace PSXEmulator {
 
       
             if (outputBufferPtr >= 2048) {
-                 
                 playAudio(outputBuffer);
                 outputBufferPtr -= 2048;
-
             }
             if (voiceHitAddress) {
                 SPU_IRQ();
             }
-
-
         }
         uint captureAddress = 0;
 
@@ -637,14 +540,10 @@ namespace PSXEmulator {
 
         }
         public void SPU_IRQ() {
-
             if (IRQ9_Enable) {
                 IRQ_Flag = 1;
                 IRQ_CONTROL.IRQsignal(9);
             }
-
-           
-
         }
         
         private void reverbMemoryWrite(short value, uint address) {
@@ -713,5 +612,6 @@ namespace PSXEmulator {
             RAM[currentAddress++] = (byte)((data >> 24) & 0xFF);
 
         }
+
     }
 }

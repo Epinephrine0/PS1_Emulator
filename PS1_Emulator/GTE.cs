@@ -1,10 +1,4 @@
-﻿using OpenTK.Audio.OpenAL.Extensions.Creative.EFX;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing.Processors.Transforms;
-using System;
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
-using System.Drawing.Drawing2D;
+﻿using System;
 
 namespace PSXEmulator {
     internal class GTE {

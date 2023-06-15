@@ -795,10 +795,8 @@ namespace PSXEmulator {
         }
 
         public void display() {
-            
             displayFrame();
             SwapBuffers();
-
         }
 
         public void modifyAspectRatio() {
@@ -851,8 +849,6 @@ namespace PSXEmulator {
                 GL.Uniform1(display_areay_Y_Loc, (float)VRAM_HEIGHT);
             }
 
-
-
         }
         protected override void OnResize(ResizeEventArgs e) {
             base.OnResize(e);
@@ -862,33 +858,27 @@ namespace PSXEmulator {
         protected override void OnKeyDown(KeyboardKeyEventArgs e) {
             base.OnKeyDown(e);
 
-
             if (e.Key.Equals(Keys.Escape)) {
                 Close();
-            }
-            else if (e.Key.Equals(Keys.D)) {
+
+            }else if (e.Key.Equals(Keys.D)) {
                 CPU.BUS.debug = true;
                 Thread.Sleep(100);
 
-            }
-            else if (e.Key.Equals(Keys.P)) {
+            }else if (e.Key.Equals(Keys.P)) {
                 CPU.isPaused = !CPU.isPaused;
                 Thread.Sleep(100);
 
-            }
-            else if (e.Key.Equals(Keys.Tab)) {
+            }else if (e.Key.Equals(Keys.Tab)) {
                 showTextures = !showTextures;
                 Thread.Sleep(100);
 
-            }
-            else if (e.Key.Equals(Keys.F)) {
+            }else if (e.Key.Equals(Keys.F)) {
                 isFullScreen = !isFullScreen;
                 this.WindowState = isFullScreen ? WindowState.Fullscreen : WindowState.Normal;
                 this.CursorState = isFullScreen ? CursorState.Hidden : CursorState.Normal;
                 Thread.Sleep(100);
-
             }
-
         }
         
         protected override void OnUpdateFrame(FrameEventArgs args) {

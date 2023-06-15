@@ -1,23 +1,10 @@
-﻿using OpenTK.Graphics.ES20;
-using PSXEmulator.PS1_Emulator;
+﻿using PSXEmulator.PS1_Emulator;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Linq.Expressions;
-using System.Reflection.Emit;
-using System.Reflection.Metadata;
-using System.Text;
-using System.Threading.Tasks;
-using static PSXEmulator.GPU;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace PSXEmulator {
     public class GPU {
-        public Range range = new Range(0x1f801810, 5);            //Assumption  
+        public Range range = new Range(0x1f801810, 5);
         Renderer window;
 
         public enum VerticalRes {
@@ -474,7 +461,7 @@ namespace PSXEmulator {
             this.drawing_area_left = (UInt16)(value & 0x3ff);
         }
 
-        public void write_GP1(UInt32 value) {
+        private void write_GP1(UInt32 value) {
             UInt32 opcode = (value >> 24) & 0xff;
 
             switch (opcode) {
@@ -661,6 +648,26 @@ namespace PSXEmulator {
             return lastGPURead;
 
         }
+
+        public uint loadWord(uint address) {
+            uint offset = address - range.start;
+            switch (offset) {
+                case 0: return gpuReadReg();
+                case 4: return read_GPUSTAT();
+                default: throw new Exception("Unhandled read to offset " + offset);
+            }
+        }
+        public void storeWord(uint address, uint value) {
+            uint offset = address - range.start;
+            switch (offset) {
+                case 0: write_GP0(value); break;
+                case 4: write_GP1(value); break;
+                default:
+                    throw new Exception("Unhandled write to offset: " + offset + " val: " + Convert.ToUInt32(value).ToString("x")
+                                        + "Physical address: " + offset.ToString("x"));
+            }
+        }
+
     }
 
     public class HorizontalRes {

@@ -15,15 +15,10 @@ namespace PSXEmulator {
         }
 
         public short getElement(int R, int C) {
-            
             return vectors[C-1].getElement(R);
-
         }
         public void setElement(int R, int C, short value) {
-        
-
             vectors[C - 1].setElement(R, value);
-
         }
         public void printMatrix() {
             for (int i = 1; i < 4; i++) {
@@ -32,10 +27,6 @@ namespace PSXEmulator {
                 }
                 Debug.WriteLine("\n");
             }
-
-
         }
-
-
     }
 }

@@ -1,14 +1,5 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace PSXEmulator {
     public class IO_PORTS {
@@ -101,7 +92,8 @@ namespace PSXEmulator {
 
 
         }
-        public byte read(uint offset) {
+        public byte loadByte(uint address) {
+            uint offset = address - range.start;
 
             switch (offset) {
 
@@ -131,45 +123,22 @@ namespace PSXEmulator {
             }
 
         }
-        public uint read32(uint offset) {
-
+        public uint loadWord(uint address) {
+            uint offset = address - range.start;
             switch (offset) {
-
-
                 case 4: return JOY_STAT;
-
-
-                default:
-                    throw new Exception("Unhandled reading from IO Ports at offset: " + offset.ToString("x"));
+                default: throw new Exception("Unhandled reading from IO Ports at offset: " + offset.ToString("x"));
             }
-
-
         }
-        public UInt16 read16(uint offset) {
-
+        public UInt16 loadHalf(uint address) {
+            uint offset = address - range.start;
             switch (offset) {
-
-                       case 4:
-                           return getStatu();        //3
-
-
-                       case 0xA:
-                           
-                          return getCTRL();
-
-                       case 0xE:
-
-                       return 0xFFFF;
+                case 0x4: return getStatu();        //3
+                case 0xA: return getCTRL();
+                case 0xE: return 0xFFFF;
                        
-                        
-                default:
-
-                       throw new Exception("Unkown JOY port: " + offset.ToString("X"));
-
-
-
+                default: throw new Exception("Unkown JOY port: " + offset.ToString("X"));
             }
-
 
         }
 
@@ -189,9 +158,9 @@ namespace PSXEmulator {
             }
 
         }
-        public void write(uint offset, uint value) {
+        public void storeHalf(uint address, ushort value) {
+            uint offset = address - range.start;
 
-            
             switch (offset) {
                 case 0:
 

@@ -1,18 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PSXEmulator {
-    using System;
-    using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Linq;
-    using System.Security.Cryptography.X509Certificates;
-    using System.Text;
-    using System.Threading.Tasks;
-
     namespace PS1_Emulator {
         public class TIMER1 {
             public Range range = new Range(0x1F801110, 0xF + 1);        //Assumption 
@@ -30,8 +18,8 @@ namespace PSXEmulator {
             public bool GPUinVblank = false;
             public bool GPUGotVblankOnce = false;
 
-            public void write(uint offset, uint value) {
-
+            public void write(uint address, uint value) {
+                uint offset = address - range.start; 
 
                 switch (offset) {
 
@@ -62,7 +50,8 @@ namespace PSXEmulator {
 
 
             }
-            public uint read(uint offset) {
+            public uint read(uint address) {
+                uint offset = address - range.start;
 
                 switch (offset) {
 

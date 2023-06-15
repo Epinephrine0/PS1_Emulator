@@ -1,7 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
 
 namespace PSXEmulator {
     public unsafe class CPU {
@@ -182,8 +180,8 @@ namespace PSXEmulator {
                                 Console.Write("\\<NULL>");
                             }
                             else {
-                                while (BUS.load8(address) != 0) {
-                                    character = (char)BUS.load8(address);
+                                while (BUS.loadByte(address) != 0) {
+                                    character = (char)BUS.loadByte(address);
                                     Console.Write(character);
                                     address++;
                                 }
@@ -242,8 +240,8 @@ namespace PSXEmulator {
                             }
                             else {
 
-                                while (BUS.load8(address) != 0) {
-                                    character = (char)BUS.load8(address);
+                                while (BUS.loadByte(address) != 0) {
+                                    character = (char)BUS.loadByte(address);
                                     Console.Write(character);
                                     address++;
                                 }
@@ -631,7 +629,7 @@ namespace PSXEmulator {
             UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             //aligned?
-            Int16 halfWord = (Int16)cpu.BUS.load16(final_address);
+            Int16 halfWord = (Int16)cpu.BUS.loadHalf(final_address);
             if ((final_address & 0x1) == 0) {
                 cpu.registerDelayedLoad.registerNumber = instruction.get_rt();         //Position
                 cpu.registerDelayedLoad.value = (UInt32)halfWord;                     //Value
@@ -649,7 +647,7 @@ namespace PSXEmulator {
             UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             if ((final_address & 0x1) == 0) {
-                UInt32 halfWord = (UInt32)cpu.BUS.load16(final_address);
+                UInt32 halfWord = (UInt32)cpu.BUS.loadHalf(final_address);
                 cpu.registerDelayedLoad.registerNumber = instruction.get_rt();  //Position
                 cpu.registerDelayedLoad.value = halfWord;                       //Value
                
@@ -985,7 +983,7 @@ namespace PSXEmulator {
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
 
-            byte byte_ = cpu.BUS.load8(cpu.GPR[base_] + addressRegPos);
+            byte byte_ = cpu.BUS.loadByte(cpu.GPR[base_] + addressRegPos);
             cpu.registerDelayedLoad.registerNumber = instruction.get_rt();  //Position
             cpu.registerDelayedLoad.value = (UInt32)byte_;                     //Value
             
@@ -1038,7 +1036,7 @@ namespace PSXEmulator {
 
             UInt32 addressRegPos = instruction.signed_imm();
             UInt32 base_ = instruction.get_rs();
-            sbyte sb = (sbyte)cpu.BUS.load8(cpu.GPR[base_] + addressRegPos);
+            sbyte sb = (sbyte)cpu.BUS.loadByte(cpu.GPR[base_] + addressRegPos);
             cpu.registerDelayedLoad.registerNumber = instruction.get_rt();  //Position
             cpu.registerDelayedLoad.value = (UInt32)sb;                     //Value
 
@@ -1232,35 +1230,15 @@ namespace PSXEmulator {
 
         private static void mfc0(CPU cpu, Instruction instruction) {
             //MFC has load delay
-
             cpu.registerDelayedLoad.registerNumber = instruction.get_rt();
 
             switch (instruction.get_rd()) {
-
-                case 12:
-
-                    cpu.registerDelayedLoad.value = cpu.SR;
-
-                    break;
-
-                case 13:
-
-                    cpu.registerDelayedLoad.value = cpu.cause;
-
-                    break;
-
-                case 14:
-
-                    cpu.registerDelayedLoad.value = cpu.epc;
-
-                    break;
-
-                default:
-                    return;
+                case 12: cpu.registerDelayedLoad.value = cpu.SR; break;
+                case 13: cpu.registerDelayedLoad.value = cpu.cause; break;
+                case 14: cpu.registerDelayedLoad.value = cpu.epc; break;
+                default: return; //yeah no, TODO: handle the rest
                     throw new Exception("Unhandled cop0 register: " + instruction.get_rd());
             }
-
-
 
         }
 
@@ -1273,16 +1251,12 @@ namespace PSXEmulator {
                 case 7:
                 case 9:
                 case 11:
-
                     if (cpu.GPR[instruction.get_rt()] != 0) {
                         throw new Exception("Unhandled write to cop0 register: " + instruction.get_rd());
                     }
-
                     break;
 
-                case 12:
-                    cpu.SR = cpu.GPR[instruction.get_rt()];            //Setting the status register's 16th bit
-                    break;
+                case 12: cpu.SR = cpu.GPR[instruction.get_rt()]; break;         //Setting the status register's 16th bit
 
                 case 13:
                     //cause register, mostly read-only data describing the
@@ -1292,13 +1266,8 @@ namespace PSXEmulator {
                     }
                     break;
 
-                default:
-                    throw new Exception("Unhandled cop0 register: " + instruction.get_rd());
+                default: throw new Exception("Unhandled cop0 register: " + instruction.get_rd());
             }
-          
-
-
-
         }
         private static void bne(CPU cpu, Instruction instruction) {
             if (!cpu.GPR[instruction.get_rs()].Equals(cpu.GPR[instruction.get_rt()])) {
@@ -1310,12 +1279,10 @@ namespace PSXEmulator {
             offset = offset << 2;
             cpu.next_pc = cpu.next_pc + offset;
             cpu.next_pc = cpu.next_pc - 4;        //Cancel the +4 from the emu cycle 
-            cpu._branch = true;
-                 
+            cpu._branch = true;    
         }
      
         internal void tick() {
-
             if (isPaused) { return; }
 
             for (int i = 0; i < CYCLES_PER_FRAME;) {        //Timings are nowhere near accurate 
@@ -1340,12 +1307,10 @@ namespace PSXEmulator {
                 BUS.SPU.SPU_Tick(cycles);
                 BUS.GPU.tick(cycles * (double)11 / 7);
                 BUS.IO_PORTS.tick(cycles);
-                BUS.CDROM_tick(cycles);
+                BUS.CD_ROM.tick(cycles);
                 i += cycles;
                 cycles = 0;
-
             }
-
         }
     }
 }

@@ -1,25 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PSXEmulator {
     public class RAM {
-                    
-        public Range range = new Range(0x00000000, 8*1024*1024);        //2MB RAM can be mirrored to the first 8MB (strangely, enabled by default)
-        byte[] data;
+        //2MB RAM can be mirrored to the first 8MB (strangely, enabled by default)
+        public Range range = new Range(0x00000000, 8*1024*1024);
+        byte[] data = new byte[2 * 1024 * 1024];
 
-        public RAM() {
-
-            this.data = new byte[2*1024*1024];
-            
-        }
-
-        public UInt32 read(UInt32 offset) {
-
+        public UInt32 loadWord(UInt32 address) {
             //CPU.cycles++;
+            uint offset = address - range.start;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));
@@ -31,8 +20,9 @@ namespace PSXEmulator {
 
             return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
         }
-        public void write(UInt32 offset, UInt32 value) {
+        public void storeWord(UInt32 address, UInt32 value) {
             //CPU.cycles++;
+            uint offset = address - range.start;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));
@@ -50,39 +40,9 @@ namespace PSXEmulator {
 
         }
 
-        internal void store8(UInt32 offset, byte value) {
+        internal UInt16 loadHalf(UInt32 address) {
             //CPU.cycles++;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
-
-            data[final] = value;
-        }
-        internal void store16(UInt32 offset, UInt16 value) {
-            //CPU.cycles++;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
-
-            byte b0 = (byte)value;
-            byte b1 = (byte)(value >> 8);
-
-            data[final + 0] = b0;
-            data[final + 1] = b1;
-        }
-        internal byte load8(UInt32 offset) {
-
-            //CPU.cycles++;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
-
-            return data[final];
-        }
-
-        internal UInt16 load16(UInt32 offset) {
-
-            //CPU.cycles++;
+            uint offset = address - range.start;
             int start = 0;
             int end = data.Length;
             uint final = (uint)(start + ((offset - start) % (end - start)));
@@ -93,5 +53,38 @@ namespace PSXEmulator {
             return ((UInt16)(b0 | (b1 << 8)));
         }
 
+        internal void storeHalf(UInt32 address, UInt16 value) {
+            //CPU.cycles++;
+            uint offset = address - range.start;
+            int start = 0;
+            int end = data.Length;
+            uint final = (uint)(start + ((offset - start) % (end - start)));
+
+            byte b0 = (byte)value;
+            byte b1 = (byte)(value >> 8);
+
+            data[final + 0] = b0;
+            data[final + 1] = b1;
+        }
+        internal byte loadByte(UInt32 address) {
+            //CPU.cycles++;
+            uint offset = address - range.start;
+            int start = 0;
+            int end = data.Length;
+            uint final = (uint)(start + ((offset - start) % (end - start)));
+
+            return data[final];
+        }
+
+        internal void storeByte(UInt32 address, byte value) {
+            //CPU.cycles++;
+            uint offset = address - range.start;
+            int start = 0;
+            int end = data.Length;
+            uint final = (uint)(start + ((offset - start) % (end - start)));
+
+            data[final] = value;
+        }
+       
     }
 }

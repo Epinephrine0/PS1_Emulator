@@ -1,30 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PSXEmulator {
-    public class MDEC {
+﻿namespace PSXEmulator {
+    public class MDEC { //TODO
         public Range range = new Range(0x1F801820,5);
-        UInt32 cotrol;
 
-        internal uint read(uint offset) {
+        internal uint read(uint address) {
+            uint offset = address - range.start;
             return 0;
         }
 
-        internal void write(uint offset, uint value) {
-            switch (offset) { 
-            
-                case 4:
-                    cotrol = value;
-                break;
-            
-               // default:
-
-               //     throw new Exception("Unhandled MDEC write to offset: " + offset.ToString("x"));
-            }
-
+        internal void write(uint address, uint value) {
+            uint offset = address - range.start;
         }
     }
 }

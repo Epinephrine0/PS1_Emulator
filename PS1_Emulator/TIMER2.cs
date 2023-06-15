@@ -1,11 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PSXEmulator {
     public class TIMER2 {
@@ -32,8 +25,8 @@ namespace PSXEmulator {
         */
 
 
-        public void write(uint offset, uint value) {
-          
+        public void write(uint address, uint value) {
+            uint offset = address - range.start;
 
             switch (offset) {
 
@@ -67,8 +60,9 @@ namespace PSXEmulator {
          
 
         }
-        public uint read(uint offset) {
-          
+        public uint read(uint address) {
+            uint offset = address - range.start;
+
             switch (offset) {
                 
                 case 0:  return currentValue;        //0x000016b0 random value that works for entering shell

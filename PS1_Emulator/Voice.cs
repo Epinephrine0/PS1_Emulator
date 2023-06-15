@@ -1,11 +1,5 @@
 ﻿using NAudio.Wave;
-using OpenTK.Graphics.ES11;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PSXEmulator {
     public class Voice {
@@ -27,8 +21,6 @@ namespace PSXEmulator {
         public bool isLoaded = false;
         public bool hit_IRQ_Address = false;
 
-        private WaveOutEvent waveOutEvent = new WaveOutEvent();
-        private BufferedWaveProvider bufferedWaveProvider = new BufferedWaveProvider(new WaveFormat());
         Int16[] decodedSamples = new Int16[31]; //28 samples + 3 
         byte[] samples = new byte[16];
 
@@ -102,26 +94,25 @@ namespace PSXEmulator {
                 0x5997, 0x599E, 0x59A4, 0x59A9, 0x59AD, 0x59B0, 0x59B2, 0x59B3,
         };
         public Voice() {
-            this.adsr.adsrLOW = 0;
-            this.adsr.adsrHI = 0;
-            this.adsr.adsrVolume = 0;
-            this.adsr.setPhase(ADSR.Phase.Off);
-            this.volumeLeft = 0;
-            this.volumeRight = 0;
-            this.lastSample = 0;
-            this.ADPCM = 0;
-            this.ADPCM_Pitch = 0;
+            adsr.adsrLOW = 0;
+            adsr.adsrHI = 0;
+            adsr.adsrVolume = 0;
+            adsr.setPhase(ADSR.Phase.Off);
+            volumeLeft = 0;
+            volumeRight = 0;
+            lastSample = 0;
+            ADPCM = 0;
+            ADPCM_Pitch = 0;
         }
         public void setADSR_LOW(UInt16 v) {
-            this.adsr.adsrLOW = v;
+            adsr.adsrLOW = v;
         }
         public void setADSR_HI(UInt16 v) {
-            this.adsr.adsrHI = v;
+            adsr.adsrHI = v;
         }
-        public void getSamples(ref byte[] SPU_RAM, uint IRQ_Address) {
-
+        public void loadSamples(ref byte[] SPU_RAM, uint IRQ_Address) {
             hit_IRQ_Address = IRQ_Address >= (current_address << 3) && IRQ_Address <= (current_address << 3) + samples.Length - 1;
-
+            //Possible optimization using Span
             for (int i = 0; i < samples.Length; i++) {
                 int index = (current_address << 3) + i;
                 samples[i] = SPU_RAM[index];
@@ -130,7 +121,7 @@ namespace PSXEmulator {
             isLoaded = true;
 
             //Handle Loop Start/End/Repeat flags
-            uint flags = (uint)(samples[1]);
+            uint flags = (uint)samples[1];
 
             if ((flags >> 2 & 1) != 0) {     //Loop Start bit
                 ADPCM_RepeatAdress = current_address;
@@ -178,20 +169,15 @@ namespace PSXEmulator {
         uint sampleIndex;
 
         public short interpolate() {
-     
             int interpolated;
-            uint interpolationIndex = this.getInterpolationIndex();
-            sampleIndex = this.getCurrentSampleIndex();
-  
-
+            uint interpolationIndex = getInterpolationIndex();
+            sampleIndex = getCurrentSampleIndex();
+ 
             interpolated =  gaussTable[0x0FF - interpolationIndex] * decodedSamples[sampleIndex + 0];
             interpolated += gaussTable[0x1FF - interpolationIndex] * decodedSamples[sampleIndex + 1];
             interpolated += gaussTable[0x100 + interpolationIndex] * decodedSamples[sampleIndex + 2];
             interpolated += gaussTable[0x000 + interpolationIndex] * decodedSamples[sampleIndex + 3];
             interpolated = interpolated >> 15;
-
-
-
 
             return (short)interpolated;
         }
@@ -220,7 +206,6 @@ namespace PSXEmulator {
                         adsr.setPhase(ADSR.Phase.Off);
                         adsr.adsrVolume = 0;
                         adsr.adsrCounter = 0;     
-
                     }
 
                 }

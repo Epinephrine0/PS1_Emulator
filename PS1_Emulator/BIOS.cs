@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PSXEmulator {
     public class BIOS {
@@ -26,7 +22,8 @@ namespace PSXEmulator {
         }
         
 
-        public UInt32 fetch(UInt32 offset) {
+        public UInt32 loadWord(UInt32 address) {
+            uint offset = address - range.start;
             CPU.cycles += 20;
 
             UInt32 b0 = data[offset + 0];
@@ -37,21 +34,20 @@ namespace PSXEmulator {
             return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
         }
 
-        public byte load8(UInt32 offset) {
+        public byte loadByte(UInt32 address) {
             CPU.cycles++;
-
-
+            uint offset = address - range.start;
             return data[offset];
         }
 
-        internal UInt16 load16(uint offset) {
+        internal UInt16 loadHalf(uint address) {
             CPU.cycles += 2;
+            uint offset = address - range.start;
 
             UInt32 b0 = data[offset + 0];
             UInt32 b1 = data[offset + 1];
        
-
-            return ((ushort)(b0 | (b1 << 8)));
+            return (ushort)(b0 | (b1 << 8));
         }
 
     }
