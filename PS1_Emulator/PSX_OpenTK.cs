@@ -287,9 +287,9 @@ namespace PSXEmulator {
                             }
                          }*/
 
-                         if(isDithered == 1){
+                         /*if(isDithered == 1){
                               outputColor.rgb = (((outputColor.rgb) * vec3(255.0,255.0,255.0)) + dither(vec2(gl_FragCoord.xy - vec2(0.5,0.5)))) / vec3(255.0, 255.0, 255.0);
-                         }
+                         }*/
    	 	             return;
 
                  }else if(TextureMode == 0){  //4 Bit texture

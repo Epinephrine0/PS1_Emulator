@@ -30,7 +30,7 @@ namespace PSXEmulator {
         }
 
         public static bool isRequestingIRQ() {
-            return (I_STAT & I_MASK) != 0;  
+            return (I_STAT & I_MASK) > 0;  
         }
 
         public static int readIRQbit(int bitNumber) {

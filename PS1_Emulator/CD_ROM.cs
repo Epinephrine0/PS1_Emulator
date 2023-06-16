@@ -84,7 +84,7 @@ namespace PSXEmulator {
 
         public byte padding;
         public byte currentCommand;
-        public bool hasDisk = true;       //A game disk, audio disks are not supported yet 
+        public bool hasDisk = false;       //A game disk, audio disks are not supported yet 
         public bool ledOpen = false;
         public string path = @"C:\Users\Old Snake\Desktop\PS1\ROMS\Metal Gear Solid (USA) (Disc 1) (v1.0)\Metal Gear Solid (USA) (Disc 1).bin";
         byte[] disk;
@@ -673,11 +673,17 @@ namespace PSXEmulator {
                      
                     
                     if(command != Command.Play) {
+                        string xa = "";
                         for (uint i = 0; i < size; i++) {
                             lastReadSector.Enqueue(disk[i + currentIndex]);
-
+                            if(((i) >= 0x400) && ((i) <= 0x407)) {
+                                xa = xa + (Char)disk[i + currentIndex];
+                            }
                         }
-
+                        if (xa.Equals("CD-XA001")) {
+                            Console.WriteLine("CD-XA Sector!"); //TODO
+                        }
+                        xa = "";
                         f++;
 
                         if (f >= 75) {

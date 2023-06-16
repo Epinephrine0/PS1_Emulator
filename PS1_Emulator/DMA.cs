@@ -3,17 +3,17 @@
 namespace PSXEmulator {
     public class DMA {
         public Range range = new Range(0x1f801080, 0x80);
-        UInt32 control = 0x07654321;
+        public UInt32 control = 0x07654321;
 
         //Interrupt register
-        UInt32 mastet_enabled;     //Bit 23
-        byte ch_irq_en;            //irq enable for indivisual channels Bits [22:16]
-        byte ch_irq_flags;         //Bits [30:24] indivisual channels (reset by setting 1)
-        UInt32 force_irq;          //Bit 15 (higher priority than Bit 23)
-        byte read_write;           //Bits [5:0]
+        public UInt32 mastet_enabled;     //Bit 23
+        public byte ch_irq_en;            //irq enable for indivisual channels Bits [22:16]
+        public byte ch_irq_flags;         //Bits [30:24] indivisual channels (reset by setting 1)
+        public UInt32 force_irq;          //Bit 15 (higher priority than Bit 23)
+        public byte read_write;           //Bits [5:0]
         public DMAChannel[] channels;
 
-        private DMAChannel reject = null;
+        public DMAChannel reject = null;
 
         public DMA() {
          channels = new DMAChannel[7];
@@ -144,17 +144,15 @@ namespace PSXEmulator {
                     if ((ch_irq_en >> i & 1) == 1) {
                         ch_irq_flags = (byte)(ch_irq_flags | (1 << i));
                     }
-                    channels[i].finished = false;
-
                 }
             }
 
-            v = (v | read_write);
-            v = (v | (force_irq << 15));
-            v = (v | (((UInt32)ch_irq_en) << 16));
-            v = (v | (mastet_enabled << 23));
-            v = (v | (((UInt32)ch_irq_flags) << 24));
-            v = (v | (irq() << 31));
+            v = v | read_write;
+            v = v | (force_irq << 15);
+            v = v | (((UInt32)ch_irq_en) << 16);
+            v = v | (mastet_enabled << 23);
+            v = v | (((UInt32)ch_irq_flags) << 24);
+            v = v | (irq() << 31);
 
             return v;
         }
@@ -162,20 +160,19 @@ namespace PSXEmulator {
 
 
         private void set_interrupt_reg(UInt32 value) {
-            this.read_write = (byte)(value & 0x3f);
-            this.force_irq = (value >> 15) & 1;
-            this.ch_irq_en = (byte)((value >> 16) & 0x7f);
-            this.mastet_enabled = (value >> 23) & 1;
-            this.ch_irq_flags = (byte)(this.ch_irq_flags & ~((value >> 24) & 0x3f));      //0x7f??
+            read_write = (byte)(value & 0x3f);
+            force_irq = (value >> 15) & 1;
+            ch_irq_en = (byte)((value >> 16) & 0x7f);
+            mastet_enabled = (value >> 23) & 1;
+            ch_irq_flags = (byte)(ch_irq_flags & (~((value >> 24) & 0x7f)));      //0x7f??
 
             for (int i = 0; i < channels.Length; i++) {
-                channels[i].finished = ch_irq_flags >> i != 0;
+                channels[i].finished = ((ch_irq_flags >> i) & 1) == 1;
             }
 
         }
         public UInt32 irq() {
-            UInt32 irq = (UInt32)(ch_irq_flags & ch_irq_en);
-            if ((irq != 0 && (mastet_enabled != 0)) || force_irq != 0) {
+            if ((force_irq == 1) || ((mastet_enabled == 1) && ((ch_irq_en & ch_irq_flags) > 0))) {
                 return 1;
             }
             else {

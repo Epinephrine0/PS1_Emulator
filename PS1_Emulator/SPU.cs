@@ -139,16 +139,20 @@ namespace PSXEmulator {
                 case 0x1b4: external_Audio_Input_Volume = external_Audio_Input_Volume & 0xFFFF0000 | value; break;
                 case 0x1b6: external_Audio_Input_Volume = external_Audio_Input_Volume & 0x0000FFFF | (uint)value << 16; break;
                 case 0x1ac: transfer_Control = value; break;
-                case 0x1a4: SPU_IRQ_Address = (uint)value << 3; break;
+                case 0x1a4: SPU_IRQ_Address = ((uint)value) << 3;
+                    if (SPU_IRQ_Address <= 0x3FF) {
+                        Console.WriteLine("[SPU] Capture address: " + SPU_IRQ_Address.ToString("x"));
+                    }
+                    break;
                 case 0x1a6:
                     transfer_address = value;            //Store adress devided by 8
-                    currentAddress = (uint)(value << 3); //Store adress multiplied by 8
+                    currentAddress = ((uint)value) << 3; //Store adress multiplied by 8
                     break;
 
                 case 0x1a8:
                     if((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
                     currentAddress &= 0x7FFFF;
-                    if (currentAddress <= SPU_IRQ_Address && currentAddress + 1 >= SPU_IRQ_Address) { SPU_IRQ(); }
+                    if ((currentAddress <= SPU_IRQ_Address) && ((currentAddress + 1) >= SPU_IRQ_Address)) { SPU_IRQ(); }
                     RAM[currentAddress++] = (byte)(value & 0xFF);
                     RAM[currentAddress++] = (byte)((value >> 8) & 0xFF);
 
@@ -315,7 +319,7 @@ namespace PSXEmulator {
         public void SPU_Tick(int cycles) {        //SPU Clock
            
             clk_counter += cycles;
-            if (clk_counter < CYCLES_PER_SAMPLE) { return; }
+            if (clk_counter < CYCLES_PER_SAMPLE || !SPU_Enable) { return; }
             reverbCounter = (reverbCounter + 1) & 1;    //For half the frequency
             clk_counter = 0;
 
@@ -368,7 +372,6 @@ namespace PSXEmulator {
                     Console.WriteLine("[SPU] Noise generator !");   
                     voices[i].adsr.adsrVolume = 0;
                     voices[i].lastSample = 0;
-
                 }
 
                 sample = (short)((sample * voices[i].adsr.adsrVolume) >> 15);
@@ -385,10 +388,17 @@ namespace PSXEmulator {
                  }
                
             }
+            
+            captureBuffers(0x800 + captureOffset, (byte)(voices[1].lastSample & 0xFF));
+            captureBuffers(0x800 + captureOffset + 1, (byte)((voices[1].lastSample >> 8) & 0xFF));
+            captureBuffers(0xC00 + captureOffset, (byte)(voices[3].lastSample & 0xFF));
+            captureBuffers(0xC00 + captureOffset + 1, (byte)((voices[3].lastSample >> 8) & 0xFF));
 
-            captureBuffers();
+            captureOffset += 2;
 
-            if(reverbCounter == 1) {
+            if (captureOffset > 0x3FF) { captureOffset = 0; }
+
+            if (reverbCounter == 1) {
                 (reverbLeft, reverbRight) = processReverb(reverbLeft_Input, reverbRight_Input);
             }
 
@@ -417,23 +427,24 @@ namespace PSXEmulator {
                 SPU_IRQ();
             }
         }
-        uint captureAddress = 0;
+        uint captureOffset = 0;
 
-        private void captureBuffers() { //Experimental 
+        private void captureBuffers(uint address, byte halfSample) { //Experimental 
 
-            RAM[0x00800 + captureAddress] = (byte)voices[1].lastSample;
-            RAM[0x00800 + captureAddress + 1] = (byte)(voices[1].lastSample >> 8);
+            /*RAM[0x00800 + captureOffset] = (byte)voices[1].lastSample;
+            RAM[0x00800 + captureOffset + 1] = (byte)(voices[1].lastSample >> 8);
 
-            RAM[0x00C00 + captureAddress] = (byte)voices[3].lastSample;
-            RAM[0x00C00 + captureAddress + 1] = (byte)(voices[3].lastSample >> 8);
+            RAM[0x00C00 + captureOffset] = (byte)voices[3].lastSample;
+            RAM[0x00C00 + captureOffset + 1] = (byte)(voices[3].lastSample >> 8);*/
 
-            if (((0x00800 + captureAddress == SPU_IRQ_Address) || (0x00C00 + captureAddress == SPU_IRQ_Address))
-                && ((transfer_Control >> 2) & 0x3) != 0) { 
+            /* Setting the IRQ address to 0000h..01FFh (aka byte address 00000h..00FFFh) 
+             will trigger IRQs on writes to the four capture buffers */
+            RAM[address] = halfSample;
+
+
+            if ((SPU_IRQ_Address == address) && (((transfer_Control >> 2) & 0x3) != 0)) { 
                 SPU_IRQ();
             }
-
-            captureAddress = (captureAddress + 2) & 0x3FF;
-            
 
         }
         private (int, int) processReverb(int leftInput, int rightInput) {
@@ -550,7 +561,7 @@ namespace PSXEmulator {
             uint start = (uint)mBASE << 3;
             uint end = 0x7FFFF;      
             uint final = (start + ((address - start) % (end - start))) & 0x7FFFE; //Aliengment for even addresses only
-            if (final == SPU_IRQ_Address || final + 1 == SPU_IRQ_Address) { SPU_IRQ(); }
+            if ((final == SPU_IRQ_Address) || ((final + 1) == SPU_IRQ_Address)) { SPU_IRQ(); }
             RAM[final] = (byte)value;
             RAM[final + 1] = (byte)(value >> 8);
 
@@ -560,7 +571,7 @@ namespace PSXEmulator {
             uint start = (uint)mBASE << 3;
             uint end = 0x7FFFF; 
             uint final = (start + ((address - start) % (end - start))) & 0x7FFFE; //Aliengment for even addresses only
-            if(final == SPU_IRQ_Address || final + 1 == SPU_IRQ_Address) { SPU_IRQ(); }
+            if((final == SPU_IRQ_Address) || ((final + 1) == SPU_IRQ_Address)) { SPU_IRQ(); }
             return (short)(((uint)RAM[final + 1] << 8) | RAM[final]);
 
         }
@@ -583,31 +594,35 @@ namespace PSXEmulator {
 
         }
 
-        
-        
-
         public void playAudio(byte[] samples) {
-
-
             bufferedWaveProvider.AddSamples(samples, 0, samples.Length);
             if (waveOutEvent.PlaybackState != PlaybackState.Playing) {
                 waveOutEvent.Volume = 1; 
                 waveOutEvent.Play();
-                
             }
-            
         }
 
         internal void DMAtoSPU(uint data) {
             if ((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
             currentAddress &= 0x7FFFF;
-            if(currentAddress <= SPU_IRQ_Address && currentAddress + 3 >= SPU_IRQ_Address) { SPU_IRQ(); }
+            if((currentAddress <= SPU_IRQ_Address) && ((currentAddress + 3) >= SPU_IRQ_Address)) { SPU_IRQ(); }
 
             RAM[currentAddress++] = (byte)(data & 0xFF);
             RAM[currentAddress++] = (byte)((data >> 8) & 0xFF);
             RAM[currentAddress++] = (byte)((data >> 16) & 0xFF);
             RAM[currentAddress++] = (byte)((data >> 24) & 0xFF);
+        }
+        internal uint SPUtoDMA() {
+            if ((transfer_Control >> 1 & 7) != 2) { throw new Exception(); }
+            currentAddress &= 0x7FFFF;
+            if ((currentAddress <= SPU_IRQ_Address) && ((currentAddress + 3) >= SPU_IRQ_Address)) { SPU_IRQ(); }
 
+            uint b0 = RAM[currentAddress++];
+            uint b1 = RAM[currentAddress++];
+            uint b2 = RAM[currentAddress++];
+            uint b3 = RAM[currentAddress++];
+       
+            return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
         }
 
     }

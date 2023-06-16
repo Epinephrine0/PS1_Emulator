@@ -32,60 +32,60 @@ namespace PSXEmulator {
 
         public DMAChannel() {
 
-            this.Direction.Add("ToRam",0);
-            this.Direction.Add("FromRam", 1);
-            this.Step.Add("Increment", 0);
-            this.Step.Add("Decrement", 1);
-            this.Sync.Add("Manual",0);
-            this.Sync.Add("Request", 1);
-            this.Sync.Add("LinkedList", 2);
+            Direction.Add("ToRam",0);
+            Direction.Add("FromRam", 1);
+            Step.Add("Increment", 0);
+            Step.Add("Decrement", 1);
+            Sync.Add("Manual",0);
+            Sync.Add("Request", 1);
+            Sync.Add("LinkedList", 2);
 
 
-            this.enable = 0;
-            this.direction = this.Direction["ToRam"];
-            this.step = this.Step["Increment"];
-            this.sync = this.Sync["Manual"];
-            this.trigger = 0;
-            this.chop = 0;
-            this.chop_DMA_window_size = 0;
-            this.chop_CPU_window_size = 0;
-            this.read_write = 0;
+            enable = 0;
+            direction = Direction["ToRam"];
+            step = Step["Increment"];
+            sync = Sync["Manual"];
+            trigger = 0;
+            chop = 0;
+            chop_DMA_window_size = 0;
+            chop_CPU_window_size = 0;
+            read_write = 0;
 
         }
         public void set_portnum(UInt32 num) {
 
-           this.portnum = num;
+           portnum = num;
 
         }
         public UInt32 get_portnum() {
 
-            return this.portnum;
+            return portnum;
         }
         public UInt32 get_direction() {
 
-            return this.direction;
+            return direction;
         }
         public UInt32 get_step() {
 
-            return this.step;
+            return step;
         }
         public UInt32 get_sync() {
 
-            return this.sync;
+            return sync;
         }
 
         public bool is_active() {
 
-            switch (this.sync) {
+            switch (sync) {
                 case 0:
-                    if ((this.trigger & this.enable) == 1) {
+                    if ((trigger & enable) == 1) {
                         return true;
                     }
 
                     break;
 
                 default:
-                    if ((this.enable) == 1) {
+                    if ((enable) == 1) {
                         return true;
                     }
                     break;
@@ -191,8 +191,8 @@ namespace PSXEmulator {
         }
         public bool finished; 
         internal void done() {
-            this.enable = 0;
-            this.trigger = 0;
+            enable = 0;
+            trigger = 0;
             finished = true;   
         }
     }

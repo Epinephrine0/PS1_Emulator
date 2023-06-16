@@ -351,7 +351,7 @@ namespace PSXEmulator {
             if (transfer_size == null) {
                 throw new Exception("transfer size is null, LinkedList mode?");
             }
-
+            bool isSPUIRQ = false;
             while (transfer_size > 0) {
                 UInt32 current_address = base_address & 0x1ffffc;
 
@@ -366,10 +366,10 @@ namespace PSXEmulator {
 
                         case 4:
                             SPU.DMAtoSPU(data);
-
-                            if(transfer_size - 1 <= 0) {
+                            isSPUIRQ = true;
+                            /*if(transfer_size - 1 <= 0) {
                                 SPU.DMA_Read_Request = 0;
-                            }
+                            }*/
 
                             break;
 
@@ -382,7 +382,7 @@ namespace PSXEmulator {
                     switch (ch.get_portnum()) {
                         case 1: break; //MDECout (MDEC to RAM)
 
-                        case 2:
+                        case 2:  //GPU
                             UInt16 pixel0 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
                             UInt16 pixel1 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
                             UInt32 merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
@@ -392,7 +392,7 @@ namespace PSXEmulator {
                             RAM.storeWord(current_address, merged_Pixels);
                             break;
 
-                      case 3:
+                      case 3:  //CD-ROM
                             uint byte0 = CD_ROM.currentSector.Dequeue();
                             uint byte1 = CD_ROM.currentSector.Dequeue();
                             uint byte2 = CD_ROM.currentSector.Dequeue();
@@ -400,6 +400,11 @@ namespace PSXEmulator {
 
                             UInt32 merged_bytes = (byte0 | (byte1 << 8) | (byte2 << 16) | (byte3 << 24));
                             RAM.storeWord(current_address, merged_bytes);
+                            break;
+
+                        case 4:  //SPU
+                            isSPUIRQ = true;
+                            RAM.storeWord(current_address, SPU.SPUtoDMA());
                             break;
 
                         case 6:
@@ -417,9 +422,15 @@ namespace PSXEmulator {
                 base_address = (UInt32)(base_address + step);
                 transfer_size -= 1;
             }
-            
-            ch.done();
-            IRQ_CONTROL.IRQsignal(3);   //?
+            //if (isSPUIRQ) { SPU.SPU_IRQ(); }    //Causes problems with MGS
+
+            ch.done();  
+
+            //DMA IRQ 
+            DMA.ch_irq_flags = (byte)(DMA.ch_irq_flags | (1 << (int)ch.get_portnum()));
+            if (DMA.irq() == 1) {
+                IRQ_CONTROL.IRQsignal(3);
+            };
         }
 
     }

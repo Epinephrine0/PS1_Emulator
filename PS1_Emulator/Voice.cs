@@ -111,7 +111,7 @@ namespace PSXEmulator {
             adsr.adsrHI = v;
         }
         public void loadSamples(ref byte[] SPU_RAM, uint IRQ_Address) {
-            hit_IRQ_Address = IRQ_Address >= (current_address << 3) && IRQ_Address <= (current_address << 3) + samples.Length - 1;
+            hit_IRQ_Address = (IRQ_Address >= (current_address << 3)) && IRQ_Address <= ((current_address << 3) + samples.Length - 1);
             //Possible optimization using Span
             for (int i = 0; i < samples.Length; i++) {
                 int index = (current_address << 3) + i;
