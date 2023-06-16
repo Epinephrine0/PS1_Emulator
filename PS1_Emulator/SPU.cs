@@ -162,7 +162,7 @@ namespace PSXEmulator {
 
                 case 0x19E:
                     for (int i = 16; i < voices.Length; i++) {
-                        voices[i].ENDX = (uint)((value >> i) & 1);
+                        voices[i].ENDX = (uint)((value >> (i - 16)) & 1);
                     }
                     break;
 
@@ -249,22 +249,19 @@ namespace PSXEmulator {
                     return 0;
 
                 //1F801D98h - Voice 0..23 Reverb mode aka Echo On (EON) (R/W)
-                case 0x19a: return (ushort)(EON >> 16);
-                case 0x198: return (ushort)EON;
-                case 0x1b8: return (ushort)mainVolumeLeft;  
-                case 0x1ba: return (ushort)mainVolumeRight;  
-                case 0x1a6: return (ushort)transfer_address;
                 case 0x190: return (ushort)PMON;
                 case 0x192: return (ushort)(PMON >> 16);
                 case 0x194: return (ushort)NON;
                 case 0x196: return (ushort)(NON >> 16);
-
-                /*case 0x1b0: //1F801DB0h - CD Audio Input Volume (for normal CD-DA, and compressed XA-ADPCM)
-                case 0x1b2:
-                case 0x1b4: //1F801DB4h - External Audio Input Volume
-                case 0x1b6:
-
-                    return 0;*/
+                case 0x198: return (ushort)EON;
+                case 0x19a: return (ushort)(EON >> 16);
+                case 0x1b0: return (ushort)CD_INPUT_VOLUME;
+                case 0x1b2: return (ushort)(CD_INPUT_VOLUME >> 16);
+                case 0x1b8: return (ushort)mainVolumeLeft;  
+                case 0x1ba: return (ushort)mainVolumeRight;  
+                case 0x1a6: return (ushort)transfer_address;
+                case 0x1b4: return (ushort)external_Audio_Input_Volume;
+                case 0x1b6: return (ushort)(external_Audio_Input_Volume >> 16);
 
                 default: throw new NotImplementedException("Offset: " + offset.ToString("x") + "\n"
                                                       + "Full address: 0x" + (offset + 0x1f801c00).ToString("x"));

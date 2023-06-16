@@ -108,6 +108,7 @@ namespace PSXEmulator {
             lookUpTable[0x0A] = &init;
             lookUpTable[0x0B] = &mute;
             lookUpTable[0x0C] = &demute;
+            lookUpTable[0x0D] = &setFilter;
             lookUpTable[0x0E] = &setMode;
             lookUpTable[0x13] = &getTN;
             lookUpTable[0x14] = &getTD;
@@ -119,6 +120,7 @@ namespace PSXEmulator {
         }
 
         private static void illegal(CD_ROM cdrom) {
+            //Console.WriteLine("[CDROM] Ignoring command 0x" +  cdrom.currentCommand.ToString("X"));
             throw new Exception("Unknown CDROM command: " + cdrom.currentCommand.ToString("x"));
         }
         public void controller(byte command) {
@@ -225,15 +227,10 @@ namespace PSXEmulator {
                     break;
 
 
-
-
                 default:
                     throw new Exception("Unhandled store at CRROM offset: " + offset + " index: " + Index);
 
             }
-
-
-
 
         }
 
@@ -280,6 +277,11 @@ namespace PSXEmulator {
                 case 0x20: getDateAndVersion(cdrom); break;
                 default: throw new Exception("Unknown parameter: " + parameter.ToString("x"));
             }
+        }
+        private static void setFilter(CD_ROM cdrom) {
+            Console.WriteLine("[CDROM] Ignoring setFilter");
+            cdrom.responseBuffer.Enqueue(cdrom.stat);
+            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
         }
         private static void seekP(CD_ROM cdrom) {
             cdrom.CDROM_State = State.RespondingToCommand;

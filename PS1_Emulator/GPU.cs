@@ -97,7 +97,7 @@ namespace PSXEmulator {
             public ushort height => (ushort)(transferType == TransferType.VramFill?
               ((resolution >> 16) & 0x1FF) : ((((resolution >> 16) - 1) & 0x1FF) + 1));
 
-            public ushort size => (ushort)(((width * height) + 1) & ~1);
+            public uint size => (uint)((((width > 0 ? (uint)width : 0x400) * (height > 0 ? (uint)height : 0x200)) + 1) & ~1);
             public bool dataEnd => size == dataPtr;
             public ushort destination_X => (ushort)(parameters[1] & (transferType == TransferType.VramFill ? 0x3F0 : 0x3FF));
             public ushort destination_Y => (ushort)((parameters[1] >> 16) & 0x1FF);
@@ -238,7 +238,7 @@ namespace PSXEmulator {
                     interrupt = true;
                     TIMER1.GPUinVblank = true;
                     TIMER1.GPUGotVblankOnce = true;
-
+                    
                 }
 
                 if (!TIMER1.isUsingSystemClock()) {

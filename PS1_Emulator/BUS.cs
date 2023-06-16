@@ -259,6 +259,11 @@ namespace PSXEmulator {
             }else if (scratchpad.range.contains(physical_address)) {
                 return scratchpad.loadByte(physical_address);
 
+            }else if (address == 0x1f8010f6) {
+                //Weird DMA register
+                //throw new Exception();
+
+                return 0;
             }else {
                 throw new Exception("Unhandled load8 at address : " + address.ToString("x"));
             } 
@@ -284,6 +289,9 @@ namespace PSXEmulator {
             }else if (expansion2.range.contains(physical_address)) {
                 //Console.WriteLine("Unhandled write to EXPANTION2 at address : " + address.ToString("x"));
 
+            }else if (address == 0x1f8010f6) {
+                //Weird DMA register
+                //throw new Exception();
             }else {
                 throw new Exception("Unhandled store8 at address : " + address.ToString("x"));
             }

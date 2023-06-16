@@ -757,23 +757,20 @@ namespace PSXEmulator {
             //After that reset the Scissor box to the drawing area
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
             GL.ClearColor(0, 0, 0, 1.0f);
-
         }
        
-
         public void update_vram(int x, int y , int width, int height, ref ushort[] textureData) {
-            if (width == 0) { width = VRAM_WIDTH; }
-            if (height == 0) { height = VRAM_HEIGHT; }
+            /*if (width == 0) { width = VRAM_WIDTH; }
+            if (height == 0) { height = VRAM_HEIGHT; }*/
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
             GL.BindTexture(TextureTarget.Texture2D, vram_texture);
-            GL.TexSubImage2D(TextureTarget.Texture2D,0,x,y,width,height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
+            GL.TexSubImage2D(TextureTarget.Texture2D,0,x,y,width,height, 
+                PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
             
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-
-         
         }
         internal void VramToVramCopy(int x0_src, int y0_src, int x0_dest, int y0_dest, int width, int height) {
             //No idea if correct, TODO: find a test?
