@@ -50,8 +50,8 @@ namespace PSXEmulator {
 
             RAM = new RAM();
             scratchpad = new Scratchpad();
-            SPU = new SPU();
             CD_ROM = new CD_ROM();
+            SPU = new SPU(ref CD_ROM.DataController);
             DMA = new DMA();
             IO_PORTS = new IO_PORTS();
             memoryControl = new MemoryControl(); //useless ?
@@ -392,15 +392,7 @@ namespace PSXEmulator {
                             RAM.storeWord(current_address, merged_Pixels);
                             break;
 
-                      case 3:  //CD-ROM
-                            uint byte0 = CD_ROM.currentSector.Dequeue();
-                            uint byte1 = CD_ROM.currentSector.Dequeue();
-                            uint byte2 = CD_ROM.currentSector.Dequeue();
-                            uint byte3 = CD_ROM.currentSector.Dequeue();
-
-                            UInt32 merged_bytes = (byte0 | (byte1 << 8) | (byte2 << 16) | (byte3 << 24));
-                            RAM.storeWord(current_address, merged_bytes);
-                            break;
+                        case 3: RAM.storeWord(current_address, CD_ROM.DataController.readWord()); break;  //CD-ROM
 
                         case 4:  //SPU
                             isSPUIRQ = true;

@@ -1,5 +1,6 @@
 ﻿using NAudio.Wave;
 using System;
+using System.Runtime.InteropServices;
 using static PSXEmulator.Voice.ADSR;
 
 namespace PSXEmulator {
@@ -11,9 +12,11 @@ namespace PSXEmulator {
 
         UInt16 SPUCNT;
         bool reverbEnabled;
-        bool SPU_Enable;
-        bool IRQ9_Enable;
-
+        bool SPUEnable;
+        bool IRQ9Enable;
+        bool CDAudioEnable;
+        bool CDReverbEnable;
+        bool SPUMuted;
 
         //STAT:
         byte SPU_Mode;                          //0-5
@@ -37,8 +40,9 @@ namespace PSXEmulator {
         uint NON;           //Noise mode enable
         uint EON;           //Echo 
 
-        uint CD_INPUT_VOLUME;
+        uint CDInputVolume;
         uint external_Audio_Input_Volume;
+        CDROMDataController CDDataControl;
 
         UInt16 transfer_Control;
         uint transfer_address;
@@ -46,6 +50,16 @@ namespace PSXEmulator {
         uint reverbCurrentAddress;
         Voice[] voices;
         uint SPU_IRQ_Address;
+
+        private int clk_counter = 0;
+        public const uint CYCLES_PER_SAMPLE = 0x300;
+        byte[] outputBuffer = new byte[2048];
+        int outputBufferPtr = 0;
+        int sumLeft;
+        int sumRight;
+        private int reverbCounter = 0;
+        uint captureOffset = 0;
+
         //Reverb registers
         ushort mBASE;   //(divided by 8)
         ushort dAPF1;   //Type: disp
@@ -85,7 +99,9 @@ namespace PSXEmulator {
         private BufferedWaveProvider bufferedWaveProvider = new BufferedWaveProvider(new WaveFormat());
         //private WaveFileWriter waveFileWriter = new WaveFileWriter("output.wav", new WaveFormat());     //For audio dumping
 
-        public SPU() {
+        /* Default wave format: 44,1kHz, 16 bit, stereo */
+
+        public SPU(ref CDROMDataController CDControl) {
            voices = new Voice[24];
            for (int i = 0; i < voices.Length; i++) { 
                 voices[i] = new Voice();
@@ -94,6 +110,8 @@ namespace PSXEmulator {
             bufferedWaveProvider.DiscardOnBufferOverflow = true;
             bufferedWaveProvider.BufferDuration = new TimeSpan(0, 0, 0, 0, 300);
             waveOutEvent.Init(bufferedWaveProvider);
+            this.CDDataControl = CDControl;
+
         }
         public void storeHalf(uint address, UInt16 value) {
             uint offset = address - range.start;
@@ -134,15 +152,15 @@ namespace PSXEmulator {
                 case 0x196: NON = NON & 0x0000FFFF | (uint)value << 16; break;
                 case 0x198: EON = EON & 0xFFFF0000 | value; break;
                 case 0x19a: EON = EON & 0x0000FFFF | (uint)value << 16; break;
-                case 0x1b0: CD_INPUT_VOLUME = CD_INPUT_VOLUME & 0xFFFF0000 | value; break;
-                case 0x1b2: CD_INPUT_VOLUME = CD_INPUT_VOLUME & 0x0000FFFF | (uint)value << 16; break;
+                case 0x1b0: CDInputVolume = CDInputVolume & 0xFFFF0000 | value; break;
+                case 0x1b2: CDInputVolume = CDInputVolume & 0x0000FFFF | (uint)value << 16; break;
                 case 0x1b4: external_Audio_Input_Volume = external_Audio_Input_Volume & 0xFFFF0000 | value; break;
                 case 0x1b6: external_Audio_Input_Volume = external_Audio_Input_Volume & 0x0000FFFF | (uint)value << 16; break;
                 case 0x1ac: transfer_Control = value; break;
                 case 0x1a4: SPU_IRQ_Address = ((uint)value) << 3;
-                    if (SPU_IRQ_Address <= 0x3FF) {
-                        Console.WriteLine("[SPU] Capture address: " + SPU_IRQ_Address.ToString("x"));
-                    }
+                    /*if (SPU_IRQ_Address <= 0x3FF) {
+                        //Console.WriteLine("[SPU] Capture address: " + SPU_IRQ_Address.ToString("x"));
+                    }*/
                     break;
                 case 0x1a6:
                     transfer_address = value;            //Store adress devided by 8
@@ -259,8 +277,8 @@ namespace PSXEmulator {
                 case 0x196: return (ushort)(NON >> 16);
                 case 0x198: return (ushort)EON;
                 case 0x19a: return (ushort)(EON >> 16);
-                case 0x1b0: return (ushort)CD_INPUT_VOLUME;
-                case 0x1b2: return (ushort)(CD_INPUT_VOLUME >> 16);
+                case 0x1b0: return (ushort)CDInputVolume;
+                case 0x1b2: return (ushort)(CDInputVolume >> 16);
                 case 0x1b8: return (ushort)mainVolumeLeft;  
                 case 0x1ba: return (ushort)mainVolumeRight;  
                 case 0x1a6: return (ushort)transfer_address;
@@ -290,36 +308,36 @@ namespace PSXEmulator {
 
         public void setCtrl(UInt16 value) {
             SPUCNT = value;
-
-            SPU_Enable = ((SPUCNT >> 15) & 1) == 1;
-            IRQ9_Enable = ((SPUCNT >> 6) & 1) == 1;
-            SPU_Mode = (byte)(value & 0x3F);
+            CDAudioEnable = (value & 1) == 1;
+            CDReverbEnable = ((value >> 2) & 1) == 1;
             DMA_Read_Write_Request = (byte)((value >> 5) & 0x1);
-            reverbEnabled = ((value >> 7) & 1) == 1;        //Only affects Reverb bufffer write, SPU can still read from reverb area
+            SPU_Mode = (byte)(value & 0x3F);
+            IRQ9Enable = ((SPUCNT >> 6) & 1) == 1;
+            reverbEnabled = ((value >> 7) & 1) == 1;     //Only affects Reverb bufffer write, SPU can still read from reverb area
 
-            if (!SPU_Enable) {
+            //8-9   Noise Frequency Step    (0..03h = Step "4,5,6,7")
+            //10-13 Noise Frequency Shift   (0..0Fh = Low .. High Frequency)
+
+            SPUMuted = ((value >> 14) & 1) == 0;
+            SPUEnable = ((SPUCNT >> 15) & 1) == 1;
+
+            if (!SPUEnable) {
                 for (int i = 0; i < voices.Length; i++) {
                     voices[i].adsr.setPhase(Phase.Off);
                 }
             }
 
-            if (!IRQ9_Enable) {
+            if (!IRQ9Enable) {
                 IRQ_Flag = 0;
             }
 
         }
 
-        private int clk_counter = 0;
-        public const uint CYCLES_PER_SAMPLE = 0x300;
-        byte[] outputBuffer = new byte[2048];
-        int outputBufferPtr = 0;
-        int sumLeft;
-        int sumRight;
-        private int reverbCounter = 0;
+      
         public void SPU_Tick(int cycles) {        //SPU Clock
-           
+         
             clk_counter += cycles;
-            if (clk_counter < CYCLES_PER_SAMPLE || !SPU_Enable) { return; }
+            if (clk_counter < CYCLES_PER_SAMPLE || !SPUEnable) { return; }
             reverbCounter = (reverbCounter + 1) & 1;    //For half the frequency
             clk_counter = 0;
 
@@ -348,9 +366,7 @@ namespace PSXEmulator {
 
                 if (voices[i].adsr.phase == Voice.ADSR.Phase.Off) {
                     voices[i].lastSample = 0;
-
                     continue;
-
                 }
 
                 short sample = 0;
@@ -381,19 +397,35 @@ namespace PSXEmulator {
                 sumLeft += (sample * voices[i].getVolumeLeft()) >> 15;
                 sumRight += (sample * voices[i].getVolumeRight()) >> 15;
 
-               
                  if (((EON >> i) & 1) == 1) {   //Adding samples from any channel with active reverb
                     reverbLeft_Input += (sample * voices[i].getVolumeLeft()) >> 15;    
                     reverbRight_Input += (sample * voices[i].getVolumeRight()) >> 15;
                  }
                
             }
-            
-            captureBuffers(0x800 + captureOffset, (byte)(voices[1].lastSample & 0xFF));
-            captureBuffers(0x800 + captureOffset + 1, (byte)((voices[1].lastSample >> 8) & 0xFF));
-            captureBuffers(0xC00 + captureOffset, (byte)(voices[3].lastSample & 0xFF));
-            captureBuffers(0xC00 + captureOffset + 1, (byte)((voices[3].lastSample >> 8) & 0xFF));
 
+            //Merge in CD-Audio (CD-DA and compressed XA-ADPCM), read one L/R sample each tick (tick rate is 44.1khz)
+            //CD Samples are consumed even if CD audio is disabled, they will also end up in the capture buffer 
+            int cdSamples = CDDataControl.CD_AudioSamples.Count;
+            short CDAudioLeft = 0;
+            short CDAudioRight = 0;
+            if (cdSamples > 0) {              
+                short CDLeftVolume = (short)CDInputVolume;
+                short CDRightVolume = (short)(CDInputVolume >> 16);
+                short leftSample = CDDataControl.CD_AudioSamples.Dequeue();
+                short rightSample = CDDataControl.CD_AudioSamples.Dequeue();
+                CDAudioLeft += (short)((leftSample * CDLeftVolume) >> 15);
+                CDAudioRight += (short)((rightSample * CDRightVolume) >> 15);
+                captureBuffers(0x000 + captureOffset, CDAudioLeft);               //Capture CD Audio left (before *volume)
+                captureBuffers(0x400 + captureOffset, CDAudioRight);              //Capture CD Audio right (before *volume)
+            }
+            sumLeft += CDAudioEnable ? CDAudioLeft : 0;
+            sumRight += CDAudioEnable ? CDAudioRight : 0;
+            reverbLeft_Input += (CDAudioEnable && CDReverbEnable) ? CDAudioLeft : 0;
+            reverbRight_Input += (CDAudioEnable && CDReverbEnable) ? CDAudioRight : 0;
+
+            captureBuffers(0x800 + captureOffset, voices[1].lastSample);             //Capture Voice 1
+            captureBuffers(0xC00 + captureOffset, voices[3].lastSample);             //Capture Voice 3
             captureOffset += 2;
 
             if (captureOffset > 0x3FF) { captureOffset = 0; }
@@ -408,17 +440,15 @@ namespace PSXEmulator {
             sumLeft = (Math.Clamp(sumLeft, -0x8000, 0x7FFE) * mainVolumeLeft) >> 15;
             sumRight = (Math.Clamp(sumRight, -0x8000, 0x7FFE) * mainVolumeRight) >> 15;
 
-
             //SPU Mute
-            sumLeft *= (SPUCNT >> 14) & 1;      
-            sumRight *= (SPUCNT >> 14) & 1;
+            sumLeft = SPUMuted ? 0 : sumLeft;
+            sumRight = SPUMuted ? 0 : sumRight;
 
             outputBuffer[outputBufferPtr++] = (byte)sumLeft;
             outputBuffer[outputBufferPtr++] = (byte)(sumLeft >> 8);
             outputBuffer[outputBufferPtr++] = (byte)sumRight;
             outputBuffer[outputBufferPtr++] = (byte)(sumRight >> 8);
 
-      
             if (outputBufferPtr >= 2048) {
                 playAudio(outputBuffer);
                 outputBufferPtr -= 2048;
@@ -427,30 +457,19 @@ namespace PSXEmulator {
                 SPU_IRQ();
             }
         }
-        uint captureOffset = 0;
 
-        private void captureBuffers(uint address, byte halfSample) { //Experimental 
-
-            /*RAM[0x00800 + captureOffset] = (byte)voices[1].lastSample;
-            RAM[0x00800 + captureOffset + 1] = (byte)(voices[1].lastSample >> 8);
-
-            RAM[0x00C00 + captureOffset] = (byte)voices[3].lastSample;
-            RAM[0x00C00 + captureOffset + 1] = (byte)(voices[3].lastSample >> 8);*/
-
-            /* Setting the IRQ address to 0000h..01FFh (aka byte address 00000h..00FFFh) 
-             will trigger IRQs on writes to the four capture buffers */
-            RAM[address] = halfSample;
-
-
+        private void captureBuffers(uint address, short value) { //Experimental 
+            Span<byte> Memory = new Span<byte>(RAM, (int)address, 2);
+            MemoryMarshal.Write<short>(Memory, ref value);
             if ((SPU_IRQ_Address == address) && (((transfer_Control >> 2) & 0x3) != 0)) { 
                 SPU_IRQ();
             }
-
         }
         private (int, int) processReverb(int leftInput, int rightInput) {
 
             //Apply reverb formula
-            //Seems like any Multiplication/Addition needs to be clamped to (-0x8000 , +0x7FFF), not just the last values written to memory
+            //Seems like any Multiplication/Addition needs to be clamped to (-0x8000 , +0x7FFF),
+            //not just the last values written to memory
 
 
             //  ___Input from Mixer (Input volume multiplied with incoming data)_____________
@@ -548,7 +567,7 @@ namespace PSXEmulator {
 
         }
         public void SPU_IRQ() {
-            if (IRQ9_Enable) {
+            if (IRQ9Enable) {
                 IRQ_Flag = 1;
                 IRQ_CONTROL.IRQsignal(9);
             }
@@ -577,7 +596,6 @@ namespace PSXEmulator {
         }
 
         private void modulatePitch(int i) {
-            
             int step =  voices[i].ADPCM_Pitch;   //Sign extended to 32-bits
 
             if (((PMON & (1 << i)) != 0) && i > 0) {
@@ -587,11 +605,8 @@ namespace PSXEmulator {
                 step = step >> 15;
                 step = step & 0x0000FFFF;
             }
-
             if (step > 0x3FFF) { step = 0x4000; }
-
             voices[i].pitchCounter = (voices[i].pitchCounter + (ushort)step);
-
         }
 
         public void playAudio(byte[] samples) {

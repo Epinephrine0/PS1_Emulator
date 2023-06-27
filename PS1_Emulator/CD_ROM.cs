@@ -1,9 +1,11 @@
-﻿using System;
+﻿using NAudio.CoreAudioApi;
+using SixLabors.ImageSharp;
+using System;
 using System.Collections.Generic;
 using System.IO;
 
 namespace PSXEmulator {
-    public unsafe class CD_ROM  {
+    public unsafe class CD_ROM  {   
         public Range range = new Range(0x1F801800, 4);
 
         public const byte INT0 = 0; //INT0 No response received(no interrupt request)
@@ -45,7 +47,7 @@ namespace PSXEmulator {
         byte requestRegister;
         byte stat = 0b00000010;
 
-        //Mode from Setmode
+        //Setmode
         byte mode;
         uint lastSize;
         bool autoPause;
@@ -55,7 +57,7 @@ namespace PSXEmulator {
         uint s; //Seconds
         uint f; //Sectors
 
-        public enum Command {
+        public enum Command {   //This could be removed?
             GetStat,
             Init,
             GetID,
@@ -67,28 +69,36 @@ namespace PSXEmulator {
             Play
         }
 
-        public enum State {
+        public enum State {    //TODO: Enhance/Add states
             Idle,
             RespondingToCommand,
             ReadingSectors
         }
 
+        /* CD Audio Volume */
         byte LeftCD_toLeft_SPU_Volume;
         byte LeftCD_toRight_SPU_Volume;
         byte RightCD_toRight_SPU_Volume;
         byte RightCD_toLeft_SPU_Volume;
-        byte audioApplyChanges;
+
+        bool doubleSpeed;
 
         State CDROM_State;
         Command command;
 
         public byte padding;
         public byte currentCommand;
-        public bool hasDisk = false;       //A game disk, audio disks are not supported yet 
+        public bool hasDisk = true;       //A game disk, audio disks are not supported yet 
         public bool ledOpen = false;
-        public string path = @"C:\Users\Old Snake\Desktop\PS1\ROMS\Metal Gear Solid (USA) (Disc 1) (v1.0)\Metal Gear Solid (USA) (Disc 1).bin";
+        public string path =
+            @"C:\Users\Old Snake\Desktop\PS1\ROMS\Crash Team Racing [U] [SCUS-94426]\CTR - Crash Team Racing (USA).bin";
         byte[] disk;
         private delegate*<CD_ROM, void>[] lookUpTable = new delegate*<CD_ROM, void>[0xFF + 1];
+        public CDROMDataController DataController;
+
+        uint currentIndex;      //Offset in bytes
+        int counter = 0;        //Delay
+        uint sectorOffset = 0;  //Skip headers, etc
 
         public CD_ROM() {
             disk = hasDisk? File.ReadAllBytes(path) : null;
@@ -97,7 +107,7 @@ namespace PSXEmulator {
             for (int i = 0; i< lookUpTable.Length; i++) {
                 lookUpTable[i] = &illegal;
             }
-
+            DataController = new CDROMDataController(ref disk);
             //Add whatever I implemented manually
             lookUpTable[0x01] = &getStat;
             lookUpTable[0x02] = &setloc;
@@ -118,37 +128,41 @@ namespace PSXEmulator {
             lookUpTable[0x1A] = &getID;
             lookUpTable[0x1B] = &readN_S;
         }
+        private static byte DecToBcd(byte value) {
+            return (byte)(value + 6 * (value / 10));
+        }
+
+        private static int BcdToDec(byte value) {
+            return value - 6 * (value >> 4);
+        }
 
         private static void illegal(CD_ROM cdrom) {
             //Console.WriteLine("[CDROM] Ignoring command 0x" +  cdrom.currentCommand.ToString("X"));
             throw new Exception("Unknown CDROM command: " + cdrom.currentCommand.ToString("x"));
         }
         public void controller(byte command) {
-            //BUSYSTS = 1;    //Command busy flag
-            //busyDelay = 1000;
             currentCommand = command;
             interrupts.Clear();
             responseBuffer.Clear();
-            currentSector.Clear();
-            lastReadSector.Clear();
+            DataController.dataFifo.Clear();
+            DataController.sectorQueue.Clear();
             lookUpTable[command](this);
             parameterBuffer.Clear();
             //Console.WriteLine("CD-ROM: 0x" + command.ToString("x"));
-
         }
         private byte CDROM_Status() {
-            DRQSTS = (byte)((currentSector.Count > 0) ? 1 : 0);
+            DRQSTS = (byte)((DataController.dataFifo.Count > 0) ? 1 : 0);
             RSLRRDY = (byte)((responseBuffer.Count > 0) ? 1 : 0);
-            byte status = (byte)((BUSYSTS << 7) | (DRQSTS << 6) | (RSLRRDY << 5) | (PRMWRDY << 4) | (PRMEMPT << 3) | (ADPBUSY << 2) | Index);
+            byte status = (byte)((BUSYSTS << 7) | (DRQSTS << 6) 
+                | (RSLRRDY << 5) | (PRMWRDY << 4) | (PRMEMPT << 3) | (ADPBUSY << 2) | Index);
             //Console.WriteLine("[CDROM] Reading Status: " + status.ToString("x"));
             return status;
         }
 
         public void storeByte(uint address, byte value) {
             uint offset = address - range.start;
-
             switch (offset) {
-                case 0: Index = (byte)(value & 3); break; //Status register
+                case 0: Index = (byte)(value & 3); break; //Status register, all mirrors
                 case 1:
                     switch (Index) {
                         case 0: controller(value); break;
@@ -169,117 +183,85 @@ namespace PSXEmulator {
 
                 case 3:
                     switch (Index) {
-                        case 0: //This could be wrong
-                            requestRegister = value;
-                            
-                            if((requestRegister & 0x80) != 0) {
-                                if (currentSector.Count > 0) { return; }
-                                int negativeOffset=0;
-
-                                switch (lastSize) {
-                                    case 0x800:
-                                        negativeOffset = -8;
-                                        break;
-
-                                    case 0x924:
-                                        negativeOffset = -4;
-                                        break;
-                                }
-                                
-                                for (int i = 0; i < lastSize; i++) {
-                                    if (i==(lastSize+negativeOffset)) {
-                                        padding = lastReadSector.Peek();
-                                    }
-                                    currentSector.Enqueue(lastReadSector.Dequeue());
-
-                                }
-                                
-
-                            }
-                            else {
-                                currentSector.Clear();
-
-                            }
-                            break;
-
-                        case 1:
-                            IRQ_flag &= (byte) ~(value & 0x1F);
-
-                            if(interrupts.Count > 0 && interrupts.Peek().delay <= 0) {
-                                IRQ_flag |= interrupts.Dequeue().interrupt;
-                            }
-                            if (((value >> 6) & 1) == 1) {
-                                parameterBuffer.Clear();
-                            }
-                            break;
-
-                        case 2:
-                            LeftCD_toRight_SPU_Volume = value;
-                            break;
-
-                        case 3:
-                            audioApplyChanges = value;
-                            break;
-
-                        default:
-                            throw new Exception("Unknown Index (" + Index + ")" + " at CRROM IRQ flag register");
+                        case 0: RequestRegister(value); break;
+                        case 1: InterruptFlagRegister(value); break;
+                        case 2: LeftCD_toRight_SPU_Volume = value; break;
+                        case 3: applyVolume(value); break;
+                        default:  throw new Exception("Unknown Index (" + Index + ")" + " at CRROM IRQ flag register");
                     }
                     break;
 
-
-                default:
-                    throw new Exception("Unhandled store at CRROM offset: " + offset + " index: " + Index);
-
+                default: throw new Exception("Unhandled store at CRROM offset: " + offset + " index: " + Index);
             }
-
         }
 
         public byte loadByte(uint address) {
             uint offset = address - range.start;
 
             switch (offset) {
-                case 0: return CDROM_Status();   //Status register 
-
-                case 1:            //Response FIFO, all indexes are mirrors
-                    if (responseBuffer.Count > 0) {
-
-                        return responseBuffer.Dequeue();
-
-                    }
-                    //Console.WriteLine("[CDROM] Responding..");
-                    return 0xFF;
-
+                case 0: return CDROM_Status();              //Status register, all indexes are mirrors
+                case 1: return responseBuffer.Dequeue();    //Response fifo, all indexes are mirrors
+                case 2: return DataController.readByte();           //Data fifo, all indexes are mirrors
                 case 3:
                     switch (Index) {
-
                         case 0:
                         case 2:
-                            return (byte)(IRQ_enable | 0xe0);   //0-4 > INT enable ,the rest are 1s
-
+                            return (byte)(IRQ_enable | 0xe0);   //0-4 > INT enable , the rest are 1s
                         case 1:
                         case 3:
-                            //Console.WriteLine("[CDROM] Reading IRQ FLAG: "+ IRQ_flag);
-                            return (byte)(IRQ_flag | 0xe0);   //0-4 > INT flag ,the rest are 1s
+                            return (byte)(IRQ_flag | 0xe0);   //0-4 > INT flag , the rest are 1s
 
-                        default:  throw new Exception("Unknown Index (" + Index + ")" + " at CRROM IRQ flag register");
+                        default: throw new Exception("Unknown Index (" + Index + ")" + " at CRROM IRQ flag register");
                     }
-
-
-                default:
-                    throw new Exception("Unhandled read at CRROM register: " + offset + " index: " + Index);
-
+                default: throw new Exception("Unhandled read at CRROM register: " + offset + " index: " + Index);
             }
+        }
+        private void RequestRegister(byte value) {
+            if ((value & 0x80) != 0) { //Request data
+                if (DataController.dataFifo.Count > 0) { return; }
+                DataController.moveSectorToDataFifo();
+            }
+            else {
+                DataController.dataFifo.Clear();
+            }
+        }
+        private void InterruptFlagRegister(byte value) {
+            IRQ_flag &= (byte)~(value & 0x1F);
 
+            if (interrupts.Count > 0 && interrupts.Peek().delay <= 0) {
+                IRQ_flag |= interrupts.Dequeue().interrupt;
+            }
+            if (((value >> 6) & 1) == 1) {
+                parameterBuffer.Clear();
+            }
+        }
+        private void applyVolume(byte value) {
+            bool isMute = (value & 1) != 0;
+            bool applyVolume = ((value >> 5) & 1) != 0;
+            if (isMute) {
+                DataController.currentVolume.LtoL = 0;
+                DataController.currentVolume.LtoR = 0;
+                DataController.currentVolume.RtoL = 0;
+                DataController.currentVolume.RtoR = 0;
+            }
+            else if (applyVolume) {
+                DataController.currentVolume.LtoL = LeftCD_toLeft_SPU_Volume;
+                DataController.currentVolume.LtoR = LeftCD_toRight_SPU_Volume;
+                DataController.currentVolume.RtoL = RightCD_toLeft_SPU_Volume;
+                DataController.currentVolume.RtoR = RightCD_toRight_SPU_Volume;
+            }
         }
         private static void test(CD_ROM cdrom) {
             byte parameter = cdrom.parameterBuffer.Dequeue();
             switch (parameter) {
                 case 0x20: getDateAndVersion(cdrom); break;
-                default: throw new Exception("Unknown parameter: " + parameter.ToString("x"));
+                default: throw new Exception("[CDROM] Test command: unknown parameter: " + parameter.ToString("x"));
             }
         }
         private static void setFilter(CD_ROM cdrom) {
-            Console.WriteLine("[CDROM] Ignoring setFilter");
+            cdrom.DataController.filter.fileNumber = cdrom.parameterBuffer.Dequeue();
+            cdrom.DataController.filter.channelNumber = cdrom.parameterBuffer.Dequeue();
+
             cdrom.responseBuffer.Enqueue(cdrom.stat);
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
         }
@@ -287,9 +269,7 @@ namespace PSXEmulator {
             cdrom.CDROM_State = State.RespondingToCommand;
             cdrom.command = Command.Seek;
 
-            cdrom.currentIndex = (((cdrom.m * 60 * 75) + (cdrom.s * 75) + cdrom.f - 150)) * 0x930 + cdrom.sectorOffset;
-
-            //Console.WriteLine("[CDROM] seekl");
+            cdrom.currentIndex = ((cdrom.m * 60 * 75) + (cdrom.s * 75) + cdrom.f - 150) * 0x930;
 
             cdrom.stat = 0x42; //Seek
 
@@ -303,8 +283,7 @@ namespace PSXEmulator {
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
         }
 
-        private static void play(CD_ROM cdrom) {   //Subbed
-
+        private static void play(CD_ROM cdrom) {   //CD-DA ? TODO
             cdrom.CDROM_State = State.ReadingSectors;
             cdrom.command = Command.Play;
 
@@ -317,21 +296,11 @@ namespace PSXEmulator {
             //Response 1
             cdrom.responseBuffer.Enqueue(cdrom.stat);
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
-
-            /*//Hardcoded as fuck
-
-            if (parameterBuffer.Count > 0 && parameterBuffer.Dequeue() != 0) {
-                //disk = File.ReadAllBytes(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Puzzle Bobble 2 (Japan)\Puzzle Bobble 2 (Japan) (Track 02).bin");
-                currentIndex = 0;
-            }*/
-
-
         }
 
             private static void stop(CD_ROM cdrom) {
             //The first response returns the current status (this already with bit5 cleared)
             //The second response returns the new status (with bit1 cleared)
-
             cdrom.stat = 0x2;
             cdrom.responseBuffer.Enqueue(cdrom.stat);
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
@@ -347,14 +316,6 @@ namespace PSXEmulator {
             }
 
             cdrom.command = Command.Stop;
-        }
-
-        private static byte DecToBcd(byte value) {
-            return (byte)(value + 6 * (value / 10));
-        }
-
-        private static int BcdToDec(byte value) {
-            return value - 6 * (value >> 4);
         }
 
         private static void getTD(CD_ROM cdrom) {
@@ -404,10 +365,6 @@ namespace PSXEmulator {
         private static void pause(CD_ROM cdrom) {
             cdrom.CDROM_State = State.RespondingToCommand;
 
-           
-           // Console.WriteLine("[CDROM] Pause, next MSF: " + m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0'));
-
-            
             //Response 1
             cdrom.responseBuffer.Enqueue(cdrom.stat);
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
@@ -422,9 +379,7 @@ namespace PSXEmulator {
             else {
                 cdrom.interrupts.Enqueue(new DelayedInterrupt(cdrom.doubleSpeed ? 0x010bd93 : 0x021181c, INT2));
             }
-
             cdrom.command = Command.Pause;
-
         }
         private static void init(CD_ROM cdrom) {
             // Console.WriteLine("[CDROM] Init");
@@ -446,9 +401,8 @@ namespace PSXEmulator {
 
         private static void readN_S(CD_ROM cdrom) {
             cdrom.CDROM_State = State.ReadingSectors;
-            // Console.WriteLine("[CDROM] ReadN at MSF: " + m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0'));
 
-            cdrom.currentIndex = (((cdrom.m * 60 * 75) + (cdrom.s * 75) + cdrom.f - 150)) * 0x930 + cdrom.sectorOffset;
+            cdrom.currentIndex = ((cdrom.m * 60 * 75) + (cdrom.s * 75) + cdrom.f - 150) * 0x930;
 
             cdrom.stat = 0x2; //Read
             cdrom.stat |= 0x20;
@@ -459,8 +413,9 @@ namespace PSXEmulator {
 
             //Further responses [INT1] are added in tick() 
         }
-        bool doubleSpeed;
+  
         private static void setMode(CD_ROM cdrom) {
+            // Console.WriteLine("[CDROM] seekl");
             cdrom.CDROM_State = State.RespondingToCommand;
             cdrom.command = Command.Other;
 
@@ -478,9 +433,16 @@ namespace PSXEmulator {
                 }
             }
 
+            //Test
+            cdrom.DataController.bytesToSkip = cdrom.sectorOffset;
+            cdrom.DataController.sizeOfDataSegment = cdrom.lastSize;
+            cdrom.DataController.filter.isEnabled = ((cdrom.mode >> 3) & 1) != 0;
+
             cdrom.doubleSpeed = ((cdrom.mode >> 7) & 1) != 0;
             cdrom.autoPause = ((cdrom.mode >> 1) & 1) != 0; //For audio play only
             cdrom.report = ((cdrom.mode >> 2) & 1) != 0; //For audio play only
+
+            cdrom.DataController.XA_ADPCM_En = ((cdrom.mode >> 6) & 1) != 0; //(0=Off, 1=Send XA-ADPCM sectors to SPU Audio Input)
 
             //Response 1
             cdrom.responseBuffer.Enqueue(cdrom.stat);
@@ -492,9 +454,7 @@ namespace PSXEmulator {
             cdrom.CDROM_State = State.RespondingToCommand;
             cdrom.command = Command.Seek;
 
-            cdrom.currentIndex = (((cdrom.m * 60 * 75) + (cdrom.s * 75) + cdrom.f - 150)) * 0x930 + cdrom.sectorOffset;
-
-            // Console.WriteLine("[CDROM] seekl");
+            cdrom.currentIndex = ((cdrom.m * 60 * 75) + (cdrom.s * 75) + cdrom.f - 150) * 0x930;
 
             cdrom.stat = 0x42; //Seek
 
@@ -506,17 +466,12 @@ namespace PSXEmulator {
             cdrom.stat = (byte)(cdrom.stat & (~0x40));
             cdrom.responseBuffer.Enqueue(cdrom.stat);
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
-
         }
 
-    
+
         private static void setloc(CD_ROM cdrom) {
             cdrom.CDROM_State = State.RespondingToCommand;
             cdrom.command = Command.Other;
-
-            /*Console.WriteLine(
-                "[CDROM] setloc: " + m.ToString().PadLeft(2, '0') + ":" + s.ToString().PadLeft(2, '0') + ":" + f.ToString().PadLeft(2, '0')
-                );*/
 
             cdrom.seekParameters[0] = cdrom.parameterBuffer.Dequeue();  //Minutes
             cdrom.seekParameters[1] = cdrom.parameterBuffer.Dequeue();  //Seconds 
@@ -532,9 +487,9 @@ namespace PSXEmulator {
         }
 
         private static void getID(CD_ROM cdrom) {
+            //Console.WriteLine("[CDROM] GetId");
             cdrom.CDROM_State = State.RespondingToCommand;
             cdrom.command = Command.GetID;
-            //Console.WriteLine("[CDROM] GetId");
 
             cdrom.responseBuffer.Enqueue(cdrom.stat);
             cdrom.stat = 0x40;  //0x40 seek
@@ -542,7 +497,6 @@ namespace PSXEmulator {
 
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
-          
             if (cdrom.hasDisk) {
                 cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
 
@@ -581,7 +535,6 @@ namespace PSXEmulator {
 
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
             cdrom.responseBuffer.Enqueue(cdrom.stat);
-
         }
 
         public static void getDateAndVersion(CD_ROM cdrom) {
@@ -589,23 +542,27 @@ namespace PSXEmulator {
             cdrom.CDROM_State = State.RespondingToCommand;
             cdrom.command = Command.Other;
 
-
-            //0x94, 0x09, 0x19, 0xC0        We can set anything, but this is the original values
+            //0x94, 0x09, 0x19, 0xC0
+            //We can set anything, but this is the original values
             cdrom.responseBuffer.Enqueue(0x94);
             cdrom.responseBuffer.Enqueue(0x09);
             cdrom.responseBuffer.Enqueue(0x19);
             cdrom.responseBuffer.Enqueue(0xc0);
 
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
-
         }
-
-     
-        uint currentIndex;
-        public Queue<byte> currentSector = new Queue<byte>();
-        public Queue<byte> lastReadSector = new Queue<byte>();
-        int counter = 0;
-        uint sectorOffset = 0;
+        void IncrementIndex() {
+            f++;
+            if (f >= 75) {
+                f = 0;
+                s++;
+            }
+            if (s >= 60) {
+                s = 0;
+                m++;
+            }
+            currentIndex = ((m * 60 * 75) + (s * 75) + f - 150) * 0x930; 
+        }
 
         internal void tick(int cycles) {
             counter += cycles;
@@ -613,25 +570,18 @@ namespace PSXEmulator {
             if (interrupts.Count > 0) {
                 interrupts.Peek().delay -= cycles;
             }
-
             if (interrupts.Count > 0 && IRQ_flag == 0 && interrupts.Peek().delay <= 0) {
-
                 IRQ_flag |= interrupts.Dequeue().interrupt;
-
                 if ((IRQ_enable & IRQ_flag) != 0) {
                     IRQ_CONTROL.IRQsignal(2);
-                    //Console.WriteLine("[CDROM] IRQ Fired");
                 }
-
             }
-
 
             switch (CDROM_State) {
                 case State.Idle:
                     counter = 0;
                     if(command == Command.Pause) { return; }
                     command = Command.None;
-
                     break;
 
                 case State.RespondingToCommand:
@@ -640,7 +590,6 @@ namespace PSXEmulator {
                         RSLRRDY = 0;
                         return;
                     }
-
                     break;
 
 
@@ -650,67 +599,25 @@ namespace PSXEmulator {
                     }
 
                     counter = 0;
-                    //lastReadSector.Clear();
-
-                    uint size;
-                    if ((mode >> 4 & 1) == 0) {
-                        if (((mode >> 5) & 1) == 0) {
-                            size = 0x800;
-                            lastSize = size;
-                            sectorOffset = 24;
-
-                        } else {
-                            size = 0x924;
-                            lastSize = size;
-                            sectorOffset = 12;
-
-                          }
-
-                     } else {
-                        size = lastSize;
-                      }
-
-                     
                     
                     if(command != Command.Play) {
-                        string xa = "";
-                        for (uint i = 0; i < size; i++) {
-                            lastReadSector.Enqueue(disk[i + currentIndex]);
-                            if(((i) >= 0x400) && ((i) <= 0x407)) {
-                                xa = xa + (Char)disk[i + currentIndex];
+                        bool sendToCPU = DataController.loadNewSector(currentIndex);
+                        IncrementIndex();
+                        if (sendToCPU) {    
+                            responseBuffer.Enqueue(stat);
+                            if (m < 74) {
+                                interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
+                            }
+                            else {
+                                interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end, but what should be the index?
                             }
                         }
-                        if (xa.Equals("CD-XA001")) {
-                            Console.WriteLine("CD-XA Sector!"); //TODO
-                        }
-                        xa = "";
-                        f++;
-
-                        if (f >= 75) {
-                            f = 0;
-                            s++;
-                        }
-
-                        if (s >= 60) {
-                            s = 0;
-                            m++;
-                        }
-
-                        currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
-                        responseBuffer.Enqueue(stat);
-                        if (m < 74) {
-
-                            interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
-
-                        }
                         else {
-                            interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end
-                            //Console.WriteLine("[CDROM] Data end INT4 issued!");
+                            //Send to SPU
                         }
                     }
                     else {
-                        lastReadSector.Clear();
-
+                        DataController.sectorQueue.Clear();
                         if (report) {
                             responseBuffer.Enqueue(0xFF);   //Garbage Report 
                             interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
@@ -721,16 +628,10 @@ namespace PSXEmulator {
                             pause(this);
                             Console.WriteLine("[CDROM] Data end INT4 issued!");
                         }
-
                     }
-                    
                     break;
-
             }
-
-
         }
-
     }
     public class DelayedInterrupt {     //Interrupts from the CDROM need to be delayed with an average number of cycles  
         public int delay;
