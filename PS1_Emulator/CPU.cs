@@ -115,7 +115,7 @@ namespace PSXEmulator {
 
             current = new Instruction(BUS.loadWord(pc));
 
-            delay_slot = _branch;   //Brach delay 
+            delay_slot = _branch;   //Branch delay 
             _branch = false;
 
             pc = next_pc;
