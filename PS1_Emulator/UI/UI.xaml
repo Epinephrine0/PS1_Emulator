@@ -5,7 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:PSXEmulator"
         mc:Ignorable="d"
-        Title="UI" Height="450" Width="800" Background = "#363535" >
+        Title="UI" Height="450" Width="800" Background = "#363535"
+        WindowStartupLocation="CenterScreen">
     <Grid>
         <Button Name = "PlayButton" Content="Start" HorizontalAlignment="Center" Margin="0,33,0,0" VerticalAlignment="Top" Height="34" Width="100" Click="PlayButton_Click" Background="#FF707070"/>
         <Button Name = "ImportButton" Content="Load Games" HorizontalAlignment="Left" Margin="603,33,0,0" VerticalAlignment="Top" Height="34" Width="100" RenderTransformOrigin="3.391,1.291" Click="ImportButton_Click" Background="#FF707070"/>
