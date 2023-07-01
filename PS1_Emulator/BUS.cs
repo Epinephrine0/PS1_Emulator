@@ -1,4 +1,5 @@
 ﻿using PSXEmulator.PS1_Emulator;
+using PSXEmulator.UI;
 using System;
 using System.IO;
 
@@ -36,21 +37,12 @@ namespace PSXEmulator {
         public Range TIMER0 = new Range(0x1F801100, 0xF+1);        //Assumption 
         public bool debug = false;
 
-        public BUS(Renderer mainWindow) {
-            try {
-                BIOS = new BIOS(@"BIOS\PSX - SCPH1001.BIN");
-                mainWindow.Title += BIOS.ID.Contains("1001") ? (" - BIOS: " + BIOS.ID) : "";
-            }
-            catch (FileNotFoundException e) {
-                Console.WriteLine("ERROR: PSX BIOS WAS NOT FOUND!");
-                Console.WriteLine("Press any key to exit");
-                Console.ReadKey();
-                throw e;
-            }
+        public BUS(Renderer mainWindow, Settings userSettings) {
+            BIOS = new BIOS(userSettings.BIOSPath);
 
             RAM = new RAM();
             scratchpad = new Scratchpad();
-            CD_ROM = new CD_ROM();
+            CD_ROM = new CD_ROM(userSettings.SelectedGameFolder, userSettings.TrackIndex);
             SPU = new SPU(ref CD_ROM.DataController);
             DMA = new DMA();
             IO_PORTS = new IO_PORTS();

@@ -1,53 +1,80 @@
-﻿using OpenTK.Windowing.GraphicsLibraryFramework;
+﻿using PSXEmulator.UI;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Forms;
 
 namespace PSXEmulator {
     /// <summary>
-    /// Interaction logic for UI.xaml
+    /// Interaction logic for UserInterface.xaml
     /// </summary>
-    public partial class UI : System.Windows.Window {
+    public partial class UserInterface : System.Windows.Window {
         PSX_OpenTK MainEmu;
-        static string BiosPath;
-        static string GamesPath;
+
         string[] GamesFolders; 
         string[] SelectedGameFiles;
         string SystemID = "PLAYSTATION";
         string CopyRight = "Sony Computer Entertainment Inc.";
-        bool HasValidBios;
-        public UI() {
+        bool HasValidBios;  
+        Settings UserSettings;  //The way I pass this object around is pretty Bullshit and needs to be changed
+
+        public UserInterface() {
             InitializeComponent();
             this.Title = "PSX Emulator";
             this.ResizeMode = ResizeMode.NoResize;
-            try {
-                BiosPath = File.ReadAllText("BIOSPath.txt");  
-            }
-            catch (FileNotFoundException ex) {
-                loadBios();
-            }
-            HasValidBios = IsValidBios(BiosPath);
 
-            try {
-                GamesPath = File.ReadAllText("GamesPath.txt");
-            }catch(FileNotFoundException ex) {
-                GamesPath = "";
+            LoadSettings();
+
+            if (!UserSettings.HasBios) {
+                loadBios();
+            } 
+
+            HasValidBios = IsValidBios(UserSettings.BIOSPath);  
+
+            if (UserSettings.HasGames) {
+                Console.WriteLine("Found game folder");
+                listGames(UserSettings.GamesFolderPath);
+            } else {
+                Console.WriteLine("No game folder found, please import your game folder");
             }
-            listGames(GamesPath);
-            
+        }
+
+        private void LoadSettings() {
+            try {
+                byte[] target = File.ReadAllBytes("Settings.bin");
+                UserSettings = JsonSerializer.Deserialize<Settings>(new ReadOnlySpan<byte>(target));
+                Console.WriteLine("Found Settings");
+            } catch (Exception ex) {
+                switch (ex) {
+                    case FileNotFoundException: //Not found
+                    case JsonException:         //Invalid
+                        Console.WriteLine("Creating new settings");
+                        UserSettings = new Settings();
+                        break;
+                    default:
+                        Console.WriteLine("Fatal: " + ex.ToString());
+                        DisableAll();
+                        return;
+                }
+            }
+        }
+        private void ConfigButton_Click(object sender, RoutedEventArgs e) {
+            //Later
+        }
+        private void DisableAll() {
+            GameList.IsHitTestVisible = false;
+            PlayButton.IsHitTestVisible = false;   
+            ConfigButton.IsHitTestVisible = false;
+            ImportButton.IsHitTestVisible = false;
         }
         private void loadBios() {
             using (OpenFileDialog openFileDialog = new OpenFileDialog()) {
                 openFileDialog.Title = "Select a PSX BIOS file";
-
                 if (openFileDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK && 
                     !string.IsNullOrWhiteSpace(openFileDialog.FileName)) {
-                    BiosPath = openFileDialog.FileName;
+                    UserSettings.BIOSPath = openFileDialog.FileName;
                 }
             }
         }
@@ -67,65 +94,68 @@ namespace PSXEmulator {
             string biosString = Encoding.ASCII.GetString(data);
             if (biosString.Equals(CopyRight)) {
                 Console.WriteLine("Found a valid BIOS!");
-                File.WriteAllText("BIOSPath.txt", BiosPath);
                 return true;
             } else {
                 Console.WriteLine("Selected BIOS is invalid");
                 return false;
             }
         }
-        private void UpdatePathes() {
-        }
+  
         private void PlayButton_Click(object sender, RoutedEventArgs e) {
-            //this.Visibility = Visibility.Hidden;
+
             if (!HasValidBios) {
                 loadBios();
-                HasValidBios = IsValidBios(BiosPath);
+                HasValidBios = IsValidBios(UserSettings.BIOSPath);
                 if (!HasValidBios) {
-                    return;
+                    return; //Refuse to run if not valid
                 }
             }
-            if(gameList.SelectedIndex < 0 || gameList.SelectedItem.Equals("Games go here")) {
+
+            if(GameList.SelectedIndex < 0 || GameList.SelectedItem.Equals("Games go here")) {
                 Console.WriteLine("No game selected");
                 Console.WriteLine("Proceeding to boot without a game");
-                return;
+                Boot();
+                return; //No need to check games and bullshit when booting the Shell
             }
-            SelectedGameFiles = Directory.GetFiles(GamesFolders[gameList.SelectedIndex]);
-            int index = findFirstValidBinary(SelectedGameFiles);
+
+            UserSettings.SelectedGameFolder = GamesFolders[GameList.SelectedIndex];
+            SelectedGameFiles = Directory.GetFiles(UserSettings.SelectedGameFolder);
+
+            int index = findFirstValidBinary(SelectedGameFiles);    //Make sure the game folder contains at least one valid bin
+            UserSettings.TrackIndex = index;
+
             if (index >= 0) {
+                UserSettings.SelectedGameName = Path.GetFileName(SelectedGameFiles[index]);
                 Console.WriteLine("Found valid binary!");
-                Console.WriteLine("Booting: " + Path.GetFileName(SelectedGameFiles[index]));
+                Console.WriteLine("Booting: " + UserSettings.SelectedGameName);
             }
             else {
                 Console.WriteLine("Could not find a valid binary for the selected game");
                 Console.WriteLine("Proceeding to boot without a game");
             }
+
+            Boot();
         }
         private void ImportButton_Click(object sender, RoutedEventArgs e) {
             using (var fbd = new FolderBrowserDialog()) {
                 DialogResult result = fbd.ShowDialog();
                 if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath)) {
-                    GamesPath = fbd.SelectedPath;
+                    UserSettings.GamesFolderPath = fbd.SelectedPath;
                     Console.WriteLine("Reading games folder...");
-                    listGames(GamesPath);
-                    File.WriteAllText("GamesPath.txt", GamesPath);
+                    listGames(UserSettings.GamesFolderPath);
                 }
             }
         }
-
-        private void ConfigButton_Click(object sender, RoutedEventArgs e) {
-            //Later
-        }
         private void listGames(string path) {
-            gameList.Items.Clear();
+            GameList.Items.Clear();
             if (Directory.Exists(path)) {
-                GamesFolders = Directory.GetDirectories(GamesPath);
+                GamesFolders = Directory.GetDirectories(path);
                 Console.WriteLine("Found " + GamesFolders.Length + " games");
                 foreach (string gameFolder in GamesFolders) {
-                    gameList.Items.Add(Path.GetFileName(gameFolder));
+                    GameList.Items.Add(Path.GetFileName(gameFolder));
                 }
             } else {
-                gameList.Items.Add("Games go here");
+                GameList.Items.Add("Games go here");
             }
         }
         private int findFirstValidBinary(string[] selectedGameFiles) {
@@ -147,6 +177,28 @@ namespace PSXEmulator {
                 }
             }
             return -1;
+        }
+        private void OnClose(object sender, EventArgs e) {
+            byte[] serialized = JsonSerializer.SerializeToUtf8Bytes(UserSettings,
+                 new JsonSerializerOptions { WriteIndented = false, IgnoreNullValues = false });
+            File.WriteAllBytes("Settings.bin", serialized);
+            Console.WriteLine("Saved settings");
+        }
+
+        private void Boot() {
+            this.Visibility = Visibility.Hidden; //Hide UI
+
+            MainEmu = new PSX_OpenTK(UserSettings);            /* Game loop */
+
+
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine("Renderer Closed");
+            this.Visibility = Visibility.Visible;
+        }
+
+        private void Window_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
+            GameList.UnselectAll();
         }
     }
 }

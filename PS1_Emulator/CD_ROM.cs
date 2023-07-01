@@ -1,6 +1,4 @@
-﻿using NAudio.CoreAudioApi;
-using SixLabors.ImageSharp;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -90,8 +88,7 @@ namespace PSXEmulator {
         public byte currentCommand;
         public bool hasDisk = true;       //A game disk, audio disks are not supported yet 
         public bool ledOpen = false;
-        public string path =
-            @"C:\Users\Old Snake\Desktop\PS1\ROMS\Crash Team Racing [U] [SCUS-94426]\CTR - Crash Team Racing (USA).bin";
+
         byte[] disk;
         private delegate*<CD_ROM, void>[] lookUpTable = new delegate*<CD_ROM, void>[0xFF + 1];
         public CDROMDataController DataController;
@@ -100,14 +97,19 @@ namespace PSXEmulator {
         int counter = 0;        //Delay
         uint sectorOffset = 0;  //Skip headers, etc
 
-        public CD_ROM() {
-            disk = hasDisk? File.ReadAllBytes(path) : null;
+        public CD_ROM(string gameFolder, int TrackIndex) {
+
+            hasDisk = TrackIndex >= 0;
+
+            if (hasDisk) {
+                disk = File.ReadAllBytes(Directory.GetFiles(gameFolder)[TrackIndex]);
+            }
+            DataController = new CDROMDataController(ref disk); //Will refrence null if no disk, I should really change this
 
             //Fill the functions lookUpTable with illegal first, to be safe
             for (int i = 0; i< lookUpTable.Length; i++) {
                 lookUpTable[i] = &illegal;
             }
-            DataController = new CDROMDataController(ref disk);
             //Add whatever I implemented manually
             lookUpTable[0x01] = &getStat;
             lookUpTable[0x02] = &setloc;

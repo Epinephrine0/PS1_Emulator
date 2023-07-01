@@ -10,15 +10,15 @@ using System;
 using System.Threading;
 using System.IO;
 using System.Linq;
+using PSXEmulator.UI;
 
 namespace PSXEmulator {
     public class PSX_OpenTK {
         public Renderer mainWindow;
-        public PSX_OpenTK() {
-
+        public PSX_OpenTK(Settings userSettings) { 
             var nativeWindowSettings = new NativeWindowSettings() {
                 Size = new Vector2i(1024, 512),
-                Title = "PS1 Emulator",
+                Title = "OpenGL",
                 // This is needed to run on macos
                 Flags = ContextFlags.ForwardCompatible,
                 APIVersion = Version.Parse("4.6.0"),
@@ -40,9 +40,18 @@ namespace PSXEmulator {
                 Console.WriteLine("Warning: PSX logo not found!");
             }
 
-            mainWindow = new Renderer(Gws, nativeWindowSettings);
+            //TODO : Create everything here 
+
+
+
+
+
+
+            mainWindow = new Renderer(Gws, nativeWindowSettings, userSettings);
             mainWindow.Run();
 
+            mainWindow.Dispose();   //Will reach this if the render window closes   
+          
         }
 
         public byte[] ImageToByteArray(string Icon) {
@@ -410,7 +419,7 @@ namespace PSXEmulator {
             }";
 
 
-        public Renderer(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
+        public Renderer(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings, Settings userSettings )
              : base(gameWindowSettings, nativeWindowSettings) {
 
             //Clear the window
@@ -420,25 +429,15 @@ namespace PSXEmulator {
 
 
             try {
-                BUS bus = new BUS(this);
+                BUS bus = new BUS(this, userSettings);
                 CPU = new CPU(bus);     //The Renderer will handle the CPU clock
             }
             catch (FileNotFoundException e) {
                 Close();
                 return;
             }
+            this.Title += " | " + (userSettings.TrackIndex >= 0 ? userSettings.SelectedGameName : "PSX-BIOS") + " | ";
 
-            if (CPU.BUS.CD_ROM.hasDisk) {
-                string gameName = Path.ChangeExtension(CPU.BUS.CD_ROM.path, null);
-                char stop = (char)92;
-                for (int j = gameName.Length - 1; j >= 0; j--) {
-                    if (gameName.ElementAt(j) == stop) {
-                        gameName = gameName.Remove(0, j + 1);
-                        break;
-                    }
-                }
-                this.Title += " - " + gameName;
-            }
         }
         protected override void OnLoad() {
             
@@ -886,9 +885,8 @@ namespace PSXEmulator {
             //Read controller input 
             CPU.BUS.IO_PORTS.controller1.readInput(JoystickStates[0]);
             //cpu.bus.IO_PORTS.controller2.readInput(JoystickStates[1]);
-
         }
-
+     
 
         protected override void OnUnload() {
 

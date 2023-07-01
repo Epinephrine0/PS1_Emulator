@@ -11,13 +11,8 @@ namespace PSXEmulator {
         public BIOS(string path) {
             data = File.ReadAllBytes(path);
 
-            if (data.Length!=size) {
-
+            if (data.Length != size) {
                 throw new Exception("BIOS file is not valid");
-            }
-
-            for (int i = 0x12C; i < 0x13E; i++) {
-                ID += (char)data[i];
             }
         }
         
