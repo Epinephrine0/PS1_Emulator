@@ -22,6 +22,8 @@ namespace PSXEmulator {
 
         public UserInterface() {
             InitializeComponent();
+            Console.ForegroundColor = ConsoleColor.White;
+
             this.Title = "PSX Emulator";
             this.ResizeMode = ResizeMode.NoResize;
 
