@@ -114,6 +114,9 @@ namespace PSXEmulator {
             }
 
             if(GameList.SelectedIndex < 0 || GameList.SelectedItem.Equals("Games go here")) {
+                UserSettings.SelectedGameFolder = null;
+                UserSettings.TrackIndex = -1;
+
                 Console.WriteLine("No game selected");
                 Console.WriteLine("Proceeding to boot without a game");
                 Boot();
@@ -134,6 +137,8 @@ namespace PSXEmulator {
             else {
                 Console.WriteLine("Could not find a valid binary for the selected game");
                 Console.WriteLine("Proceeding to boot without a game");
+                UserSettings.SelectedGameFolder = null;
+                UserSettings.TrackIndex = -1;
             }
 
             Boot();
