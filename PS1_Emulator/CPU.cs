@@ -76,8 +76,7 @@ namespace PSXEmulator {
             this.LO = 0xdeadbeef;
             this._branch = false;
             this.delay_slot = false;
-            Console.ForegroundColor = ConsoleColor.Green;   //For TTY Console
-            Console.Title = "TTY Console";
+            Console.ForegroundColor = ConsoleColor.Green;   
         }
         struct RegisterLoad {
             public uint registerNumber;

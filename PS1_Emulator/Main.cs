@@ -29,6 +29,7 @@ namespace PSXEmulator {
             DeleteMenu(GetSystemMenu(GetConsoleWindow(), false), SC_MAXIMIZE, MF_BYCOMMAND);
 
             //PSX_OpenTK emu = new PSX_OpenTK();
+            Console.Title = "TTY Console";
             Application app = new Application();
             app.Run(new UserInterface());    //Launch UI
         }
