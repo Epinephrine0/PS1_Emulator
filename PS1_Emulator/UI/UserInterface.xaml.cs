@@ -116,7 +116,6 @@ namespace PSXEmulator {
             if(GameList.SelectedIndex < 0 || GameList.SelectedItem.Equals("Games go here")) {
                 UserSettings.SelectedGameFolder = null;
                 UserSettings.TrackIndex = -1;
-
                 Console.WriteLine("No game selected");
                 Console.WriteLine("Proceeding to boot without a game");
                 Boot();

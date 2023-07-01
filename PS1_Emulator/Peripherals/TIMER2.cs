@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace PSXEmulator {
+namespace PSXEmulator.Peripherals {
     public class TIMER2 {
         public Range range = new Range(0x1F801120, 0xF + 1);        //Assumption 
         uint mode;
@@ -37,7 +37,7 @@ namespace PSXEmulator {
                     synchronization = (mode & 1) != 0;
                     counter = 0;
                     //Clock source
-                    switch ((mode >> 8) & 3) {
+                    switch (mode >> 8 & 3) {
                         case 0:
                         case 1:
                             clockSource = ClockSource.SystemClock;
@@ -57,29 +57,29 @@ namespace PSXEmulator {
 
             }
 
-         
+
 
         }
         public uint read(uint address) {
             uint offset = address - range.start;
 
             switch (offset) {
-                
-                case 0:  return currentValue;        //0x000016b0 random value that works for entering shell
 
-                case 4:                        
+                case 0: return currentValue;        //0x000016b0 random value that works for entering shell
+
+                case 4:
                     uint temp = mode;
                     mode &= 0b0000_0111_1111_1111;    //Reset bits 11-12 (above 12 are garbage)
                     return temp;
-           
+
                 case 8: return target;
-                
+
 
                 default: throw new Exception("Unknown TIMER2 offset: " + offset);
 
             }
 
-            
+
 
 
         }
@@ -87,7 +87,7 @@ namespace PSXEmulator {
         int counter;
         bool reset = false;
         public void tick(int cycles) {
-            if(reset) { currentValue = 0; counter = 0; reset = false; }
+            if (reset) { currentValue = 0; counter = 0; reset = false; }
             if (!pause) {
                 switch (clockSource) {
                     case ClockSource.SystemClock:
@@ -110,18 +110,17 @@ namespace PSXEmulator {
 
             //Pause?
             if (synchronization) {
-                switch ((mode >> 1) & 3) {
+                switch (mode >> 1 & 3) {
                     case 0:
                     case 3:
-                         pause = true;
+                        pause = true;
                         break;
 
                     default:
                         pause = false;
                         break;
                 }
-            }
-            else {
+            } else {
                 pause = false;
             }
 
@@ -129,18 +128,17 @@ namespace PSXEmulator {
             bool IRQenabled = false;
 
             //Reached target?
-            if (((mode >> 3) & 1) == 1) {       //(0=After Counter=FFFFh, 1=After Counter=Target)
+            if ((mode >> 3 & 1) == 1) {       //(0=After Counter=FFFFh, 1=After Counter=Target)
                 reachedTarget = currentValue >= target;
 
-                if (((mode >> 4) & 1) == 1) {
+                if ((mode >> 4 & 1) == 1) {
                     IRQenabled = true;
                 }
                 flag = 1 << 11;
 
-            }
-            else {
+            } else {
                 reachedTarget = currentValue >= 0xffff;
-                if (((mode >> 5) & 1) == 1) {
+                if ((mode >> 5 & 1) == 1) {
                     IRQenabled = true;
                 }
                 flag = 1 << 12;
@@ -160,7 +158,7 @@ namespace PSXEmulator {
         }
 
         public void IRQ() {
-            mode = (uint)(mode & (~(1 << 10))); //IRQ request (bit 10 = 0)
+            mode = (uint)(mode & ~(1 << 10)); //IRQ request (bit 10 = 0)
             IRQ_CONTROL.IRQsignal(6);
 
         }

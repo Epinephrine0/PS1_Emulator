@@ -1,7 +1,7 @@
-﻿using PSXEmulator.PS1_Emulator;
+﻿using PSXEmulator.Peripherals;
+using PSXEmulator.PS1_Emulator;
 using PSXEmulator.UI;
 using System;
-using System.IO;
 
 namespace PSXEmulator {
 
