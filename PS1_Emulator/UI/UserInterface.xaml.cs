@@ -190,12 +190,11 @@ namespace PSXEmulator {
         private void Boot() {
             this.Visibility = Visibility.Hidden; //Hide UI
 
-            MainEmu = new PSX_OpenTK(UserSettings);            /* Game loop */
-
+            MainEmu = new PSX_OpenTK(UserSettings);            /* Emulation loop */
 
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("Renderer Closed");
+            Console.WriteLine("Main Emulation loop terminated");
             this.Visibility = Visibility.Visible;
         }
 
