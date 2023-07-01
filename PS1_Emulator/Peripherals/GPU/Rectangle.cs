@@ -16,7 +16,7 @@ namespace PSXEmulator {
         ushort texPage; //Unlike for Textured-Polygons, the "Texpage" must be set up separately for Rectangles, via GP0(E1h)
                         //I also added texmode in texpage (bits 7-8)
 
-        public Rectangle(uint value, ushort texPage, uint semi_transparency) { 
+        public Rectangle(uint value, ushort texPage, uint semi_transparency) {  //TODO: Fix broken rectangles in Puzzle Bobble 2 
             //this.numOfParameters = numOfParameters;
             this.opcode = (value >> 24) & 0xff;
             this.texPage = texPage;
@@ -61,7 +61,6 @@ namespace PSXEmulator {
                  B = (byte)(buffer[0] >> 16);
             }
            
-
             ushort width = 0;
             ushort height = 0;
 
@@ -141,7 +140,5 @@ namespace PSXEmulator {
                 isTextured, clut, texPage
                 );*/
         }
-
-       
     }
 }

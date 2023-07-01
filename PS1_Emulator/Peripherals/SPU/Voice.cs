@@ -1,16 +1,16 @@
 ﻿using NAudio.Wave;
 using System;
 
-namespace PSXEmulator {
+namespace PSXEmulator.Peripherals.SPU {
     public class Voice {
-        public Int16 volumeLeft;
-        public Int16 volumeRight;
+        public short volumeLeft;
+        public short volumeRight;
 
-        public UInt16 ADPCM_Pitch; 
+        public ushort ADPCM_Pitch;
         public ADSR adsr = new ADSR();
-        public UInt16 ADPCM;            //Start address of sound in Sound buffer (in 8-byte units)
-        public UInt16 ADPCM_RepeatAdress;
-        public UInt16 current_address;
+        public ushort ADPCM;            //Start address of sound in Sound buffer (in 8-byte units)
+        public ushort ADPCM_RepeatAdress;
+        public ushort current_address;
         public uint pitchCounter;     //Used for interpolation and current sample index
 
         public short old;
@@ -21,13 +21,13 @@ namespace PSXEmulator {
         public bool isLoaded = false;
         public bool hit_IRQ_Address = false;
 
-        Int16[] decodedSamples = new Int16[31]; //28 samples + 3 
+        short[] decodedSamples = new short[31]; //28 samples + 3 
         byte[] samples = new byte[16];
 
-        private readonly int[] pos_xa_adpcm_table = { 0, +60, +115, +98, +122 };
-        private readonly int[] neg_xa_adpcm_table = { 0, 0, -52, -55, -60 };
+        private int[] pos_xa_adpcm_table = { 0, +60, +115, +98, +122 };
+        private int[] neg_xa_adpcm_table = { 0, 0, -52, -55, -60 };
 
-        private readonly short[] gaussTable = new short[] {
+        private short[] gaussTable = new short[] {
                 -0x001, -0x001, -0x001, -0x001, -0x001, -0x001, -0x001, -0x001,
                 -0x001, -0x001, -0x001, -0x001, -0x001, -0x001, -0x001, -0x001,
                 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0001,
@@ -104,14 +104,14 @@ namespace PSXEmulator {
             ADPCM = 0;
             ADPCM_Pitch = 0;
         }
-        public void setADSR_LOW(UInt16 v) {
+        public void setADSR_LOW(ushort v) {
             adsr.adsrLOW = v;
         }
-        public void setADSR_HI(UInt16 v) {
+        public void setADSR_HI(ushort v) {
             adsr.adsrHI = v;
         }
         public void loadSamples(ref byte[] SPU_RAM, uint IRQ_Address) {
-            hit_IRQ_Address = (IRQ_Address >= (current_address << 3)) && IRQ_Address <= ((current_address << 3) + samples.Length - 1);
+            hit_IRQ_Address = IRQ_Address >= current_address << 3 && IRQ_Address <= (current_address << 3) + samples.Length - 1;
             //Possible optimization using Span
             for (int i = 0; i < samples.Length; i++) {
                 int index = (current_address << 3) + i;
@@ -121,7 +121,7 @@ namespace PSXEmulator {
             isLoaded = true;
 
             //Handle Loop Start/End/Repeat flags
-            uint flags = (uint)samples[1];
+            uint flags = samples[1];
 
             if ((flags >> 2 & 1) != 0) {     //Loop Start bit
                 ADPCM_RepeatAdress = current_address;
@@ -136,12 +136,12 @@ namespace PSXEmulator {
             decodedSamples[0] = decodedSamples[decodedSamples.Length - 3];
 
             int headerShift = samples[0] & 0xF;
-            if(headerShift > 12) { headerShift = 9; }
+            if (headerShift > 12) { headerShift = 9; }
 
-            int shift = (int)(12 - headerShift);
-            int filter = (int)((samples[0] & 0x70) >> 4);            //ProjectPSX ANDs it with 0X70 for some reason
+            int shift = 12 - headerShift;
+            int filter = (samples[0] & 0x70) >> 4;            //ProjectPSX ANDs it with 0X70 for some reason
             if (filter > 4) { filter = 4; }
-                                                                     
+
             int f0 = pos_xa_adpcm_table[filter];
             int f1 = neg_xa_adpcm_table[filter];
             int t;
@@ -150,15 +150,15 @@ namespace PSXEmulator {
             int nibble = 1;
 
             for (int i = 0; i < 28; i++) {
-                nibble = (nibble + 1) & 0x1;        //sample number inside the byte (either 0 or 1)
+                nibble = nibble + 1 & 0x1;        //sample number inside the byte (either 0 or 1)
 
-                t = signed4bits((byte)(((samples[position]) >> (nibble << 2)) & 0x0F));
-                s = (t << shift) + ((this.old * f0 + this.older * f1 + 32) / 64);
+                t = signed4bits((byte)(samples[position] >> (nibble << 2) & 0x0F));
+                s = (t << shift) + (old * f0 + older * f1 + 32) / 64;
 
                 short decoded = (short)Math.Clamp(s, -0x8000, 0x7FFF);
                 decodedSamples[3 + i] = decoded;    //Skip 3 (last 3 of previous block)
-                this.older = this.old;
-                this.old = decoded;
+                older = old;
+                old = decoded;
 
                 position += nibble;
 
@@ -172,8 +172,8 @@ namespace PSXEmulator {
             int interpolated;
             uint interpolationIndex = getInterpolationIndex();
             sampleIndex = getCurrentSampleIndex();
- 
-            interpolated =  gaussTable[0x0FF - interpolationIndex] * decodedSamples[sampleIndex + 0];
+
+            interpolated = gaussTable[0x0FF - interpolationIndex] * decodedSamples[sampleIndex + 0];
             interpolated += gaussTable[0x1FF - interpolationIndex] * decodedSamples[sampleIndex + 1];
             interpolated += gaussTable[0x100 + interpolationIndex] * decodedSamples[sampleIndex + 2];
             interpolated += gaussTable[0x000 + interpolationIndex] * decodedSamples[sampleIndex + 3];
@@ -181,8 +181,6 @@ namespace PSXEmulator {
 
             return (short)interpolated;
         }
-
-
         public void checkSamplesIndex() {
 
             sampleIndex = getCurrentSampleIndex();
@@ -190,10 +188,10 @@ namespace PSXEmulator {
             if (sampleIndex >= 28) {
                 changeCurrentSampleIndex(-28);
 
-                this.current_address += 2;
+                current_address += 2;
                 isLoaded = false;
 
-                uint flags = (uint)(samples[1]);
+                uint flags = samples[1];
 
                 if ((flags & 0x1) != 0) {       //Loop End bit
                     ENDX = 1;
@@ -201,30 +199,19 @@ namespace PSXEmulator {
                     if ((flags & 0x2) != 0) {     //Loop Repeat bit
                         current_address = ADPCM_RepeatAdress;
 
-                    }
-                    else {
+                    } else {
                         adsr.setPhase(ADSR.Phase.Off);
                         adsr.adsrVolume = 0;
-                        adsr.adsrCounter = 0;     
+                        adsr.adsrCounter = 0;
                     }
-
                 }
-
             }
-
-        
-
         }
-
         private void changeCurrentSampleIndex(int value) {
-
             uint old = getCurrentSampleIndex();
-            int newIndex = ((int)(value + old));
-
+            int newIndex = (int)(value + old);
             pitchCounter = (ushort)(pitchCounter & 0xFFF);
-            pitchCounter |= (ushort)((newIndex) << 12);
-
-        
+            pitchCounter |= (ushort)(newIndex << 12);
         }
         internal void keyOn() {
             adsr.adsrVolume = 0;
@@ -235,29 +222,23 @@ namespace PSXEmulator {
             old = 0;
             older = 0;
             ENDX = 0;
-            isLoaded = false; 
-
+            isLoaded = false;
         }
-
         public uint getCurrentSampleIndex() {
-            return (uint)(pitchCounter >> 12 & 0x1F);
+            return pitchCounter >> 12 & 0x1F;
         }
         public uint getInterpolationIndex() {
-            return (uint)((pitchCounter >> 3) & 0xFF); // >> 4 ??
+            return pitchCounter >> 3 & 0xFF; // >> 4 ??
         }
         int signed4bits(byte value) {
-            return (value << 28) >> 28;
+            return value << 28 >> 28;
         }
-
-
-   
         public short getVolumeLeft() {
             short vol;
             if ((volumeLeft >> 15 & 1) == 0) {
-                vol = ((short)(volumeLeft << 1));
+                vol = (short)(volumeLeft << 1);
                 return vol;
-            }
-            else {
+            } else {
                 return 0x7FFF;
             }
         }
@@ -265,21 +246,16 @@ namespace PSXEmulator {
             short vol;
 
             if ((volumeRight >> 15 & 1) == 0) {
-                vol = ((short)(volumeRight << 1));
+                vol = (short)(volumeRight << 1);
                 return vol;
-            }
-            else {
+            } else {
                 return 0x7FFF;
             }
         }
-
         public void keyOff() {
-
             adsr.setPhase(ADSR.Phase.Release);
             adsr.adsrCounter = 0;
-
         }
-
         public class ADSR {        //ADSR Generator/Handler 
             public enum Phase {
                 Attack,
@@ -306,12 +282,12 @@ namespace PSXEmulator {
             int step;           //(0..3 = "+7,+6,+5,+4")
 
 
-            public UInt16 adsrLOW;
-            public UInt16 adsrHI;
+            public ushort adsrLOW;
+            public ushort adsrHI;
 
             public ushort adsrVolume;
-            public int limit;         
-            
+            public int limit;
+
 
             int[] positiveSteps = { +7, +6, +5, +4 };
             int[] negativeSteps = { -8, -7, -6, -5 };
@@ -323,11 +299,11 @@ namespace PSXEmulator {
             public void setPhase(Phase phase) {
                 this.phase = phase;
 
-                switch (phase){
+                switch (phase) {
 
                     case Phase.Attack:
 
-                        switch ((adsrLOW >> 15) & 1) {
+                        switch (adsrLOW >> 15 & 1) {
                             case 0:
                                 mode = Mode.Linear;
                                 break;
@@ -340,28 +316,28 @@ namespace PSXEmulator {
                         }
 
                         direction = Direction.Increase; //Fixed for attack mode
-                        shift = ((adsrLOW >> 10) & 0X1F);
-                        step = positiveSteps[(adsrLOW >> 8) & 0x3];
+                        shift = adsrLOW >> 10 & 0X1F;
+                        step = positiveSteps[adsrLOW >> 8 & 0x3];
                         limit = 0x7FFF;       //Maximum for attack mode
                         nextphase = Phase.Decay;
                         break;
-                    
-                   case Phase.Decay:
+
+                    case Phase.Decay:
                         //Debug.WriteLine("decay!");
 
                         mode = Mode.Exponential;          //Fixed for decay mode
                         direction = Direction.Decrease;   //Fixed, always Decrease until sustain lever
-                        shift = ((adsrLOW >> 4) & 0x0F);   //Only 4 bits, not 5
+                        shift = adsrLOW >> 4 & 0x0F;   //Only 4 bits, not 5
                         step = -8;      //Fixed for decay mode
-                        limit =  (((adsrLOW & 0xF) + 1) * 0x800); //Level=(N+1)*800h
+                        limit = ((adsrLOW & 0xF) + 1) * 0x800; //Level=(N+1)*800h
                         nextphase = Phase.Sustain;
-                        
+
                         break;
 
                     case Phase.Sustain:
                         //Debug.WriteLine("sustain!");
 
-                        switch ((adsrHI >> 15) & 1) {
+                        switch (adsrHI >> 15 & 1) {
                             case 0:
                                 mode = Mode.Linear;
                                 break;
@@ -373,7 +349,7 @@ namespace PSXEmulator {
                                 throw new Exception("Unkown mode value");
                         }
 
-                        switch ((adsrHI >> 14) & 1) {
+                        switch (adsrHI >> 14 & 1) {
                             case 0:
                                 direction = Direction.Increase;
                                 step = positiveSteps[adsrHI >> 6 & 0x3];
@@ -390,7 +366,7 @@ namespace PSXEmulator {
                         }
 
 
-                        shift = ((adsrHI >> 8) & 0x1F);
+                        shift = adsrHI >> 8 & 0x1F;
                         limit = 0x0000;         //Questionable 
                         nextphase = Phase.Sustain;
 
@@ -398,7 +374,7 @@ namespace PSXEmulator {
 
                     case Phase.Release:
 
-                        switch ((adsrHI >> 5) & 1) {
+                        switch (adsrHI >> 5 & 1) {
                             case 0:
                                 mode = Mode.Linear;
                                 break;
@@ -412,9 +388,9 @@ namespace PSXEmulator {
 
                         direction = Direction.Decrease; //(Fixed, always Decrease) (until Level 0000h)
                         limit = 0x0000;
-                        shift = (adsrHI & 0x1F);
+                        shift = adsrHI & 0x1F;
                         step = -8;                      //Fixed for release mode
-                        
+
                         nextphase = Phase.Off;
                         break;
 
@@ -424,7 +400,7 @@ namespace PSXEmulator {
                         shift = 0;
                         step = 0;
                         nextphase = Phase.Off;
-                        
+
                         break;
 
                     default:
@@ -438,7 +414,7 @@ namespace PSXEmulator {
 
             public void ADSREnvelope() {
 
-                if (adsrCounter > 0) { 
+                if (adsrCounter > 0) {
                     adsrCounter--;
                     return;
                 }
@@ -457,7 +433,7 @@ namespace PSXEmulator {
                 }
 
                 if (mode == Mode.Exponential && direction == Direction.Decrease) {
-                    adsrStep = ((adsrStep * adsrVolume) >> 15);
+                    adsrStep = adsrStep * adsrVolume >> 15;
 
                 }
 
@@ -485,7 +461,7 @@ namespace PSXEmulator {
                         break;
 
                     case Phase.Sustain:
-                      
+
                         break;
 
                     case Phase.Release:
@@ -506,5 +482,5 @@ namespace PSXEmulator {
         }
     }
 
-    
+
 }

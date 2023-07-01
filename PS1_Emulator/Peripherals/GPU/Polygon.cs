@@ -2,8 +2,7 @@
 
 namespace PSXEmulator {
     public unsafe class Polygon : Primitive {
-        /*
-        GPU Render Polygon Commands
+        /*GPU Render Polygon Commands
 
         First command decoding:
         bit number     value   meaning
@@ -13,9 +12,7 @@ namespace PSXEmulator {
            26           1/0    textured / untextured
            25           1/0    semi-transparent / opaque
            24           1/0    raw texture / modulation
-           23-0         rgb    first color value.
-
-        */
+           23-0         rgb    first color value. */
 
         bool isGouraud;
         bool isQuad;
@@ -35,20 +32,8 @@ namespace PSXEmulator {
         int numOfParameters = -1;
         int numberOfVertices = 0;
         uint semi_transparency = 0;
-        bool isDithered = false;
-        readonly byte[] NoBlendColors = new[] {       //Colors to blend with if the command does not use blending 
-                                                    //The 0x80 will be cancelled in the bledning formula, so they don't change anything
-
-                (byte)0x80, (byte)0x80 , (byte)0x80,
-                (byte)0x80, (byte)0x80 , (byte)0x80,
-                (byte)0x80, (byte)0x80 , (byte)0x80,
-
-                (byte)0x80, (byte)0x80 , (byte)0x80,
-                (byte)0x80, (byte)0x80 , (byte)0x80,
-                (byte)0x80, (byte)0x80 , (byte)0x80,
-
-        };
-        
+        bool isDithered = false;    //TODO
+      
         public Polygon(uint value , uint semi_transparency, bool ditherEnabled) {
             opcode = (value >> 24);
             isGouraud = (value >> 28 & 1) == 1;
@@ -77,8 +62,8 @@ namespace PSXEmulator {
             }
 
             isDithered = ditherEnabled && (isGouraud || !isRawTextured);
-            
         }
+
         public void add(uint value) {
             buffer.Add(value);
         }
@@ -158,9 +143,7 @@ namespace PSXEmulator {
 
                 isTextured, clut, page, false
                 );
-
             }
         }
-     
     }
 }

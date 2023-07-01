@@ -31,11 +31,11 @@ namespace PSXEmulator {
             else {
                 return buffer.Count == (isGouraud ? 4 : 3);  
             }
-
         }
         public void draw(ref Renderer window) {
 
             int numOfVertices = buffer.Count;
+
             if (isPolyLine) {
                 numOfVertices--;
             }
@@ -76,12 +76,7 @@ namespace PSXEmulator {
             }
 
             window.drawLines(ref vertices, ref colors, isPolyLine);
-            
         }
-
-
     }
-
-
  }
 

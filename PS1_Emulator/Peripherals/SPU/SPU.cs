@@ -1,7 +1,8 @@
 ﻿using NAudio.Wave;
+using PSXEmulator.Peripherals.SPU;
 using System;
 using System.Runtime.InteropServices;
-using static PSXEmulator.Voice.ADSR;
+using static PSXEmulator.Peripherals.SPU.Voice.ADSR;
 
 namespace PSXEmulator {
     public class SPU {                            //Thanks to BlueStorm, lots of things are here "inspired" :D
