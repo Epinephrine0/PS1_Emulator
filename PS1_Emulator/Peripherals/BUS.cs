@@ -7,20 +7,20 @@ namespace PSXEmulator {
 
     public class BUS {      //Main BUS, connects the CPU to everything
         public BIOS BIOS;
-        public MemoryControl memoryControl;
-        public RAM_SIZE ram_size;
-        public CACHECONTROL cacheControl;
+        public MemoryControl MemoryControl;
+        public RAM_SIZE RamSize;
+        public CACHECONTROL CacheControl;
         public RAM RAM;
         public SPU SPU;
-        public EXPANSION1 expansion1;
-        public EXPANSION2 expansion2;
+        public Expansion1 Expansion1;
+        public Expansion2 Expansion2;
         public DMA DMA;
         public GPU GPU;
         public CD_ROM CD_ROM;
-        public TIMER1 TIMER1;
-        public TIMER2 TIMER2;
+        public TIMER1 Timer1;
+        public TIMER2 Timer2;
         public IO_PORTS IO_PORTS;
-        public Scratchpad scratchpad;
+        public Scratchpad Scratchpad;
         public MDEC MDEC;
         private readonly UInt32[] region_Mask = { 
                     // KUSEG: 2048MB
@@ -37,24 +37,28 @@ namespace PSXEmulator {
         public Range TIMER0 = new Range(0x1F801100, 0xF+1);        //Assumption 
         public bool debug = false;
 
-        public BUS(Renderer mainWindow, Settings userSettings) {
-            BIOS = new BIOS(userSettings.BIOSPath);
-
-            RAM = new RAM();
-            scratchpad = new Scratchpad();
-            CD_ROM = new CD_ROM(userSettings.SelectedGameFolder, userSettings.TrackIndex);
-            SPU = new SPU(ref CD_ROM.DataController);
-            DMA = new DMA();
-            IO_PORTS = new IO_PORTS();
-            memoryControl = new MemoryControl(); //useless ?
-            ram_size = new RAM_SIZE();           //useless ?
-            cacheControl = new CACHECONTROL();   //useless ?
-            expansion1 = new EXPANSION1();
-            expansion2 = new EXPANSION2();
-            TIMER1 = new TIMER1();
-            TIMER2 = new TIMER2();
-            MDEC = new MDEC();
-            GPU = new GPU(mainWindow, ref TIMER1);
+        public BUS(
+            BIOS BIOS, RAM RAM, Scratchpad Scratchpad,
+            CD_ROM CDROM, SPU SPU, DMA DMA, IO_PORTS IO, MemoryControl MemCtrl, 
+            RAM_SIZE RamSize, CACHECONTROL CacheControl, Expansion1 Ex1, Expansion2 Ex2,
+            TIMER1 Timer1, TIMER2 Timer2, MDEC MDEC, GPU GPU
+            ) {
+            this.BIOS = BIOS;
+            this.RAM = RAM;
+            this.Scratchpad = Scratchpad;
+            this.CD_ROM = CDROM;
+            this.SPU = SPU;
+            this.DMA = DMA;
+            this.IO_PORTS = IO;
+            this.MemoryControl = MemCtrl;       //useless ?
+            this.RamSize = RamSize;             //useless ?
+            this.CacheControl = CacheControl;   //useless ?
+            this.Expansion1 = Ex1;
+            this.Expansion2 = Ex2;
+            this.Timer1 = Timer1;
+            this.Timer2 = Timer2;
+            this.MDEC = MDEC;
+            this.GPU = GPU;
         }
 
         public UInt32 loadWord(UInt32 address) {
@@ -78,11 +82,11 @@ namespace PSXEmulator {
             }else if (TIMER0.contains(physical_address)) { 
                 return 0;  
 
-            }else if (TIMER1.range.contains(physical_address)) {
-                return TIMER1.read(physical_address);  
+            }else if (Timer1.range.contains(physical_address)) {
+                return Timer1.read(physical_address);  
 
-            }else if (TIMER2.range.contains(physical_address)) {
-                return TIMER2.read(physical_address);
+            }else if (Timer2.range.contains(physical_address)) {
+                return Timer2.read(physical_address);
 
             }else if (address == 0x1F801060) {                          //Memory Control 2
                 return 0X00000B88;
@@ -90,8 +94,8 @@ namespace PSXEmulator {
             }else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
                 return 0x200931E1;
             }
-            else if (scratchpad.range.contains(physical_address)) {
-                return scratchpad.loadWord(physical_address);
+            else if (Scratchpad.range.contains(physical_address)) {
+                return Scratchpad.loadWord(physical_address);
 
             }else if (IO_PORTS.range.contains(physical_address)) {
                 return IO_PORTS.loadWord(physical_address);
@@ -108,16 +112,16 @@ namespace PSXEmulator {
             uint physical_address = mask(address);
             CPU.cycles++;
 
-            if (memoryControl.range.contains(physical_address)) {
-                memoryControl.storeWord(physical_address, value);
+            if (MemoryControl.range.contains(physical_address)) {
+                MemoryControl.storeWord(physical_address, value);
 
-            }else if (ram_size.range.contains(physical_address)) {        
-                ram_size.storeWord(physical_address, value);                         
+            }else if (RamSize.range.contains(physical_address)) {        
+                RamSize.storeWord(physical_address, value);                         
 
             }else if (RAM.range.contains(physical_address)) {             
                RAM.storeWord(physical_address, value);
 
-            }else if (cacheControl.range.contains(physical_address)) {
+            }else if (CacheControl.range.contains(physical_address)) {
                 //Console.WriteLine("Unhandled write to CACHECONTROL register, address: " + address.ToString("X"));
 
             }else if (IRQ_CONTROL.range.contains(physical_address)) {
@@ -141,14 +145,14 @@ namespace PSXEmulator {
             }else if (TIMER0.contains(physical_address)) {   
                 //Console.WriteLine("Unhandled write to TIMER0 register at address: " + address.ToString("X"));
                 
-            }else if (TIMER1.range.contains(physical_address)) {
-                TIMER1.write(physical_address, value);
+            }else if (Timer1.range.contains(physical_address)) {
+                Timer1.write(physical_address, value);
 
-            }else if (TIMER2.range.contains(physical_address)) {
-                TIMER2.write(physical_address, value);    
+            }else if (Timer2.range.contains(physical_address)) {
+                Timer2.write(physical_address, value);    
 
-            }else if (scratchpad.range.contains(physical_address)) {  
-                scratchpad.storeWord(physical_address, value);
+            }else if (Scratchpad.range.contains(physical_address)) {  
+                Scratchpad.storeWord(physical_address, value);
 
             }else if (MDEC.range.contains(physical_address)) {
                 //TODO
@@ -177,19 +181,19 @@ namespace PSXEmulator {
                 //Console.WriteLine("Unhandled read to TIMER0 register at address: " + address.ToString("X"));
                 return 0;
 
-            }else if (TIMER1.range.contains(physical_address)) {
-                return (ushort)TIMER1.read(physical_address);
+            }else if (Timer1.range.contains(physical_address)) {
+                return (ushort)Timer1.read(physical_address);
 
-            }else if (TIMER2.range.contains(physical_address)) {
-                return (ushort)TIMER2.read(physical_address);
+            }else if (Timer2.range.contains(physical_address)) {
+                return (ushort)Timer2.read(physical_address);
 
             }else if (IO_PORTS.range.contains(physical_address)) {
                 return IO_PORTS.loadHalf(physical_address);
 
-            }else if (scratchpad.range.contains(physical_address)) {
-                return scratchpad.loadHalf(physical_address);
+            }else if (Scratchpad.range.contains(physical_address)) {
+                return Scratchpad.loadHalf(physical_address);
 
-            }else if (expansion1.range.contains(physical_address)) {    //Ignore expansion 1
+            }else if (Expansion1.range.contains(physical_address)) {    //Ignore expansion 1
                 return 0xFF;
 
             }else {
@@ -211,11 +215,11 @@ namespace PSXEmulator {
             }else if (TIMER0.contains(physical_address)) {
                 //Console.WriteLine("Unhandled write to TIMER0 register at address: " + address.ToString("X"));
 
-            }else if (TIMER1.range.contains(physical_address)) {
-                TIMER1.write(physical_address, value);
+            }else if (Timer1.range.contains(physical_address)) {
+                Timer1.write(physical_address, value);
 
-            }else if (TIMER2.range.contains(physical_address)) {
-                TIMER2.write(physical_address, value);
+            }else if (Timer2.range.contains(physical_address)) {
+                Timer2.write(physical_address, value);
 
             }else if (IRQ_CONTROL.range.contains(physical_address)) {
                 IRQ_CONTROL.write(physical_address, value);
@@ -223,8 +227,8 @@ namespace PSXEmulator {
             }else if (IO_PORTS.range.contains(physical_address)) {
                 IO_PORTS.storeHalf(physical_address, value);
 
-            }else if (scratchpad.range.contains(physical_address)) {
-                scratchpad.storeHalf(physical_address, value);
+            }else if (Scratchpad.range.contains(physical_address)) {
+                Scratchpad.storeHalf(physical_address, value);
             }else {
                 throw new Exception("Unhandled store16 at address : " + address.ToString("x"));
             }
@@ -239,7 +243,7 @@ namespace PSXEmulator {
             }else if (BIOS.range.contains(physical_address)) {
                 return BIOS.loadByte(physical_address);
 
-            }else if (expansion1.range.contains(physical_address)) {
+            }else if (Expansion1.range.contains(physical_address)) {
                 return 0xff;
 
             }else if (CD_ROM.range.contains(physical_address)) {
@@ -248,8 +252,8 @@ namespace PSXEmulator {
             }else if (IO_PORTS.range.contains(physical_address)) {
                 return IO_PORTS.loadByte(physical_address);
 
-            }else if (scratchpad.range.contains(physical_address)) {
-                return scratchpad.loadByte(physical_address);
+            }else if (Scratchpad.range.contains(physical_address)) {
+                return Scratchpad.loadByte(physical_address);
 
             }else if (address == 0x1f8010f6) {
                 //Weird DMA register
@@ -275,10 +279,10 @@ namespace PSXEmulator {
             }else if (IO_PORTS.range.contains(physical_address)) {
                 IO_PORTS.storeHalf(physical_address, value);
 
-            }else if (scratchpad.range.contains(physical_address)) {
-                scratchpad.storeByte(physical_address, value);
+            }else if (Scratchpad.range.contains(physical_address)) {
+                Scratchpad.storeByte(physical_address, value);
 
-            }else if (expansion2.range.contains(physical_address)) {
+            }else if (Expansion2.range.contains(physical_address)) {
                 //Console.WriteLine("Unhandled write to EXPANTION2 at address : " + address.ToString("x"));
 
             }else if (address == 0x1f8010f6) {

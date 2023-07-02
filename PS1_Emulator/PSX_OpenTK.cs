@@ -11,6 +11,8 @@ using System.Threading;
 using System.IO;
 using System.Linq;
 using PSXEmulator.UI;
+using PSXEmulator.Peripherals;
+using PSXEmulator.PS1_Emulator;
 
 namespace PSXEmulator {
     public class PSX_OpenTK {
@@ -40,14 +42,37 @@ namespace PSXEmulator {
                 Console.WriteLine("Warning: PSX logo not found!");
             }
 
-            //TODO : Create everything here 
-
-
-
-
-
 
             mainWindow = new Renderer(Gws, nativeWindowSettings, userSettings);
+
+            //Create everything here, pass relevant user settings
+            RAM Ram = new RAM();
+            BIOS Bios = new BIOS(userSettings.BIOSPath);
+            Scratchpad Scratchpad = new Scratchpad();
+            CD_ROM cdrom = new CD_ROM(userSettings.SelectedGameFolder, userSettings.TrackIndex);
+            SPU Spu = new SPU(ref cdrom.DataController);         //Needs to read CD-Audio
+            DMA Dma = new DMA();
+            IO_PORTS IO = new IO_PORTS();
+            MemoryControl MemoryControl = new MemoryControl();   //useless ?
+            RAM_SIZE RamSize = new RAM_SIZE();                   //useless ?
+            CACHECONTROL CacheControl = new CACHECONTROL();      //useless ?
+            Expansion1 Ex1 = new Expansion1();
+            Expansion2 Ex2 = new Expansion2();
+            TIMER1 Timer1 = new TIMER1();
+            TIMER2 Timer2 = new TIMER2();
+            MDEC Mdec = new MDEC();
+            GPU Gpu = new GPU(mainWindow, ref Timer1);
+
+            BUS Bus = new BUS(          
+                Bios,Ram,Scratchpad,cdrom,Spu,Dma,
+                IO,MemoryControl,RamSize,CacheControl,
+                Ex1,Ex2,Timer1,Timer2,Mdec,Gpu
+                );
+            CPU CPU = new CPU(Bus);
+
+            mainWindow.CPU = CPU;
+            mainWindow.Title += " | " + (userSettings.TrackIndex >= 0 ? userSettings.SelectedGameName : "PSX-BIOS") + " | ";
+
             mainWindow.Run();
 
             mainWindow.Dispose();   //Will reach this if the render window closes   
@@ -64,7 +89,7 @@ namespace PSXEmulator {
     }
 
     public class Renderer : GameWindow {
-        CPU CPU;
+        public CPU CPU;
         const int VRAM_WIDTH = 1024;
         const int VRAM_HEIGHT = 512;
 
@@ -426,17 +451,6 @@ namespace PSXEmulator {
             GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             GL.Clear(ClearBufferMask.ColorBufferBit);
             SwapBuffers();
-
-
-            try {
-                BUS bus = new BUS(this, userSettings);
-                CPU = new CPU(bus);     //The Renderer will handle the CPU clock
-            }
-            catch (FileNotFoundException e) {
-                Close();
-                return;
-            }
-            this.Title += " | " + (userSettings.TrackIndex >= 0 ? userSettings.SelectedGameName : "PSX-BIOS") + " | ";
 
         }
         protected override void OnLoad() {

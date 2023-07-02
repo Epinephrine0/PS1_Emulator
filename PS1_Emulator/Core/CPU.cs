@@ -1300,8 +1300,8 @@ namespace PSXEmulator {
 
                 cycles += 2;
 
-                if (BUS.TIMER1.isUsingSystemClock()) { BUS.TIMER1.tick(cycles); }
-                BUS.TIMER2.tick(cycles);
+                if (BUS.Timer1.isUsingSystemClock()) { BUS.Timer1.tick(cycles); }
+                BUS.Timer2.tick(cycles);
 
                 BUS.SPU.SPU_Tick(cycles);
                 BUS.GPU.tick(cycles * (double)11 / 7);
