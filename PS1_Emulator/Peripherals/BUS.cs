@@ -1,10 +1,8 @@
 ﻿using PSXEmulator.Peripherals;
 using PSXEmulator.PS1_Emulator;
-using PSXEmulator.UI;
 using System;
 
 namespace PSXEmulator {
-
     public class BUS {      //Main BUS, connects the CPU to everything
         public BIOS BIOS;
         public MemoryControl MemoryControl;
@@ -22,7 +20,7 @@ namespace PSXEmulator {
         public IO_PORTS IO_PORTS;
         public Scratchpad Scratchpad;
         public MDEC MDEC;
-        private readonly UInt32[] region_Mask = { 
+        private uint[] region_Mask = { 
                     // KUSEG: 2048MB
                        0xffffffff, 0xffffffff, 0xffffffff , 0xffffffff,
                     // KSEG0: 512MB
@@ -36,6 +34,8 @@ namespace PSXEmulator {
         //No class for now
         public Range TIMER0 = new Range(0x1F801100, 0xF+1);        //Assumption 
         public bool debug = false;
+
+        //TODO: Imeplement ignored stuff 
 
         public BUS(
             BIOS BIOS, RAM RAM, Scratchpad Scratchpad,
