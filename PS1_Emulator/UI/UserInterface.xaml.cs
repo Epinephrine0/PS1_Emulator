@@ -185,14 +185,13 @@ namespace PSXEmulator {
             return -1;
         }
         private void OnClose(object sender, EventArgs e) {
-            byte[] serialized = JsonSerializer.SerializeToUtf8Bytes(UserSettings,
-                 new JsonSerializerOptions { WriteIndented = false, IgnoreNullValues = false });
-            File.WriteAllBytes("Settings.bin", serialized);
-            Console.WriteLine("Saved settings");
+            SaveSettings();
         }
 
         private void Boot() {
-            this.Visibility = Visibility.Hidden; //Hide UI
+            SaveSettings();     //Save before booting to prevent losing settings if the emulator crashed
+
+            this.Visibility = Visibility.Hidden;     //Hide UI
 
             MainEmu = new PSX_OpenTK(UserSettings);            /* Emulation loop */
 
@@ -204,6 +203,12 @@ namespace PSXEmulator {
 
         private void Window_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
             GameList.UnselectAll();
+        }
+
+        private void SaveSettings() {
+            byte[] serialized = JsonSerializer.SerializeToUtf8Bytes(UserSettings,
+                 new JsonSerializerOptions { WriteIndented = false, IgnoreNullValues = false });
+            File.WriteAllBytes("Settings.bin", serialized);
         }
     }
 }
