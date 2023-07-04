@@ -87,16 +87,21 @@ namespace PSXEmulator {
             }
         }
         public void PlayCDDA(uint currentIndex) {   //Handles play command
-            int offset = (int)(currentIndex - Tracks[SelectedTrackNumber - 1].RoundedStart);
+            uint offset = (uint)(currentIndex - Tracks[SelectedTrackNumber - 1].RoundedStart);
 
-            if (offset < 0 || offset + 0x930 >= SelectedTrack.Length) {
+            if ((offset + 0x930) >= SelectedTrack.Length) {
                 int newTrack = FindTrack(currentIndex);
                 SelectTrack(newTrack);
-                offset = (int)(currentIndex - Tracks[SelectedTrackNumber - 1].RoundedStart);
+                offset = (uint)(currentIndex - Tracks[SelectedTrackNumber - 1].RoundedStart);
                 Console.WriteLine("[CDROM] CD-DA Change to track: " + SelectedTrackNumber);
             }
 
-            ReadOnlySpan<byte> fullSector = new ReadOnlySpan<byte>(SelectedTrack).Slice(offset, 0x930);    //Add CD-DA Samples to the queue
+            if (((int)offset) < 0) {
+                Console.WriteLine("[CDROM] CD-DA Index < Track start");    //Ridge Racer setloc at position BEFORE the track starting point, I igonre this
+                return;
+            }
+
+            ReadOnlySpan<byte> fullSector = new ReadOnlySpan<byte>(SelectedTrack).Slice((int)offset, 0x930);    //Add CD-DA Samples to the queue
             for (int i = 0; i < fullSector.Length; i += 4) {                                               //Stereo, 16-bit, at 44.1Khz ...always?
                 short L = MemoryMarshal.Read<short>(fullSector.Slice(i,2));
                 short R = MemoryMarshal.Read<short>(fullSector.Slice(i + 2,2));
@@ -109,11 +114,10 @@ namespace PSXEmulator {
             SelectedTrackNumber = Tracks[trackNumber - 1].TrackNumber;
         }
 
-
         //To figure in what track does the required MSF fall in, if the track is not specified by the play command
         public int FindTrack(uint index) { 
             for (int i = 0; i < Tracks.Length; i++) {
-                if (index >= Tracks[i].RoundedStart && index < (Tracks[i].RoundedStart + Tracks[i].Length)) {
+                if (index < (Tracks[i].RoundedStart + Tracks[i].Length)) {
                     return Tracks[i].TrackNumber;
                 }
             }
