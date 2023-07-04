@@ -49,7 +49,7 @@ namespace PSXEmulator {
             RAM Ram = new RAM();
             BIOS Bios = new BIOS(userSettings.BIOSPath);
             Scratchpad Scratchpad = new Scratchpad();
-            CD_ROM cdrom = new CD_ROM(userSettings.SelectedGameFolder, userSettings.TrackIndex);
+            CD_ROM cdrom = new CD_ROM(userSettings.SelectedGameFolder, userSettings.FirstTrackIndex);
             SPU Spu = new SPU(ref cdrom.DataController);         //Needs to read CD-Audio
             DMA Dma = new DMA();
             IO_PORTS IO = new IO_PORTS();
@@ -71,7 +71,7 @@ namespace PSXEmulator {
             CPU CPU = new CPU(Bus);
 
             mainWindow.CPU = CPU;
-            mainWindow.Title += " | " + (userSettings.TrackIndex >= 0 ? userSettings.SelectedGameName : "PSX-BIOS") + " | ";
+            mainWindow.Title += " | " + (userSettings.FirstTrackIndex >= 0 ? userSettings.SelectedGameName : "PSX-BIOS") + " | ";
 
             mainWindow.Run();
 

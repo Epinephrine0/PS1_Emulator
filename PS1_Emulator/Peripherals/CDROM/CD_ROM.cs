@@ -1,7 +1,7 @@
-﻿using System;
+﻿using PSXEmulator.Peripherals.CDROM;
+using System;
 using System.Collections.Generic;
 using System.IO;
-
 namespace PSXEmulator {
     public unsafe class CD_ROM  {   
         public Range range = new Range(0x1F801800, 4);
@@ -86,25 +86,27 @@ namespace PSXEmulator {
 
         public byte padding;
         public byte currentCommand;
-        public bool hasDisk = true;       //A game disk, audio disks are not supported yet 
+        public bool HasDisk;
+        public bool HasCue;
         public bool ledOpen = false;
 
-        byte[] disk;
         private delegate*<CD_ROM, void>[] lookUpTable = new delegate*<CD_ROM, void>[0xFF + 1];
         public CDROMDataController DataController;
-
+        public Track[] CDTracks;
         uint currentIndex;      //Offset in bytes
         int counter = 0;        //Delay
         uint sectorOffset = 0;  //Skip headers, etc
 
         public CD_ROM(string gameFolder, int TrackIndex) {
+            DataController = new CDROMDataController();
 
-            hasDisk = TrackIndex >= 0;
+            HasDisk = TrackIndex >= 0;  
 
-            if (hasDisk) {
-                disk = File.ReadAllBytes(Directory.GetFiles(gameFolder)[TrackIndex]);
+            if (HasDisk) {  //TODO Move it to a method and possibly implement disk swap 
+                CDTracks = GetTracks(gameFolder, TrackIndex);
+                DataController.Tracks = CDTracks;
+                DataController.SelectedTrack = File.ReadAllBytes(CDTracks[0].FilePath);
             }
-            DataController = new CDROMDataController(ref disk); //Will refrence null if no disk, I should really change this
 
             //Fill the functions lookUpTable with illegal first, to be safe
             for (int i = 0; i< lookUpTable.Length; i++) {
@@ -129,6 +131,83 @@ namespace PSXEmulator {
             lookUpTable[0x19] = &test;
             lookUpTable[0x1A] = &getID;
             lookUpTable[0x1B] = &readN_S;
+        }
+
+        private Track[] GetTracks(string gameFolder, int indexOfDataTrack) {
+            string[] rawFiles = Directory.GetFiles(gameFolder);
+            string cuePath = "";
+            Track[] tracks;
+            for (int i = 0; i < rawFiles.Length; i++) {
+                if (Path.GetExtension(rawFiles[i]).ToLower().Equals(".cue")) { //Find cue sheet
+                    cuePath = rawFiles[i];
+                    Console.WriteLine("[CDROM] Found Cue sheet");
+                    HasCue = true;  
+                   break;
+                } 
+            }
+
+            if (HasCue) {
+                string cueSheet = File.ReadAllText(cuePath);
+                string[] filesInCue = cueSheet.Split("FILE");
+                tracks = new Track[filesInCue.Length - 1];
+
+                ReadOnlySpan<string> spanOfCueFiles = new ReadOnlySpan<string>(filesInCue).Slice(1);   //Skip 0 as it is nothing
+
+                ParseCue(spanOfCueFiles, rawFiles, ref tracks);   
+                return tracks;
+            } else {
+                Console.WriteLine("[CDROM] Could not find a Cue sheet, CD-DA audio will not be played");
+                return new Track[] { new Track(rawFiles[indexOfDataTrack], false, 01, "00:00:00") };  //Defaule to main data track only
+            }
+
+        }
+
+        private static (int,int,int) BytesToMSF(int totalSize) {
+            int totalFrames = totalSize / 2352;
+            int M = totalFrames / (60 * 75);
+            int S = (totalFrames % (60 * 75)) / 75;
+            int F = (totalFrames % (60 * 75)) % 75;
+            return (M,S,F);
+        }
+
+        private void ParseCue(ReadOnlySpan<string> filesInCue, string[] rawFiles, ref Track[] tracks) {
+            int offset = 0;
+
+            for (int i = 0; i < filesInCue.Length; i++) {
+                string[] indexes = filesInCue[i].Split("INDEX 01");
+                string index1MSF = indexes[1].Replace(" ", "");
+                if (indexes.Length > 2) {
+                    Console.WriteLine("[CDROM] Detected a track with more that 2 indexes!");    //Lets hope this doesnt happen 
+                }
+                
+                tracks[i] = new Track(rawFiles[i], filesInCue[i].Contains("AUDIO"), i + 1, index1MSF);
+                string[] initialMSF = index1MSF.Split(":");
+
+                int length = (int)new FileInfo(rawFiles[i]).Length;
+                int M; int S; int F;
+                (M, S, F) = BytesToMSF(offset);
+
+                M += int.Parse(initialMSF[0]);
+                S += int.Parse(initialMSF[1]);
+                F += int.Parse(initialMSF[2]);
+
+                tracks[i].M = M;
+                tracks[i].S = S;
+                tracks[i].F = F;
+
+                tracks[i].Length = length;
+
+                Console.WriteLine("------------------------------------------------------------");
+                Console.WriteLine("[CDROM] Added new track: ");
+                Console.WriteLine("[CDROM] Path: " + rawFiles[i]);
+                Console.WriteLine("[CDROM] isAudio: " + filesInCue[i].Contains("AUDIO"));
+                Console.WriteLine("[CDROM] Number: " + (i + 1));
+                Console.WriteLine("[CDROM] Start: " + M + ":" + S + ":" + F);
+                Console.WriteLine("[CDROM] Length: " + BytesToMSF(length));
+                Console.WriteLine("------------------------------------------------------------");
+
+                offset += length;
+            }
         }
         private static byte DecToBcd(byte value) {
             return (byte)(value + 6 * (value / 10));
@@ -219,7 +298,7 @@ namespace PSXEmulator {
             }
         }
         private void RequestRegister(byte value) {
-            if ((value & 0x80) != 0) { //Request data
+            if ((value & 0x80) != 0) {  //Request data
                 if (DataController.dataFifo.Count > 0) { return; }
                 DataController.moveSectorToDataFifo();
             }
@@ -285,22 +364,31 @@ namespace PSXEmulator {
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
         }
 
-        private static void play(CD_ROM cdrom) {   //CD-DA ? TODO
+        private static void play(CD_ROM cdrom) {   //CD-DA
             cdrom.CDROM_State = State.ReadingSectors;
             cdrom.command = Command.Play;
 
-            Console.WriteLine("[CDROM] Play command ignored");
-            //currentIndex = (((m * 60 * 75) + (s * 75) + f - 150)) * 0x930 + sectorOffset;
-
+            cdrom.currentIndex = ((cdrom.m * 60 * 75) + (cdrom.s * 75) + cdrom.f) * 0x930;      //No 150 offset?  
+            
             cdrom.stat = 0x2;
-            cdrom.stat |= (1 << 7);   //Play
+            cdrom.stat |= (1 << 7);   //Playing CDDA
 
             //Response 1
             cdrom.responseBuffer.Enqueue(cdrom.stat);
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
-        }
 
-            private static void stop(CD_ROM cdrom) {
+            if (cdrom.parameterBuffer.Count > 0) {
+                int trackNumber = cdrom.parameterBuffer.Dequeue();
+                if (cdrom.DataController.SelectedTrackNumber != trackNumber) {
+                    cdrom.DataController.SelectTrack(trackNumber);      //Change Binary to trackNumber (if it isn't already selected)
+                }
+                cdrom.currentIndex = (uint)cdrom.DataController.Tracks[cdrom.DataController.SelectedTrackNumber - 1].Start; //Start at the begining
+                Console.WriteLine("[CDROM] Play CD-DA, track: " + trackNumber);
+            } else {
+                Console.WriteLine("[CDROM] Play CD-DA, no track specified, at MSF: " + cdrom.m + ":" + cdrom.s + ":" + cdrom.f);
+            }
+        }
+        private static void stop(CD_ROM cdrom) {
             //The first response returns the current status (this already with bit5 cleared)
             //The second response returns the new status (with bit1 cleared)
             cdrom.stat = 0x2;
@@ -312,8 +400,7 @@ namespace PSXEmulator {
 
             if (cdrom.command == Command.Stop) {
                 cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0001d7b, INT2));
-            }
-            else {
+            } else {
                 cdrom.interrupts.Enqueue(new DelayedInterrupt(cdrom.doubleSpeed ? 0x18a6076 : 0x0d38aca, INT2));
             }
 
@@ -321,26 +408,56 @@ namespace PSXEmulator {
         }
 
         private static void getTD(CD_ROM cdrom) {
+            //GetTD - Command 14h,track --> INT3(stat,mm,ss) ;BCD
+            /*For a disk with NN tracks, parameter values 01h..NNh return the start of the specified track, 
+             *parameter value 00h returns the end of the last track, and parameter values bigger than NNh return error code 10h.*/
+
             cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.responseBuffer.Enqueue(DecToBcd((byte)cdrom.m));
-            cdrom.responseBuffer.Enqueue(DecToBcd((byte)cdrom.s));
+
+            int N = BcdToDec(cdrom.parameterBuffer.Dequeue());
+            int last = cdrom.DataController.Tracks.Length - 1;
+            if (N >= 1 && N <= cdrom.DataController.Tracks[last].TrackNumber) { // 01h..NNh
+       
+                //We only care about M and S
+                cdrom.responseBuffer.Enqueue(DecToBcd((byte)cdrom.DataController.Tracks[N - 1].M));
+                cdrom.responseBuffer.Enqueue(DecToBcd((byte)cdrom.DataController.Tracks[N - 1].S));
+                Console.WriteLine("[CDROM] GETTD: Track " + N + ", Response: " + cdrom.DataController.Tracks[N - 1].M + ":" + cdrom.DataController.Tracks[N - 1].S);
+
+            } else if (N == 0) {
+                //Returns the end of the last track (it's start, which is comulitave, + it's length)
+
+                (int M, int S, int F) = BytesToMSF(cdrom.DataController.Tracks[last].Length);
+
+                M += cdrom.DataController.Tracks[last].M;
+                S += cdrom.DataController.Tracks[last].S;
+
+                cdrom.responseBuffer.Enqueue((byte)M);
+                cdrom.responseBuffer.Enqueue((byte)S);
+
+                Console.WriteLine("[CDROM] GETTD: Track 0, Response: " + M + ":" + S);
+
+            }else if (N > cdrom.DataController.Tracks[last].TrackNumber) {
+                Console.WriteLine("[CDROM] GETTD: Track " + N + " > " + cdrom.DataController.Tracks[last].TrackNumber);
+            }
+
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
         }
-
         private static void getTN(CD_ROM cdrom) {
-            // throw new Exception("Check game cue");  //Todo: read and parse .cue files
+            //GetTN - Command 13h --> INT3(stat,first,last) ;BCD
+            int lastIndex = cdrom.DataController.Tracks.Length - 1;
+            byte firstTrack = DecToBcd((byte)cdrom.DataController.Tracks[0].TrackNumber);
+            byte lastTrack = DecToBcd((byte)cdrom.DataController.Tracks[lastIndex].TrackNumber);
 
             cdrom.CDROM_State = State.RespondingToCommand;
             cdrom.command = Command.Other;
 
             cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.responseBuffer.Enqueue(0x1);
-            cdrom.responseBuffer.Enqueue(0x14);
-
+            cdrom.responseBuffer.Enqueue(firstTrack);
+            cdrom.responseBuffer.Enqueue(lastTrack);
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
 
+            Console.WriteLine("[CDROM] GETTN, Response (BCD): " + firstTrack + " and " + lastTrack);
         }
-
         private static void mute(CD_ROM cdrom) {
             // Console.WriteLine("[CDROM] Mute");
 
@@ -414,8 +531,12 @@ namespace PSXEmulator {
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
             //Further responses [INT1] are added in tick() 
+
+            if (cdrom.DataController.SelectedTrackNumber != 1) {
+                cdrom.DataController.SelectTrack(1);      //Change Binary to main (only if it isn't already on main)
+            }
         }
-  
+
         private static void setMode(CD_ROM cdrom) {
             // Console.WriteLine("[CDROM] seekl");
             cdrom.CDROM_State = State.RespondingToCommand;
@@ -499,7 +620,7 @@ namespace PSXEmulator {
 
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
-            if (cdrom.hasDisk) {
+            if (cdrom.HasDisk) {
                 cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
 
                 cdrom.responseBuffer.Enqueue(0x02);       //STAT
@@ -525,7 +646,6 @@ namespace PSXEmulator {
               }
         }
         private static void getStat(CD_ROM cdrom) {
-            // Console.WriteLine("[CDROM] GetStat");
 
             cdrom.CDROM_State = State.RespondingToCommand;
             cdrom.command = Command.GetStat;
@@ -537,6 +657,8 @@ namespace PSXEmulator {
 
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
             cdrom.responseBuffer.Enqueue(cdrom.stat);
+            Console.WriteLine("[CDROM] GetStat, Response: " + cdrom.stat);
+
         }
 
         public static void getDateAndVersion(CD_ROM cdrom) {
@@ -553,7 +675,7 @@ namespace PSXEmulator {
 
             cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
         }
-        void IncrementIndex() {
+        void IncrementIndex(byte offset) {
             f++;
             if (f >= 75) {
                 f = 0;
@@ -563,7 +685,7 @@ namespace PSXEmulator {
                 s = 0;
                 m++;
             }
-            currentIndex = ((m * 60 * 75) + (s * 75) + f - 150) * 0x930; 
+            currentIndex = ((m * 60 * 75) + (s * 75) + f - offset) * 0x930; 
         }
 
         internal void tick(int cycles) {
@@ -588,7 +710,12 @@ namespace PSXEmulator {
 
                 case State.RespondingToCommand:
                     if (interrupts.Count == 0 && responseBuffer.Count == 0) {
-                        CDROM_State = State.Idle;
+                        if ((stat >> 7) > 0) {                   //If the CDROM is Playing CDDA it shouldn't stop upon a normal command, maybe reading data is the same?
+                            CDROM_State = State.ReadingSectors;  //I may need to change how my states work...
+                            command = Command.Play;
+                        } else {
+                            CDROM_State = State.Idle;
+                        }
                         RSLRRDY = 0;
                         return;
                     }
@@ -603,8 +730,9 @@ namespace PSXEmulator {
                     counter = 0;
                     
                     if(command != Command.Play) {
+                        Console.WriteLine("[CDROM] Read: " + m + ":" + s + ":" + f);
                         bool sendToCPU = DataController.loadNewSector(currentIndex);
-                        IncrementIndex();
+                        IncrementIndex(150);
                         if (sendToCPU) {    
                             responseBuffer.Enqueue(stat);
                             if (m < 74) {
@@ -614,22 +742,20 @@ namespace PSXEmulator {
                                 interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end, but what should be the index?
                             }
                         }
-                        else {
-                            //Send to SPU
-                        }
                     }
                     else {
-                        DataController.sectorQueue.Clear();
+                        if (HasCue) {
+                            DataController.PlayCDDA(currentIndex);
+                        } else {
+                            Console.WriteLine("[CD-ROM] Ignoring play command (No cue)");
+                        }
+                        IncrementIndex(0);
+
                         if (report) {
                             responseBuffer.Enqueue(0xFF);   //Garbage Report 
                             interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
                         }
-                        if(autoPause && m == 74) {
-                            responseBuffer.Enqueue(stat);
-                            interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end
-                            pause(this);
-                            Console.WriteLine("[CDROM] Data end INT4 issued!");
-                        }
+                        
                     }
                     break;
             }

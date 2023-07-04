@@ -17,15 +17,16 @@ namespace PSXEmulator.UI {
         public string? SelectedGameName { set; get; }
         public string? SelectedGameFolder { set; get; }
 
-        public int TrackIndex = -1;
+        public int FirstTrackIndex = -1;
 
 
         //More settings later
 
-        //ShowTextures
-        //ShowConsole
+        //Show Textures
+        //Show Console
         //CPI
         //Sound stuff
+        //Fast boot
 
     }
 }

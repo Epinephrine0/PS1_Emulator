@@ -1,6 +1,11 @@
-﻿using NAudio.Wave;
+﻿using Microsoft.VisualBasic.Logging;
+using NAudio.Wave;
+using OpenTK.Graphics.OpenGL;
+using PSXEmulator.Peripherals.CDROM;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
 
 namespace PSXEmulator {
     public class CDROMDataController {      //Inspects and directs data/audio sectors to CPU/SPU
@@ -12,10 +17,11 @@ namespace PSXEmulator {
         public bool XA_ADPCM_En = false;
         public Filter filter;
         public Volume currentVolume;
-        byte[] disk;
+        public Track[] Tracks;
         XA_ADPCM adpcmDecoder = new XA_ADPCM();
-        public Queue<short> CD_AudioSamples = new Queue<short>();   
-        
+        public Queue<short> CD_AudioSamples = new Queue<short>();
+        public byte[] SelectedTrack;
+        public int SelectedTrackNumber = 0;
         public struct Filter {
             public bool isEnabled;
             public byte fileNumber;
@@ -30,8 +36,8 @@ namespace PSXEmulator {
         enum SectorType {
             Video = 1, Audio = 2, Data = 4
         }
-        public CDROMDataController(ref byte[] disk) {
-            this.disk = disk;
+        public CDROMDataController() {
+           
             currentVolume.RtoL = 0x40;
             currentVolume.RtoR = 0x40;
             currentVolume.LtoL = 0x40;
@@ -53,14 +59,14 @@ namespace PSXEmulator {
                 dataFifo.Enqueue(sectorQueue.Dequeue());
             }
         }
-        public bool loadNewSector(uint currentIndex) {
+        public bool loadNewSector(uint currentIndex) {  //Only for CD-XA tracks, i.e. read command, not play command
             uint offset = 0x10;
-            byte fileNumber = disk[currentIndex + offset++];            //First Subheader byte
-            byte channelNumber = disk[currentIndex + offset++];         //Second Subheader byte
-            byte subMode = disk[currentIndex + offset++];               //Third Subheader byte
-            byte codingInfo = disk[currentIndex + offset++];            //Fourth Subheader byte
+            byte fileNumber = SelectedTrack[currentIndex + offset++];            //First Subheader byte
+            byte channelNumber = SelectedTrack[currentIndex + offset++];         //Second Subheader byte
+            byte subMode = SelectedTrack[currentIndex + offset++];               //Third Subheader byte
+            byte codingInfo = SelectedTrack[currentIndex + offset++];            //Fourth Subheader byte
 
-            ReadOnlySpan<byte> fullSector = new ReadOnlySpan<byte>(disk, (int)currentIndex, 0x930);
+            ReadOnlySpan<byte> fullSector = new ReadOnlySpan<byte>(SelectedTrack, (int)currentIndex, 0x930);
             SectorType sectorType = (SectorType)((subMode >> 1) & 0x7);
 
             if (XA_ADPCM_En && sectorType == SectorType.Audio) {
@@ -74,11 +80,45 @@ namespace PSXEmulator {
                 }
                 return false;
             } else {
-                for (uint i = bytesToSkip; i < bytesToSkip + sizeOfDataSegment; i++) {      //Data sector (or audio but disabled)
-                    sectorQueue.Enqueue(disk[i + currentIndex]);                            //Should continue to data path
+                for (uint i = bytesToSkip; i < bytesToSkip + sizeOfDataSegment; i++) {               //Data sector (or audio but disabled)
+                    sectorQueue.Enqueue(SelectedTrack[i + currentIndex]);                            //Should continue to data path
                 }
                 return true;
             }
+        }
+        public void PlayCDDA(uint currentIndex) {   //Handles play command
+            int offset = (int)(currentIndex - Tracks[SelectedTrackNumber - 1].RoundedStart);
+
+            if (offset < 0 || offset + 0x930 >= SelectedTrack.Length) {
+                int newTrack = FindTrack(currentIndex);
+                SelectTrack(newTrack);
+                offset = (int)(currentIndex - Tracks[SelectedTrackNumber - 1].RoundedStart);
+                Console.WriteLine("[CDROM] CD-DA Change to track: " + SelectedTrackNumber);
+            }
+
+            ReadOnlySpan<byte> fullSector = new ReadOnlySpan<byte>(SelectedTrack).Slice(offset, 0x930);    //Add CD-DA Samples to the queue
+            for (int i = 0; i < fullSector.Length; i += 4) {                                               //Stereo, 16-bit, at 44.1Khz ...always?
+                short L = MemoryMarshal.Read<short>(fullSector.Slice(i,2));
+                short R = MemoryMarshal.Read<short>(fullSector.Slice(i + 2,2));
+                CD_AudioSamples.Enqueue(L);   
+                CD_AudioSamples.Enqueue(R);    
+            }
+        }
+        public void SelectTrack(int trackNumber) {  //Should be called on Read and Play Commands to switch Files
+            SelectedTrack = File.ReadAllBytes(Tracks[trackNumber - 1].FilePath);
+            SelectedTrackNumber = Tracks[trackNumber - 1].TrackNumber;
+        }
+
+
+        //To figure in what track does the required MSF fall in, if the track is not specified by the play command
+        public int FindTrack(uint index) { 
+            for (int i = 0; i < Tracks.Length; i++) {
+                if (index >= Tracks[i].RoundedStart && index < (Tracks[i].RoundedStart + Tracks[i].Length)) {
+                    return Tracks[i].TrackNumber;
+                }
+            }
+            Console.WriteLine("Shit, couldn't find a suitable track");
+            return 1;
         }
     }
 }

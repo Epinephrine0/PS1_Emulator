@@ -18,7 +18,7 @@ namespace PSXEmulator {
         string SystemID = "PLAYSTATION";
         string CopyRight = "Sony Computer Entertainment Inc.";
         bool HasValidBios;  
-        Settings UserSettings;  //The way I pass this object around is pretty Bullshit and needs to be changed
+        Settings UserSettings;
 
         public UserInterface() {
             InitializeComponent();
@@ -115,7 +115,7 @@ namespace PSXEmulator {
 
             if(GameList.SelectedIndex < 0 || GameList.SelectedItem.Equals("Games go here")) {
                 UserSettings.SelectedGameFolder = null;
-                UserSettings.TrackIndex = -1;
+                UserSettings.FirstTrackIndex = -1;
                 Console.WriteLine("No game selected");
                 Console.WriteLine("Proceeding to boot without a game");
                 Boot();
@@ -126,7 +126,7 @@ namespace PSXEmulator {
             SelectedGameFiles = Directory.GetFiles(UserSettings.SelectedGameFolder);
 
             int index = findFirstValidBinary(SelectedGameFiles);    //Make sure the game folder contains at least one valid bin
-            UserSettings.TrackIndex = index;
+            UserSettings.FirstTrackIndex = index;
 
             if (index >= 0) {
                 UserSettings.SelectedGameName = Path.GetFileName(SelectedGameFiles[index]);
@@ -137,7 +137,7 @@ namespace PSXEmulator {
                 Console.WriteLine("Could not find a valid binary for the selected game");
                 Console.WriteLine("Proceeding to boot without a game");
                 UserSettings.SelectedGameFolder = null;
-                UserSettings.TrackIndex = -1;
+                UserSettings.FirstTrackIndex = -1;
             }
 
             Boot();
@@ -192,6 +192,8 @@ namespace PSXEmulator {
             SaveSettings();     //Save before booting to prevent losing settings if the emulator crashed
 
             this.Visibility = Visibility.Hidden;     //Hide UI
+
+            Console.ForegroundColor = ConsoleColor.Green;
 
             MainEmu = new PSX_OpenTK(UserSettings);            /* Emulation loop */
 
