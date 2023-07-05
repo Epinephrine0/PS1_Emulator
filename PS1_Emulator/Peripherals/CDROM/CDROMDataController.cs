@@ -96,13 +96,15 @@ namespace PSXEmulator {
                 Console.WriteLine("[CDROM] CD-DA playing track: " + SelectedTrackNumber);
             }
 
+            //Ridge Racer setloc at position BEFORE the track starting point, I igonre this
             if (((int)offset) < 0) {
-                Console.WriteLine("[CDROM] CD-DA Index < Track start");    //Ridge Racer setloc at position BEFORE the track starting point, I igonre this
+                Console.WriteLine("[CDROM] CD-DA Index < Track start");    
                 return;
             }
-
-            ReadOnlySpan<byte> fullSector = new ReadOnlySpan<byte>(SelectedTrack).Slice((int)offset, 0x930);    //Add CD-DA Samples to the queue
-            for (int i = 0; i < fullSector.Length; i += 4) {                                               //Stereo, 16-bit, at 44.1Khz ...always?
+            //Add CD-DA Samples to the queue
+            ReadOnlySpan<byte> fullSector = new ReadOnlySpan<byte>(SelectedTrack).Slice((int)offset, 0x930);  
+            
+            for (int i = 0; i < fullSector.Length; i += 4) {                   //Stereo, 16-bit, at 44.1Khz ...always?
                 short L = MemoryMarshal.Read<short>(fullSector.Slice(i,2));
                 short R = MemoryMarshal.Read<short>(fullSector.Slice(i + 2,2));
                 CD_AudioSamples.Enqueue(L);   

@@ -692,7 +692,7 @@ namespace PSXEmulator {
             } else {
                 cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT5));
 
-                cdrom.responseBuffer.Enqueue(0x08);       //No disk, this leads to the Shell 
+                cdrom.responseBuffer.Enqueue(0x08);       //No disk
                 cdrom.responseBuffer.Enqueue(0x40);
                 cdrom.responseBuffer.Enqueue(0x00);
                 cdrom.responseBuffer.Enqueue(0x00);
