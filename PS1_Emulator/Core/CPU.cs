@@ -32,6 +32,8 @@ namespace PSXEmulator {
         private const UInt32 CoprocessorError = 0xb;
         private const UInt32 Overflow = 0xc;
         private byte[] testRom;
+        private bool IsLoadingEXE;
+        private string? EXEPath;
 
         bool fastBoot = true;
         public bool isPaused = false;
@@ -59,7 +61,7 @@ namespace PSXEmulator {
                 &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal,   &illegal
         };
 
-        public CPU(BUS bus) {
+        public CPU(bool isEXE, string? EXEPath, BUS bus) {
             this.pc = 0xbfc00000;   //BIOS initial PC       
             this.next_pc = pc + 4;
             this.BUS = bus;
@@ -76,6 +78,8 @@ namespace PSXEmulator {
             this.LO = 0xdeadbeef;
             this._branch = false;
             this.delay_slot = false;
+            this.IsLoadingEXE = isEXE;
+            this.EXEPath = EXEPath;
         }
         struct RegisterLoad {
             public uint registerNumber;
@@ -158,9 +162,7 @@ namespace PSXEmulator {
         private void intercept(uint pc) {
 
             switch (pc) {
-               case 0x80030000:   //For executing EXEs
-                    //loadTestRom(@"C:\Users\Old Snake\Desktop\PSX-master\GPU\16BPP\RenderTextureRectangle\CLUT8BPP\RenderTextureRectangleCLUT8BPP.exe");
-                    break;
+               case 0x80030000: if (IsLoadingEXE) { loadTestRom(EXEPath); IsLoadingEXE = false; }   break;
 
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
                     char character;
@@ -288,7 +290,7 @@ namespace PSXEmulator {
             }
         }
 
-        private void loadTestRom(string path) {
+        private void loadTestRom(string? path) {
             testRom = File.ReadAllBytes(path);
 
             uint addressInRAM = (uint)(testRom[0x018] | (testRom[0x018 + 1] << 8) | (testRom[0x018 + 2] << 16) | (testRom[0x018 + 3] << 24));

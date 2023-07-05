@@ -1,9 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PSXEmulator.UI {
     [Serializable]  
@@ -19,6 +14,8 @@ namespace PSXEmulator.UI {
 
         public int FirstTrackIndex = -1;
 
+        public bool isEXE;
+        public string? EXEPath;
 
         //More settings later
 

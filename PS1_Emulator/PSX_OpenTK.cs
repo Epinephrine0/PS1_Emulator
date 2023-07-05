@@ -68,10 +68,10 @@ namespace PSXEmulator {
                 IO,MemoryControl,RamSize,CacheControl,
                 Ex1,Ex2,Timer1,Timer2,Mdec,Gpu
                 );
-            CPU CPU = new CPU(Bus);
+            CPU CPU = new CPU(userSettings.isEXE, userSettings.EXEPath, Bus);
 
             mainWindow.CPU = CPU;
-            mainWindow.Title += " | " + (userSettings.FirstTrackIndex >= 0 ? userSettings.SelectedGameName : "PSX-BIOS") + " | ";
+            mainWindow.Title += " | " + ((userSettings.FirstTrackIndex > 0 || userSettings.isEXE)? userSettings.SelectedGameName : "PSX-BIOS") + " | ";
 
             mainWindow.Run();
 

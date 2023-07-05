@@ -165,24 +165,29 @@ namespace PSXEmulator {
             }
         }
         private int findFirstValidBinary(string[] selectedGameFiles) {
-            ReadOnlySpan<byte> data;
             for (int i = 0; i < selectedGameFiles.Length; i++) {
                 string extension = Path.GetExtension(selectedGameFiles[i]).ToLower();
                 if (extension.Equals(".bin") || extension.Equals(".iso")) {     //Check PLAYSTAION String for a valid CD-XA track
-                    data = File.ReadAllBytes(selectedGameFiles[i]);     //Slow
-                    try {
-                        data = data.Slice((16 * 0x930) + 0x20, 11);    
-                    }
-                    catch (ArgumentOutOfRangeException ex) {
-                        continue;
-                    }
-                    string ID = Encoding.ASCII.GetString(data);
-                    if (ID.Equals(SystemID)) {
+                    if (IsValidBin(selectedGameFiles[i])) {
                         return i;
                     }
                 }
             }
             return -1;
+        }
+
+        private bool IsValidBin(string path) {
+            ReadOnlySpan<byte> data = File.ReadAllBytes(path);
+            try {
+                data = data.Slice((16 * 0x930) + 0x20, 11);
+                string ID = Encoding.ASCII.GetString(data);
+                if (ID.Equals(SystemID)) {
+                    return true;
+                }
+            } catch (ArgumentOutOfRangeException ex) {
+                return false;
+            }
+            return false;
         }
         private void OnClose(object sender, EventArgs e) {
             SaveSettings();
@@ -206,6 +211,24 @@ namespace PSXEmulator {
         private void Window_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
             GameList.UnselectAll();
         }
+        private void OnDrop(object sender, System.Windows.DragEventArgs e) {   
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)) {
+                string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
+                string extension = Path.GetExtension(files[0]).ToLower();
+                if (extension.Equals(".exe")) {
+                    Console.WriteLine("Booting Executable: " + files[0]);
+                    UserSettings.isEXE = true;
+                    UserSettings.EXEPath = files[0];
+                    UserSettings.SelectedGameName = Path.GetFileName(files[0]);
+                    Boot();
+                }else if (extension.Equals(".bin") || extension.Equals(".iso")) {
+                    if (IsValidBin(files[0])) {
+                        Console.WriteLine("Heheh");
+                    }
+                }
+            }
+        }
+        
 
         private void SaveSettings() {
             byte[] serialized = JsonSerializer.SerializeToUtf8Bytes(UserSettings,
