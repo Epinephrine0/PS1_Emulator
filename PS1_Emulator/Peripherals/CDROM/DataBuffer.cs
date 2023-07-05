@@ -93,7 +93,7 @@ namespace PSXEmulator {
                 int newTrack = FindTrack(currentIndex);
                 SelectTrack(newTrack);
                 offset = (uint)(currentIndex - Tracks[SelectedTrackNumber - 1].RoundedStart);
-                Console.WriteLine("[CDROM] CD-DA Change to track: " + SelectedTrackNumber);
+                Console.WriteLine("[CDROM] CD-DA playing track: " + SelectedTrackNumber);
             }
 
             if (((int)offset) < 0) {
