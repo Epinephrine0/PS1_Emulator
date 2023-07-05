@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.ListView;
+
 namespace PSXEmulator {
     public unsafe class CD_ROM  {   
         public Range range = new Range(0x1F801800, 4);
@@ -139,11 +141,11 @@ namespace PSXEmulator {
             string cuePath = "";
             Track[] tracks;
             for (int i = 0; i < rawFiles.Length; i++) {
-                if (Path.GetExtension(rawFiles[i]).ToLower().Equals(".cue")) { //Find cue sheet
+                if (Path.GetExtension(rawFiles[i]).ToLower().Equals(".cue")) { //Find Cue sheet
                     cuePath = rawFiles[i];
                     Console.WriteLine("[CDROM] Found Cue sheet");
-                    HasCue = true;  
-                   break;
+                    HasCue = true;
+                    break;
                 } 
             }
 
@@ -175,12 +177,18 @@ namespace PSXEmulator {
             int offset = 0;
 
             for (int i = 0; i < filesInCue.Length; i++) {
-                string[] indexes = filesInCue[i].Split("INDEX 01");
-                string index1MSF = indexes[1].Replace(" ", "");
-                if (indexes.Length > 2) {
-                    Console.WriteLine("[CDROM] Detected a track with more that 2 indexes!");    //Lets hope this doesnt happen 
+                string[] indexes = filesInCue[i].Split("INDEX");
+                string index1MSF = "";
+                for (int j = 1; j < indexes.Length; j++) {
+                    string[] details = indexes[j].Split(" ");
+                    if (details[1].Equals("01")) {
+                        index1MSF = details[2];
+                    }
                 }
-                
+                if (indexes.Length > 3) {
+                    Console.WriteLine("[CDROM] Found file with multiple indexes!");
+                }
+
                 tracks[i] = new Track(rawFiles[i], filesInCue[i].Contains("AUDIO"), i + 1, index1MSF);
                 string[] initialMSF = index1MSF.Split(":");
 
@@ -188,9 +196,18 @@ namespace PSXEmulator {
                 int M; int S; int F;
                 (M, S, F) = BytesToMSF(offset);
 
-                M += int.Parse(initialMSF[0]);
-                S += int.Parse(initialMSF[1]);
-                F += int.Parse(initialMSF[2]);
+                int cueM = 0;
+                int cueS = 0;
+                int cueF = 0;
+                bool valid = (int.TryParse(initialMSF[0], out cueM) && int.TryParse(initialMSF[1], out cueS) && int.TryParse(initialMSF[2], out cueF));
+                if (!valid) {
+                    Console.WriteLine("[CDROM] Cue Parse error, aborting..");
+                    HasCue = false;
+                    return;
+                }
+                M += cueM;
+                S += cueS;
+                F += cueF;
 
                 tracks[i].M = M;
                 tracks[i].S = S;
@@ -201,9 +218,10 @@ namespace PSXEmulator {
                 Console.WriteLine("------------------------------------------------------------");
                 Console.WriteLine("[CDROM] Added new track: ");
                 Console.WriteLine("[CDROM] Path: " + rawFiles[i]);
+                Console.WriteLine("[CDROM] CUE Index 01: " + index1MSF.Replace("\n",""));
                 Console.WriteLine("[CDROM] isAudio: " + filesInCue[i].Contains("AUDIO"));
-                Console.WriteLine("[CDROM] Number: " + (i + 1));
-                Console.WriteLine("[CDROM] Start: " + M + ":" + S + ":" + F);
+                Console.WriteLine("[CDROM] Number: " + (i + 1).ToString().PadLeft(2, '0'));
+                Console.WriteLine("[CDROM] Start: " + M.ToString().PadLeft(2,'0') + ":" + S.ToString().PadLeft(2, '0') + ":" + F.ToString().PadLeft(2, '0'));
                 Console.WriteLine("[CDROM] Length: " + BytesToMSF(length));
                 Console.WriteLine("------------------------------------------------------------");
 
