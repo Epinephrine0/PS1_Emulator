@@ -14,8 +14,11 @@ namespace PSXEmulator.UI {
 
         public int FirstTrackIndex = -1;
 
-        public bool isEXE;
+        public bool IsEXE;
         public string? EXEPath;
+
+        public bool IsDirecFile;
+        public string? DirecFilePath;
 
         //More settings later
 

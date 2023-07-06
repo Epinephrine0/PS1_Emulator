@@ -102,7 +102,7 @@ namespace PSXEmulator {
 
         public CD_ROM(string gameFolder, int TrackIndex) {
             DataController = new CDROMDataController();
-
+            LoadLUT();
             HasDisk = TrackIndex >= 0;  
 
             if (HasDisk) {  //TODO Move it to a method and possibly implement disk swap 
@@ -110,9 +110,19 @@ namespace PSXEmulator {
                 DataController.Tracks = CDTracks;
                 DataController.SelectedTrack = File.ReadAllBytes(CDTracks[0].FilePath);
             }
+        }
+        public CD_ROM(string gamePath) {
+            LoadLUT();
+            DataController = new CDROMDataController();
+            DataController.Tracks = new Track[] { new Track(gamePath, false, 01, "00:00:00") };
+            DataController.SelectedTrack = File.ReadAllBytes(gamePath);
+            HasDisk = true;
+            HasCue = false;
+        }
 
+        private void LoadLUT() {
             //Fill the functions lookUpTable with illegal first, to be safe
-            for (int i = 0; i< lookUpTable.Length; i++) {
+            for (int i = 0; i < lookUpTable.Length; i++) {
                 lookUpTable[i] = &illegal;
             }
             //Add whatever I implemented manually
@@ -127,7 +137,7 @@ namespace PSXEmulator {
             lookUpTable[0x0C] = &Demute;
             lookUpTable[0x0D] = &SetFilter;
             lookUpTable[0x0E] = &SetMode;
-            lookUpTable[0x11] = &GetLocP;   
+            lookUpTable[0x11] = &GetLocP;
             lookUpTable[0x13] = &GetTN;
             lookUpTable[0x14] = &GetTD;
             lookUpTable[0x15] = &SeekL;

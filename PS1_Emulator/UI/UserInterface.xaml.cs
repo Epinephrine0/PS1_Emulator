@@ -217,13 +217,18 @@ namespace PSXEmulator {
                 string extension = Path.GetExtension(files[0]).ToLower();
                 if (extension.Equals(".exe")) {
                     Console.WriteLine("Booting Executable: " + files[0]);
-                    UserSettings.isEXE = true;
+                    UserSettings.IsEXE = true;
                     UserSettings.EXEPath = files[0];
                     UserSettings.SelectedGameName = Path.GetFileName(files[0]);
                     Boot();
                 }else if (extension.Equals(".bin") || extension.Equals(".iso")) {
                     if (IsValidBin(files[0])) {
-                        Console.WriteLine("Heheh");
+                        Console.WriteLine("Booting Direct Binary: " + files[0]);
+                        UserSettings.SelectedGameName = Path.GetFileName(files[0]);
+                        UserSettings.IsDirecFile = true;
+                        UserSettings.DirecFilePath = files[0];
+                        UserSettings.FirstTrackIndex = 0; //Not used
+                        Boot();
                     }
                 }
             }
