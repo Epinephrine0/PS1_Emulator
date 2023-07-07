@@ -177,7 +177,10 @@ namespace PSXEmulator {
             }else if (IRQ_CONTROL.range.contains(physical_address)) {
                 return (ushort)IRQ_CONTROL.read(physical_address);
 
-            }else if (TIMER0.contains(physical_address)) {
+            } else if (DMA.range.contains(physical_address)) {  //DMA only 32-bits?
+                return (ushort)DMA.loadWord(physical_address);
+
+            } else if (TIMER0.contains(physical_address)) {
                 //Console.WriteLine("Unhandled read to TIMER0 register at address: " + address.ToString("X"));
                 return 0;
 
@@ -196,7 +199,9 @@ namespace PSXEmulator {
             }else if (Expansion1.range.contains(physical_address)) {    //Ignore expansion 1
                 return 0xFF;
 
-            }else {
+            } else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
+                return 0x31E1;
+            } else {
                 throw new Exception("Unhandled loadHalf at address : " + address.ToString("x") + "\n" +
                                "Physical address: " + physical_address.ToString("x"));
             }
@@ -224,12 +229,17 @@ namespace PSXEmulator {
             }else if (IRQ_CONTROL.range.contains(physical_address)) {
                 IRQ_CONTROL.write(physical_address, value);
 
-            }else if (IO_PORTS.range.contains(physical_address)) {
+            } else if (DMA.range.contains(physical_address)) {  
+                DMA.storeWord(physical_address, value);         //DMA only 32-bits?
+
+            } else if (IO_PORTS.range.contains(physical_address)) {
                 IO_PORTS.storeHalf(physical_address, value);
 
             }else if (Scratchpad.range.contains(physical_address)) {
                 Scratchpad.storeHalf(physical_address, value);
-            }else {
+            } else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
+
+            } else {
                 throw new Exception("Unhandled store16 at address : " + address.ToString("x"));
             }
         }
@@ -263,7 +273,6 @@ namespace PSXEmulator {
             }else {
                 throw new Exception("Unhandled load8 at address : " + address.ToString("x"));
             } 
-            //address 0x1f8010f6 ?? 
         }
 
         public void storeByte(UInt32 address, byte value) {
