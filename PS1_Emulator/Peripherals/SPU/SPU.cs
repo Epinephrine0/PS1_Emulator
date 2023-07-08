@@ -407,14 +407,14 @@ namespace PSXEmulator {
 
             //Merge in CD-Audio (CD-DA and compressed XA-ADPCM), read one L/R sample each tick (tick rate is 44.1khz)
             //CD Samples are consumed even if CD audio is disabled, they will also end up in the capture buffer 
-            int cdSamples = CDDataControl.CD_AudioSamples.Count;
+            int cdSamples = CDDataControl.CDAudioSamples.Count;
             short CDAudioLeft = 0;
             short CDAudioRight = 0;
             if (cdSamples > 0) {              
                 short CDLeftVolume = (short)CDInputVolume;
                 short CDRightVolume = (short)(CDInputVolume >> 16);
-                short leftSample = CDDataControl.CD_AudioSamples.Dequeue();
-                short rightSample = CDDataControl.CD_AudioSamples.Dequeue();
+                short leftSample = CDDataControl.CDAudioSamples.Dequeue();
+                short rightSample = CDDataControl.CDAudioSamples.Dequeue();
                 CDAudioLeft += (short)((leftSample * CDLeftVolume) >> 15);
                 CDAudioRight += (short)((rightSample * CDRightVolume) >> 15);
                 captureBuffers(0x000 + captureOffset, CDAudioLeft);               //Capture CD Audio left (before *volume)

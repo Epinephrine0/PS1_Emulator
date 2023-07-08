@@ -9,21 +9,21 @@ using System.Runtime.InteropServices;
 
 namespace PSXEmulator {
     public class CDROMDataController {      //Inspects and directs data/audio sectors to CPU/SPU
-        public byte padding;
-        public Queue<byte> sectorQueue = new Queue<byte>();
-        public Queue<byte> dataFifo = new Queue<byte>();
-        public uint bytesToSkip = 12;
-        public uint sizeOfDataSegment = 0x800;
+        public byte Padding;
+        public Queue<byte> SectorBuffer = new Queue<byte>();
+        public Queue<byte> DataFifo = new Queue<byte>();
+        public uint BytesToSkip = 12;
+        public uint SizeOfDataSegment = 0x800;
         public bool XA_ADPCM_En = false;
-        public Filter filter;
-        public Volume currentVolume;
+        public XAFilter Filter;
+        public Volume CurrentVolume;
         public Track[] Tracks;
-        XA_ADPCM adpcmDecoder = new XA_ADPCM();
-        public Queue<short> CD_AudioSamples = new Queue<short>();
+        XA_ADPCM ADPCMDecoder = new XA_ADPCM();
+        public Queue<short> CDAudioSamples = new Queue<short>();
         public byte[] SelectedTrack;
         public int SelectedTrackNumber = 0;
-        public struct Filter {
-            public bool isEnabled;
+        public struct XAFilter {
+            public bool IsEnabled;
             public byte fileNumber;
             public byte channelNumber;
         }
@@ -38,28 +38,28 @@ namespace PSXEmulator {
         }
         public CDROMDataController() {
            
-            currentVolume.RtoL = 0x40;
-            currentVolume.RtoR = 0x40;
-            currentVolume.LtoL = 0x40;
-            currentVolume.RtoR = 0x40;
+            CurrentVolume.RtoL = 0x40;
+            CurrentVolume.RtoR = 0x40;
+            CurrentVolume.LtoL = 0x40;
+            CurrentVolume.RtoR = 0x40;
         }
-        public uint readWord() {
-            uint b0 = dataFifo.Dequeue();
-            uint b1 = dataFifo.Dequeue();
-            uint b2 = dataFifo.Dequeue();
-            uint b3 = dataFifo.Dequeue();
+        public uint ReadWord() {
+            uint b0 = DataFifo.Dequeue();
+            uint b1 = DataFifo.Dequeue();
+            uint b2 = DataFifo.Dequeue();
+            uint b3 = DataFifo.Dequeue();
             uint word = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
             return word;
         }
-        public byte readByte() {
-            return dataFifo.Dequeue();
+        public byte ReadByte() {
+            return DataFifo.Dequeue();
         }
-        public void moveSectorToDataFifo() {
-            for (int i = 0; i < sizeOfDataSegment; i++) {
-                dataFifo.Enqueue(sectorQueue.Dequeue());
+        public void MoveSectorToDataFifo() {
+            for (int i = 0; i < SizeOfDataSegment; i++) {
+                DataFifo.Enqueue(SectorBuffer.Dequeue());
             }
         }
-        public bool loadNewSector(uint currentIndex) {  //Only for CD-XA tracks, i.e. read command, not play command
+        public bool LoadNewSector(uint currentIndex) {  //Only for CD-XA tracks, i.e. read command, not play command
             uint offset = 0x10;
             byte fileNumber = SelectedTrack[currentIndex + offset++];            //First Subheader byte
             byte channelNumber = SelectedTrack[currentIndex + offset++];         //Second Subheader byte
@@ -71,17 +71,17 @@ namespace PSXEmulator {
 
             if (XA_ADPCM_En && sectorType == SectorType.Audio) {
 
-                if (filter.isEnabled) { 
-                    if (filter.fileNumber == fileNumber && filter.channelNumber == channelNumber) {
-                        adpcmDecoder.handle_XA_ADPCM(fullSector, codingInfo, currentVolume, ref CD_AudioSamples);   
+                if (Filter.IsEnabled) { 
+                    if (Filter.fileNumber == fileNumber && Filter.channelNumber == channelNumber) {
+                        ADPCMDecoder.handle_XA_ADPCM(fullSector, codingInfo, CurrentVolume, ref CDAudioSamples);   
                     }
                 } else {
-                    adpcmDecoder.handle_XA_ADPCM(fullSector, codingInfo, currentVolume, ref CD_AudioSamples);
+                    ADPCMDecoder.handle_XA_ADPCM(fullSector, codingInfo, CurrentVolume, ref CDAudioSamples);
                 }
                 return false;
             } else {
-                for (uint i = bytesToSkip; i < bytesToSkip + sizeOfDataSegment; i++) {               //Data sector (or audio but disabled)
-                    sectorQueue.Enqueue(SelectedTrack[i + currentIndex]);                            //Should continue to data path
+                for (uint i = BytesToSkip; i < BytesToSkip + SizeOfDataSegment; i++) {               //Data sector (or audio but disabled)
+                    SectorBuffer.Enqueue(SelectedTrack[i + currentIndex]);                            //Should continue to data path
                 }
                 return true;
             }
@@ -107,8 +107,8 @@ namespace PSXEmulator {
             for (int i = 0; i < fullSector.Length; i += 4) {                   //Stereo, 16-bit, at 44.1Khz ...always?
                 short L = MemoryMarshal.Read<short>(fullSector.Slice(i,2));
                 short R = MemoryMarshal.Read<short>(fullSector.Slice(i + 2,2));
-                CD_AudioSamples.Enqueue(L);   
-                CD_AudioSamples.Enqueue(R);    
+                CDAudioSamples.Enqueue(L);   
+                CDAudioSamples.Enqueue(R);    
             }
         }
         public void SelectTrack(int trackNumber) {  //Should be called on Read and Play Commands to switch Files

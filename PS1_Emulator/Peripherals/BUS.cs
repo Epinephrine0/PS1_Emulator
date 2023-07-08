@@ -257,7 +257,7 @@ namespace PSXEmulator {
                 return 0xff;
 
             }else if (CD_ROM.range.contains(physical_address)) {
-                return CD_ROM.loadByte(physical_address);
+                return CD_ROM.LoadByte(physical_address);
 
             }else if (IO_PORTS.range.contains(physical_address)) {
                 return IO_PORTS.loadByte(physical_address);
@@ -283,7 +283,7 @@ namespace PSXEmulator {
                 RAM.storeByte(physical_address, value);
 
             }else if (CD_ROM.range.contains(physical_address)) {
-                CD_ROM.storeByte(physical_address, value);
+                CD_ROM.StoreByte(physical_address, value);
 
             }else if (IO_PORTS.range.contains(physical_address)) {
                 IO_PORTS.storeHalf(physical_address, value);
@@ -397,7 +397,7 @@ namespace PSXEmulator {
                             RAM.storeWord(current_address, merged_Pixels);
                             break;
 
-                        case 3: RAM.storeWord(current_address, CD_ROM.DataController.readWord()); break;  //CD-ROM
+                        case 3: RAM.storeWord(current_address, CD_ROM.DataController.ReadWord()); break;  //CD-ROM
 
                         case 4:  //SPU
                             isSPUIRQ = true;

@@ -19,61 +19,38 @@ namespace PSXEmulator {
                                     //INT6 N/A
                                     //INT7 N/A
 
-        //0 - Status register
+        //Status Register
         byte Index;                 //0-1
         byte ADPBUSY = 0;           //2
         byte PRMEMPT = 1;           //3
         byte PRMWRDY = 1;           //4
         byte RSLRRDY = 0;           //5
-        public byte DRQSTS = 0;     //6
+        byte DRQSTS = 0;            //6
         byte BUSYSTS = 0;           //7
 
-        //1 - Response FIFO
+        Queue<Byte> ResponseBuffer = new Queue<Byte>();
+        Queue<Byte> ParameterBuffer = new Queue<Byte>();
+        Queue<DelayedInterrupt> Interrupts = new Queue<DelayedInterrupt>();
 
-        Queue<Byte> responseBuffer = new Queue<Byte>();
-        Queue<Byte> parameterBuffer = new Queue<Byte>();
+        byte[] SeekParameters = new byte[3];
 
-        Queue<DelayedInterrupt> interrupts = new Queue<DelayedInterrupt>();
-
-        Byte[] seekParameters = new byte[3];
-
-        //2
         byte IRQ_enable; //0-7
-
-        //3
         byte IRQ_flag;  //0-7
 
-        byte requestRegister;
-        byte stat = 0b00000010;
+        byte stat = 0x2;  //Motor On
 
-        //Setmode
-        byte mode;
-        uint lastSize;
-        bool autoPause;
-        bool report;
+        //Mode
+        byte Mode;
+        uint LastSize;
+        bool AutoPause;
+        bool CDDAReport;
 
-        uint M; //Minutes
-        uint S; //Seconds
-        uint F; //Sectors
+        uint M, S, F;
 
-        public enum Command {   //This could be removed?
-            GetStat,
-            Init,
-            GetID,
-            Pause,
-            Stop,
-            Other,
-            Seek,
-            Read,
-            Play, 
-            None,
-
-        }
-
-        public enum State {    //TODO: Enhance/Add states
+        public enum CDROMState {   
             Idle,
-            RespondingToCommand,
-            ReadingSectors
+            ReadingData,
+            PlayingCDDA
         }
 
         /* CD Audio Volume */
@@ -82,23 +59,22 @@ namespace PSXEmulator {
         byte RightCD_toRight_SPU_Volume;
         byte RightCD_toLeft_SPU_Volume;
 
-        bool doubleSpeed;
+        bool DoubleSpeed;
 
-        State CDROM_State;
-        Command command;
+        CDROMState State;
 
-        public byte padding;
-        public byte currentCommand;
+        public byte Padding;
+        public byte CurrentCommand;
         public bool HasDisk;
         public bool HasCue;
-        public bool ledOpen = false;
+        public bool LedOpen = false;
 
-        private delegate*<CD_ROM, void>[] lookUpTable = new delegate*<CD_ROM, void>[0xFF + 1];
+        private delegate*<CD_ROM, void>[] LookUpTable = new delegate*<CD_ROM, void>[0xFF + 1];
         public CDROMDataController DataController;
         public Track[] CDTracks;
         uint CurrentIndex;      //Offset in bytes
-        int counter = 0;        //Delay
-        uint sectorOffset = 0;  //Skip headers, etc
+        int Counter = 0;        //Delay
+        uint SectorOffset = 0;  //Skip headers, etc
 
         public CD_ROM(string gameFolder, int TrackIndex) {
             DataController = new CDROMDataController();
@@ -122,29 +98,29 @@ namespace PSXEmulator {
 
         private void LoadLUT() {
             //Fill the functions lookUpTable with illegal first, to be safe
-            for (int i = 0; i < lookUpTable.Length; i++) {
-                lookUpTable[i] = &illegal;
+            for (int i = 0; i < LookUpTable.Length; i++) {
+                LookUpTable[i] = &Illegal;
             }
             //Add whatever I implemented manually
-            lookUpTable[0x01] = &GetStat;
-            lookUpTable[0x02] = &Setloc;
-            lookUpTable[0x03] = &Play;
-            lookUpTable[0x06] = &ReadNS;
-            lookUpTable[0x08] = &Stop;
-            lookUpTable[0x09] = &Pause;
-            lookUpTable[0x0A] = &Init;
-            lookUpTable[0x0B] = &Mute;
-            lookUpTable[0x0C] = &Demute;
-            lookUpTable[0x0D] = &SetFilter;
-            lookUpTable[0x0E] = &SetMode;
-            lookUpTable[0x11] = &GetLocP;
-            lookUpTable[0x13] = &GetTN;
-            lookUpTable[0x14] = &GetTD;
-            lookUpTable[0x15] = &SeekL;
-            lookUpTable[0x16] = &SeekP;
-            lookUpTable[0x19] = &Test;
-            lookUpTable[0x1A] = &GetID;
-            lookUpTable[0x1B] = &ReadNS;
+            LookUpTable[0x01] = &GetStat;
+            LookUpTable[0x02] = &Setloc;
+            LookUpTable[0x03] = &Play;
+            LookUpTable[0x06] = &ReadNS;
+            LookUpTable[0x08] = &Stop;
+            LookUpTable[0x09] = &Pause;
+            LookUpTable[0x0A] = &Init;
+            LookUpTable[0x0B] = &Mute;
+            LookUpTable[0x0C] = &Demute;
+            LookUpTable[0x0D] = &SetFilter;
+            LookUpTable[0x0E] = &SetMode;
+            LookUpTable[0x11] = &GetLocP;
+            LookUpTable[0x13] = &GetTN;
+            LookUpTable[0x14] = &GetTD;
+            LookUpTable[0x15] = &SeekL;
+            LookUpTable[0x16] = &SeekP;
+            LookUpTable[0x19] = &Test;
+            LookUpTable[0x1A] = &GetID;
+            LookUpTable[0x1B] = &ReadNS;
         }
 
         private Track[] GetTracks(string gameFolder, int indexOfDataTrack) {
@@ -242,41 +218,38 @@ namespace PSXEmulator {
         private static byte DecToBcd(byte value) {
             return (byte)(value + 6 * (value / 10));
         }
-
         private static int BcdToDec(byte value) {
             return value - 6 * (value >> 4);
         }
-
-        private static void illegal(CD_ROM cdrom) {
-            //Console.WriteLine("[CDROM] Ignoring command 0x" +  cdrom.currentCommand.ToString("X"));
-            throw new Exception("Unknown CDROM command: " + cdrom.currentCommand.ToString("x"));
+        private static void Illegal(CD_ROM cdrom) {
+            throw new Exception("Unknown CDROM command: " + cdrom.CurrentCommand.ToString("x"));
         }
-        public void controller(byte command) {
-            currentCommand = command;
-            interrupts.Clear();
-            responseBuffer.Clear();
-            DataController.dataFifo.Clear();
-            DataController.sectorQueue.Clear();
-            lookUpTable[command](this);
-            parameterBuffer.Clear();
+        public void Controller(byte command) {
+            CurrentCommand = command;
+            Interrupts.Clear();
+            ResponseBuffer.Clear();
+            DataController.DataFifo.Clear();
+            DataController.SectorBuffer.Clear();
+            LookUpTable[command](this);
+            ParameterBuffer.Clear();
             //Console.WriteLine("[CD-ROM] Command: 0x" + command.ToString("x"));
         }
         private byte CDROM_Status() {
-            DRQSTS = (byte)((DataController.dataFifo.Count > 0) ? 1 : 0);
-            RSLRRDY = (byte)((responseBuffer.Count > 0) ? 1 : 0);
+            DRQSTS = (byte)((DataController.DataFifo.Count > 0) ? 1 : 0);
+            RSLRRDY = (byte)((ResponseBuffer.Count > 0) ? 1 : 0);
             byte status = (byte)((BUSYSTS << 7) | (DRQSTS << 6) 
                 | (RSLRRDY << 5) | (PRMWRDY << 4) | (PRMEMPT << 3) | (ADPBUSY << 2) | Index);
             //Console.WriteLine("[CDROM] Reading Status: " + status.ToString("x"));
             return status;
         }
 
-        public void storeByte(uint address, byte value) {
+        public void StoreByte(uint address, byte value) {
             uint offset = address - range.start;
             switch (offset) {
                 case 0: Index = (byte)(value & 3); break; //Status register, all mirrors
                 case 1:
                     switch (Index) {
-                        case 0: controller(value); break;
+                        case 0: Controller(value); break;
                         case 3: RightCD_toRight_SPU_Volume = value; break;
                         default: throw new Exception("Unknown Index (" + Index + ")" + " at CRROM command register");
                     }
@@ -284,7 +257,7 @@ namespace PSXEmulator {
 
                 case 2:
                     switch (Index) {
-                        case 0: parameterBuffer.Enqueue(value); break;
+                        case 0: ParameterBuffer.Enqueue(value); break;
                         case 1: IRQ_enable = value; break;
                         case 2: LeftCD_toLeft_SPU_Volume = value; break;
                         case 3: RightCD_toLeft_SPU_Volume = value; break;
@@ -297,7 +270,7 @@ namespace PSXEmulator {
                         case 0: RequestRegister(value); break;
                         case 1: InterruptFlagRegister(value); break;
                         case 2: LeftCD_toRight_SPU_Volume = value; break;
-                        case 3: applyVolume(value); break;
+                        case 3: ApplyVolume(value); break;
                         default:  throw new Exception("Unknown Index (" + Index + ")" + " at CRROM IRQ flag register");
                     }
                     break;
@@ -306,13 +279,13 @@ namespace PSXEmulator {
             }
         }
 
-        public byte loadByte(uint address) {
+        public byte LoadByte(uint address) {
             uint offset = address - range.start;
 
             switch (offset) {
                 case 0: return CDROM_Status();              //Status register, all indexes are mirrors
-                case 1: return responseBuffer.Dequeue();    //Response fifo, all indexes are mirrors
-                case 2: return DataController.readByte();           //Data fifo, all indexes are mirrors
+                case 1: return ResponseBuffer.Dequeue();    //Response fifo, all indexes are mirrors
+                case 2: return DataController.ReadByte();           //Data fifo, all indexes are mirrors
                 case 3:
                     switch (Index) {
                         case 0:
@@ -329,51 +302,47 @@ namespace PSXEmulator {
         }
         private void RequestRegister(byte value) {
             if ((value & 0x80) != 0) {  //Request data
-                if (DataController.dataFifo.Count > 0) { return; }
-                DataController.moveSectorToDataFifo();
+                if (DataController.DataFifo.Count > 0) { return; }
+                DataController.MoveSectorToDataFifo();
             }
             else {
-                DataController.dataFifo.Clear();
+                DataController.DataFifo.Clear();
             }
         }
         private void InterruptFlagRegister(byte value) {
             IRQ_flag &= (byte)~(value & 0x1F);
 
-            if (interrupts.Count > 0 && interrupts.Peek().delay <= 0) {
-                IRQ_flag |= interrupts.Dequeue().interrupt;
+            if (Interrupts.Count > 0 && Interrupts.Peek().delay <= 0) {
+                IRQ_flag |= Interrupts.Dequeue().interrupt;
             }
             if (((value >> 6) & 1) == 1) {
-                parameterBuffer.Clear();
+                ParameterBuffer.Clear();
             }
         }
-        private void applyVolume(byte value) {
+        private void ApplyVolume(byte value) {
             bool isMute = (value & 1) != 0;
             bool applyVolume = ((value >> 5) & 1) != 0;
             if (isMute) {
-                DataController.currentVolume.LtoL = 0;
-                DataController.currentVolume.LtoR = 0;
-                DataController.currentVolume.RtoL = 0;
-                DataController.currentVolume.RtoR = 0;
-            }
-            else if (applyVolume) {
-                DataController.currentVolume.LtoL = LeftCD_toLeft_SPU_Volume;
-                DataController.currentVolume.LtoR = LeftCD_toRight_SPU_Volume;
-                DataController.currentVolume.RtoL = RightCD_toLeft_SPU_Volume;
-                DataController.currentVolume.RtoR = RightCD_toRight_SPU_Volume;
+                DataController.CurrentVolume.LtoL = 0;
+                DataController.CurrentVolume.LtoR = 0;
+                DataController.CurrentVolume.RtoL = 0;
+                DataController.CurrentVolume.RtoR = 0;
+            }else if (applyVolume) {
+                DataController.CurrentVolume.LtoL = LeftCD_toLeft_SPU_Volume;
+                DataController.CurrentVolume.LtoR = LeftCD_toRight_SPU_Volume;
+                DataController.CurrentVolume.RtoL = RightCD_toLeft_SPU_Volume;
+                DataController.CurrentVolume.RtoR = RightCD_toRight_SPU_Volume;
             }
         }
         private static void Test(CD_ROM cdrom) {
-            byte parameter = cdrom.parameterBuffer.Dequeue();
+            byte parameter = cdrom.ParameterBuffer.Dequeue();
             switch (parameter) {
-                case 0x20: getDateAndVersion(cdrom); break;
+                case 0x20: GetDateAndVersion(cdrom); break;
                 default: throw new Exception("[CDROM] Test command: unknown parameter: " + parameter.ToString("x"));
             }
         }
         private static void GetLocP(CD_ROM cdrom) { //Subchannel Q ?
             //GetlocP - Command 11h - INT3(track,index,mm,ss,sect,amm,ass,asect) all BCD
-
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
 
             byte track = DecToBcd((byte)cdrom.DataController.SelectedTrackNumber);
             byte index = DecToBcd(0x01);    //Usually 01, stub temporarily (I will probably forget about it lol)
@@ -383,87 +352,75 @@ namespace PSXEmulator {
             byte amm = DecToBcd((byte)cdrom.M); //Relative to whole disk
             byte ass = DecToBcd((byte)cdrom.S);
             byte aff = DecToBcd((byte)cdrom.F);
-            cdrom.responseBuffer.Enqueue(track);
-            cdrom.responseBuffer.Enqueue(index);
-            cdrom.responseBuffer.Enqueue(mm);
-            cdrom.responseBuffer.Enqueue(ss);
-            cdrom.responseBuffer.Enqueue(ff);
-            cdrom.responseBuffer.Enqueue(amm);
-            cdrom.responseBuffer.Enqueue(ass);
-            cdrom.responseBuffer.Enqueue(aff);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.ResponseBuffer.Enqueue(track);
+            cdrom.ResponseBuffer.Enqueue(index);
+            cdrom.ResponseBuffer.Enqueue(mm);
+            cdrom.ResponseBuffer.Enqueue(ss);
+            cdrom.ResponseBuffer.Enqueue(ff);
+            cdrom.ResponseBuffer.Enqueue(amm);
+            cdrom.ResponseBuffer.Enqueue(ass);
+            cdrom.ResponseBuffer.Enqueue(aff);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
         }
         private static void SetFilter(CD_ROM cdrom) {
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
+            cdrom.DataController.Filter.fileNumber = cdrom.ParameterBuffer.Dequeue();
+            cdrom.DataController.Filter.channelNumber = cdrom.ParameterBuffer.Dequeue();
 
-            cdrom.DataController.filter.fileNumber = cdrom.parameterBuffer.Dequeue();
-            cdrom.DataController.filter.channelNumber = cdrom.parameterBuffer.Dequeue();
-
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
         }
         private static void SeekP(CD_ROM cdrom) {
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Seek;
+            cdrom.State = CDROMState.Idle;
 
             cdrom.CurrentIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F - 150) * 0x930;
-
             cdrom.stat = 0x42; //Seek
 
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
             //Response 2
             cdrom.stat = (byte)(cdrom.stat & (~0x40));
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
         }
 
         private static void Play(CD_ROM cdrom) {   //CD-DA
-            cdrom.CDROM_State = State.ReadingSectors;
-            cdrom.command = Command.Play;
+            cdrom.State = CDROMState.PlayingCDDA;
 
             cdrom.CurrentIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F) * 0x930;      //No 150 offset?  
             
-            cdrom.stat = 0x2;
+            cdrom.stat = 0x2;           
             cdrom.stat |= (1 << 7);   //Playing CDDA
 
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
-            if (cdrom.parameterBuffer.Count > 0) {
-                int trackNumber = cdrom.parameterBuffer.Dequeue();
+            if (cdrom.ParameterBuffer.Count > 0 && cdrom.ParameterBuffer.Peek() > 0) {
+                int trackNumber = cdrom.ParameterBuffer.Dequeue();
                 if (cdrom.DataController.SelectedTrackNumber != trackNumber) {
                     cdrom.DataController.SelectTrack(trackNumber);      //Change Binary to trackNumber (if it isn't already selected)
                 }
-                cdrom.CurrentIndex = (uint)cdrom.DataController.Tracks[cdrom.DataController.SelectedTrackNumber - 1].Start; //Start at the begining
+                cdrom.CurrentIndex = (uint)cdrom.DataController.Tracks[cdrom.DataController.SelectedTrackNumber - 1].Start; //Start at the beginning
                 Console.WriteLine("[CDROM] Play CD-DA, track: " + trackNumber);
             } else {
                 Console.WriteLine("[CDROM] Play CD-DA, no track specified, at MSF: " + cdrom.M + ":" + cdrom.S + ":" + cdrom.F);
             }
         }
         private static void Stop(CD_ROM cdrom) {
-            cdrom.command = Command.Stop;
-            cdrom.CDROM_State = State.RespondingToCommand;
-
             //The first response returns the current status (this already with bit5 cleared)
             //The second response returns the new status (with bit1 cleared)
+            cdrom.State = CDROMState.Idle;
             cdrom.stat = 0x2;
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
 
             cdrom.stat = 0x0;
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
 
-            if (cdrom.command == Command.Stop) {
-                cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0001d7b, INT2));
-            } else {
-                cdrom.interrupts.Enqueue(new DelayedInterrupt(cdrom.doubleSpeed ? 0x18a6076 : 0x0d38aca, INT2));
-            }
-
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(cdrom.DoubleSpeed ? 0x18a6076 : 0x0d38aca, INT2));
+            //TODO: Timing for stop while stopped? stop while paused? 
         }
 
         private static void GetTD(CD_ROM cdrom) {
@@ -471,18 +428,15 @@ namespace PSXEmulator {
             /*For a disk with NN tracks, parameter values 01h..NNh return the start of the specified track, 
              *parameter value 00h returns the end of the last track, and parameter values bigger than NNh return error code 10h.*/
 
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
 
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-
-            int N = BcdToDec(cdrom.parameterBuffer.Dequeue());
+            int N = BcdToDec(cdrom.ParameterBuffer.Dequeue());
             int last = cdrom.DataController.Tracks.Length - 1;
             if (N >= 1 && N <= cdrom.DataController.Tracks[last].TrackNumber) { // 01h..NNh
        
                 //We only care about M and S
-                cdrom.responseBuffer.Enqueue(DecToBcd((byte)cdrom.DataController.Tracks[N - 1].M));
-                cdrom.responseBuffer.Enqueue(DecToBcd((byte)cdrom.DataController.Tracks[N - 1].S));
+                cdrom.ResponseBuffer.Enqueue(DecToBcd((byte)cdrom.DataController.Tracks[N - 1].M));
+                cdrom.ResponseBuffer.Enqueue(DecToBcd((byte)cdrom.DataController.Tracks[N - 1].S));
                 Console.WriteLine("[CDROM] GETTD: Track " + N + ", Response: " + cdrom.DataController.Tracks[N - 1].M + ":" + cdrom.DataController.Tracks[N - 1].S);
 
             } else if (N == 0) {
@@ -493,109 +447,82 @@ namespace PSXEmulator {
                 M += cdrom.DataController.Tracks[last].M;
                 S += cdrom.DataController.Tracks[last].S;
 
-                cdrom.responseBuffer.Enqueue((byte)M);
-                cdrom.responseBuffer.Enqueue((byte)S);
+                cdrom.ResponseBuffer.Enqueue((byte)M);
+                cdrom.ResponseBuffer.Enqueue((byte)S);
 
                 Console.WriteLine("[CDROM] GETTD: Track 0, Response: " + M + ":" + S);
 
             }else if (N > cdrom.DataController.Tracks[last].TrackNumber) {
-                Console.WriteLine("[CDROM] GETTD: Track " + N + " > " + cdrom.DataController.Tracks[last].TrackNumber);
+                Console.WriteLine("[CDROM] Unhandled GETTD: Track " + N + " > " + cdrom.DataController.Tracks[last].TrackNumber);
             }
 
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
-
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
         }
         private static void GetTN(CD_ROM cdrom) {
             //GetTN - Command 13h --> INT3(stat,first,last) ;BCD
-
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
 
             int lastIndex = cdrom.DataController.Tracks.Length - 1;
             byte firstTrack = DecToBcd((byte)cdrom.DataController.Tracks[0].TrackNumber);
             byte lastTrack = DecToBcd((byte)cdrom.DataController.Tracks[lastIndex].TrackNumber);
 
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
-
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.responseBuffer.Enqueue(firstTrack);
-            cdrom.responseBuffer.Enqueue(lastTrack);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.ResponseBuffer.Enqueue(firstTrack);
+            cdrom.ResponseBuffer.Enqueue(lastTrack);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
 
             Console.WriteLine("[CDROM] GETTN, Response (BCD): " + firstTrack + " and " + lastTrack);
         }
         private static void Mute(CD_ROM cdrom) {
-            // Console.WriteLine("[CDROM] Mute");
-
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
-
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
         }
 
         private static void Demute(CD_ROM cdrom) {
-
-            // Console.WriteLine("[CDROM] Demute");
-
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
-
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
         }
 
         private static void Pause(CD_ROM cdrom) {
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Pause;
+            cdrom.State = CDROMState.Idle;
 
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
 
             //Response 2
             cdrom.stat = 0x2;
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
 
-            if(cdrom.command == Command.Pause) {
-                cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0001df2, INT2));
-            }
-            else {
-                cdrom.interrupts.Enqueue(new DelayedInterrupt(cdrom.doubleSpeed ? 0x010bd93 : 0x021181c, INT2));
-            }
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(cdrom.DoubleSpeed ? 0x010bd93 : 0x021181c, INT2));
+            //Todo: Pause while paused timings?
         }
         private static void Init(CD_ROM cdrom) {
-            // Console.WriteLine("[CDROM] Init");
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Init;
-
-            cdrom.mode = 0;
+            //Multiple effects at once. Sets mode=00h (or not ALL bits cleared?), activates drive motor, Standby, abort all commands.
+            cdrom.Mode = 0;         //Reset other stuff?
             cdrom.stat = 0x2;
 
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0013cce, INT3));
 
             //Response 2
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
-
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
         }
 
         private static void ReadNS(CD_ROM cdrom) {
-            cdrom.CDROM_State = State.ReadingSectors;
-            cdrom.command = Command.Read;
+            cdrom.State = CDROMState.ReadingData;
+
             cdrom.CurrentIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F - 150) * 0x930;
 
-            cdrom.stat = 0x2; //Read
-            cdrom.stat |= 0x20;
+            cdrom.stat = 0x2;   
+            cdrom.stat |= 0x20; //Read
 
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
             //Further responses [INT1] are added in tick() 
 
@@ -604,143 +531,112 @@ namespace PSXEmulator {
             }
         }
 
-        private static void SetMode(CD_ROM cdrom) {
-            // Console.WriteLine("[CDROM] seekl");
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
+        private static void SetMode(CD_ROM cdrom) {        
+            cdrom.Mode = cdrom.ParameterBuffer.Dequeue();
 
-            cdrom.mode = cdrom.parameterBuffer.Dequeue();
-           // Console.WriteLine("[CDROM] Setmode: " + mode.ToString("x"));
-
-            if (((cdrom.mode >> 4) & 1) == 0) {
-                if (((cdrom.mode >> 5) & 1) == 0) {
-                    cdrom.lastSize = 0x800;
-                    cdrom.sectorOffset = 24;
+            if (((cdrom.Mode >> 4) & 1) == 0) {
+                if (((cdrom.Mode >> 5) & 1) == 0) {
+                    cdrom.LastSize = 0x800;
+                    cdrom.SectorOffset = 24;
                 }
                 else {
-                    cdrom.lastSize = 0x924;
-                    cdrom.sectorOffset = 12;
+                    cdrom.LastSize = 0x924;
+                    cdrom.SectorOffset = 12;
                 }
             }
 
             //Test
-            cdrom.DataController.bytesToSkip = cdrom.sectorOffset;
-            cdrom.DataController.sizeOfDataSegment = cdrom.lastSize;
-            cdrom.DataController.filter.isEnabled = ((cdrom.mode >> 3) & 1) != 0;
+            cdrom.DataController.BytesToSkip = cdrom.SectorOffset;
+            cdrom.DataController.SizeOfDataSegment = cdrom.LastSize;
+            cdrom.DataController.Filter.IsEnabled = ((cdrom.Mode >> 3) & 1) != 0;
 
-            cdrom.doubleSpeed = ((cdrom.mode >> 7) & 1) != 0;
-            cdrom.autoPause = ((cdrom.mode >> 1) & 1) != 0; //For audio play only
-            cdrom.report = ((cdrom.mode >> 2) & 1) != 0; //For audio play only
+            cdrom.DoubleSpeed = ((cdrom.Mode >> 7) & 1) != 0;
+            cdrom.AutoPause = ((cdrom.Mode >> 1) & 1) != 0; //For audio play only
+            cdrom.CDDAReport = ((cdrom.Mode >> 2) & 1) != 0; //For audio play only
 
-            cdrom.DataController.XA_ADPCM_En = ((cdrom.mode >> 6) & 1) != 0; //(0=Off, 1=Send XA-ADPCM sectors to SPU Audio Input)
+            cdrom.DataController.XA_ADPCM_En = ((cdrom.Mode >> 6) & 1) != 0; //(0=Off, 1=Send XA-ADPCM sectors to SPU Audio Input)
 
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
-
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
         }
-
         private static void SeekL(CD_ROM cdrom) {
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Seek;
+            cdrom.State = CDROMState.Idle;
 
             cdrom.CurrentIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F - 150) * 0x930;
 
             cdrom.stat = 0x42; //Seek
 
             //Response 1
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
             //Response 2
             cdrom.stat = (byte)(cdrom.stat & (~0x40));
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
         }
-
-
         private static void Setloc(CD_ROM cdrom) {
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
+            cdrom.SeekParameters[0] = cdrom.ParameterBuffer.Dequeue();  //Minutes
+            cdrom.SeekParameters[1] = cdrom.ParameterBuffer.Dequeue();  //Seconds 
+            cdrom.SeekParameters[2] = cdrom.ParameterBuffer.Dequeue();  //Sectors (Frames)
 
-            cdrom.seekParameters[0] = cdrom.parameterBuffer.Dequeue();  //Minutes
-            cdrom.seekParameters[1] = cdrom.parameterBuffer.Dequeue();  //Seconds 
-            cdrom.seekParameters[2] = cdrom.parameterBuffer.Dequeue();  //Sectors 
+            cdrom.M = (uint)((cdrom.SeekParameters[0] & 0xF) * 1 + ((cdrom.SeekParameters[0] >> 4) & 0xF) * 10);
+            cdrom.S = (uint)((cdrom.SeekParameters[1] & 0xF) * 1 + ((cdrom.SeekParameters[1] >> 4) & 0xF) * 10);
+            cdrom.F = (uint)((cdrom.SeekParameters[2] & 0xF) * 1 + ((cdrom.SeekParameters[2] >> 4) & 0xF) * 10);
 
-            cdrom.M = (uint)((cdrom.seekParameters[0] & 0xF) * 1 + ((cdrom.seekParameters[0] >> 4) & 0xF) * 10);
-            cdrom.S = (uint)((cdrom.seekParameters[1] & 0xF) * 1 + ((cdrom.seekParameters[1] >> 4) & 0xF) * 10);
-            cdrom.F = (uint)((cdrom.seekParameters[2] & 0xF) * 1 + ((cdrom.seekParameters[2] >> 4) & 0xF) * 10);
-
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
             //Console.WriteLine("[CDROM] Setloc:" + cdrom.M.ToString().PadLeft(2,'0') + ":" + cdrom.S.ToString().PadLeft(2, '0') + ":" + cdrom.F.ToString().PadLeft(2, '0'));
         }
 
-        private static void GetID(CD_ROM cdrom) {
-            //Console.WriteLine("[CDROM] GetId");
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.GetID;
-
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-            cdrom.stat = 0x40;  //0x40 seek
-            cdrom.stat |= 0x2;
-
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+        private static void GetID(CD_ROM cdrom) {          
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
 
             if (cdrom.HasDisk) {
-                cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
+                cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
 
-                cdrom.responseBuffer.Enqueue(0x02);       //STAT
-                cdrom.responseBuffer.Enqueue(0x00);       //Flags (Licensed, Missing, Audio or Data CD) 
-                cdrom.responseBuffer.Enqueue(0x20);       //Disk type 
-                cdrom.responseBuffer.Enqueue(0x00);       //Usually 0x00
-                cdrom.responseBuffer.Enqueue(0x53);       //From here and down it is ASCII, this is "SCEA"
-                cdrom.responseBuffer.Enqueue(0x43);
-                cdrom.responseBuffer.Enqueue(0x45);
-                cdrom.responseBuffer.Enqueue(0x41);
+                cdrom.ResponseBuffer.Enqueue(0x02);       //STAT
+                cdrom.ResponseBuffer.Enqueue(0x00);       //Flags (Licensed, Missing, Audio or Data CD) 
+                cdrom.ResponseBuffer.Enqueue(0x20);       //Disk type 
+                cdrom.ResponseBuffer.Enqueue(0x00);       //Usually 0x00
+                cdrom.ResponseBuffer.Enqueue(0x53);       //From here and down it is ASCII, this is "SCEA"
+                cdrom.ResponseBuffer.Enqueue(0x43);
+                cdrom.ResponseBuffer.Enqueue(0x45);
+                cdrom.ResponseBuffer.Enqueue(0x41);
 
             } else {
-                cdrom.interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT5));
+                cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT5));
 
-                cdrom.responseBuffer.Enqueue(0x08);       //No disk
-                cdrom.responseBuffer.Enqueue(0x40);
-                cdrom.responseBuffer.Enqueue(0x00);
-                cdrom.responseBuffer.Enqueue(0x00);
-                cdrom.responseBuffer.Enqueue(0x00);
-                cdrom.responseBuffer.Enqueue(0x00);
-                cdrom.responseBuffer.Enqueue(0x00);
-                cdrom.responseBuffer.Enqueue(0x00);
+                cdrom.ResponseBuffer.Enqueue(0x08);       //No disk
+                cdrom.ResponseBuffer.Enqueue(0x40);
+                cdrom.ResponseBuffer.Enqueue(0x00);
+                cdrom.ResponseBuffer.Enqueue(0x00);
+                cdrom.ResponseBuffer.Enqueue(0x00);
+                cdrom.ResponseBuffer.Enqueue(0x00);
+                cdrom.ResponseBuffer.Enqueue(0x00);
+                cdrom.ResponseBuffer.Enqueue(0x00);
               }
         }
         private static void GetStat(CD_ROM cdrom) {
-
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.GetStat;
-
-            if (!cdrom.ledOpen) {     //Reset shell open unless it is still opened, TODO: add disk swap
+            if (!cdrom.LedOpen) {     //Reset shell open unless it is still opened, TODO: add disk swap
                 cdrom.stat = (byte)(cdrom.stat & (~0x18));
                 cdrom.stat |= 0x2;
             }
-
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
-            cdrom.responseBuffer.Enqueue(cdrom.stat);
-           // Console.WriteLine("[CDROM] GetStat, Response: " + cdrom.stat);
-
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.ResponseBuffer.Enqueue(cdrom.stat);
         }
 
-        public static void getDateAndVersion(CD_ROM cdrom) {
-            //Console.WriteLine("[CDROM] GetDate/Version");
-            cdrom.CDROM_State = State.RespondingToCommand;
-            cdrom.command = Command.Other;
-
+        public static void GetDateAndVersion(CD_ROM cdrom) {
             //0x94, 0x09, 0x19, 0xC0
-            //We can set anything, but this is the original values
-            cdrom.responseBuffer.Enqueue(0x94);
-            cdrom.responseBuffer.Enqueue(0x09);
-            cdrom.responseBuffer.Enqueue(0x19);
-            cdrom.responseBuffer.Enqueue(0xc0);
+            //We can set anything, but these are the original values
+            cdrom.ResponseBuffer.Enqueue(0x94);
+            cdrom.ResponseBuffer.Enqueue(0x09);
+            cdrom.ResponseBuffer.Enqueue(0x19);
+            cdrom.ResponseBuffer.Enqueue(0xc0);
 
-            cdrom.interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
+            cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
         }
         void IncrementIndex(byte offset) {
             F++;
@@ -756,73 +652,57 @@ namespace PSXEmulator {
         }
 
         internal void tick(int cycles) {
-            counter += cycles;
+            Counter += cycles;
 
-            if (interrupts.Count > 0) {
-                interrupts.Peek().delay -= cycles;
+            if (Interrupts.Count > 0) {
+                Interrupts.Peek().delay -= cycles;
             }
-            if (interrupts.Count > 0 && IRQ_flag == 0 && interrupts.Peek().delay <= 0) {
-                IRQ_flag |= interrupts.Dequeue().interrupt;
+            if (Interrupts.Count > 0 && IRQ_flag == 0 && Interrupts.Peek().delay <= 0) {    //Make sure the previous INT has been ACKed, INTs are queued not ORed
+                IRQ_flag |= Interrupts.Dequeue().interrupt;
                 if ((IRQ_enable & IRQ_flag) != 0) {
                     IRQ_CONTROL.IRQsignal(2);
                 }
             }
 
-            switch (CDROM_State) {
-                case State.Idle:
-                    counter = 0;
-                    if(command == Command.Pause) { return; }
-                    command = Command.None;
-                    break;
+            switch (State) {
+                case CDROMState.Idle:
+                    Counter = 0;
+                    return;
 
-                case State.RespondingToCommand:
-                    if (interrupts.Count == 0 && responseBuffer.Count == 0) {
-                        if ((stat >> 7) > 0) {                   //If the CDROM is Playing CDDA it shouldn't stop upon a normal command, maybe reading data is the same?
-                            CDROM_State = State.ReadingSectors;  //I may need to change how my states work...
-                            command = Command.Play;
-                        } else {
-                            CDROM_State = State.Idle;
-                        }
-                        RSLRRDY = 0;
+                case CDROMState.ReadingData:
+                    if (Counter < (33868800 / (DoubleSpeed ? 150 : 75)) || Interrupts.Count != 0) {
                         return;
                     }
+                    Counter = 0;
+                    //Console.WriteLine("[CDROM] Data Read at " + M.ToString().PadLeft(2,'0') + ":" + S.ToString().PadLeft(2, '0') + ":" + F.ToString().PadLeft(2, '0'));
+                    bool sendToCPU = DataController.LoadNewSector(CurrentIndex);
+                    IncrementIndex(150);
+                    if (sendToCPU) {
+                        ResponseBuffer.Enqueue(stat);
+                        if (M < 74) {
+                            Interrupts.Enqueue(new DelayedInterrupt(DoubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
+                        } else {
+                            Interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end, but what should be the index?
+                        }
+                    }
                     break;
 
-
-                case State.ReadingSectors:
-                    if (counter < (33868800 / (doubleSpeed ? 150 : 75)) || interrupts.Count != 0) {
+                case CDROMState.PlayingCDDA:
+                    if (Counter < (33868800 / (DoubleSpeed ? 150 : 75)) || Interrupts.Count != 0) {
                         return;
                     }
+                    Counter = 0;
 
-                    counter = 0;
-                    
-                    if(command != Command.Play) {
-                        //Console.WriteLine("[CDROM] Data Read at " + M.ToString().PadLeft(2,'0') + ":" + S.ToString().PadLeft(2, '0') + ":" + F.ToString().PadLeft(2, '0'));
-                        bool sendToCPU = DataController.loadNewSector(CurrentIndex);
-                        IncrementIndex(150);
-                        if (sendToCPU) {    
-                            responseBuffer.Enqueue(stat);
-                            if (M < 74) {
-                                interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
-                            }
-                            else {
-                                interrupts.Enqueue(new DelayedInterrupt(50000, INT4));    //Data end, but what should be the index?
-                            }
-                        }
+                    if (HasCue) {
+                        DataController.PlayCDDA(CurrentIndex);
+                    } else {
+                        Console.WriteLine("[CD-ROM] Ignoring play command (No cue)");
                     }
-                    else {
-                        if (HasCue) {
-                            DataController.PlayCDDA(CurrentIndex);
-                        } else {
-                            Console.WriteLine("[CD-ROM] Ignoring play command (No cue)");
-                        }
-                        IncrementIndex(0);
+                    IncrementIndex(0);
 
-                        if (report) {
-                            responseBuffer.Enqueue(0xFF);   //Garbage Report 
-                            interrupts.Enqueue(new DelayedInterrupt(doubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
-                        }
-                        
+                    if (CDDAReport) {
+                        ResponseBuffer.Enqueue(0xFF);   //Garbage Report 
+                        Interrupts.Enqueue(new DelayedInterrupt(DoubleSpeed ? 0x0036cd2 : 0x006e1cd, INT1));
                     }
                     break;
             }
