@@ -42,8 +42,8 @@ namespace PSXEmulator {
         //Mode
         byte Mode;
         uint LastSize;
-        bool AutoPause;
-        bool CDDAReport;
+        bool AutoPause;  //TODO
+        bool CDDAReport; //TODO
 
         uint M, S, F;
 
