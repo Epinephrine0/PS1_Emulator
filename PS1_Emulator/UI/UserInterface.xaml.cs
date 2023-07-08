@@ -15,8 +15,8 @@ namespace PSXEmulator {
 
         string[] GamesFolders; 
         string[] SelectedGameFiles;
-        string SystemID = "PLAYSTATION";
-        string CopyRight = "Sony Computer Entertainment Inc.";
+        const string SYSTEMID = "PLAYSTATION";
+        const string COPYRIGHT = "Sony Computer Entertainment Inc.";
         bool HasValidBios;  
         Settings UserSettings;
 
@@ -85,7 +85,7 @@ namespace PSXEmulator {
             ReadOnlySpan<byte> data;
             try {
                 data = File.ReadAllBytes(BIOSpath);
-                data = data.Slice(0x108, CopyRight.Length);
+                data = data.Slice(0x108, COPYRIGHT.Length);
             }
             catch (ArgumentOutOfRangeException ex) {
                 return false;                   //Invalid file
@@ -94,7 +94,7 @@ namespace PSXEmulator {
                 return false;
             }
             string biosString = Encoding.ASCII.GetString(data);
-            if (biosString.Equals(CopyRight)) {
+            if (biosString.Equals(COPYRIGHT)) {
                 Console.WriteLine("Found a valid BIOS!");
                 return true;
             } else {
@@ -181,7 +181,7 @@ namespace PSXEmulator {
             try {
                 data = data.Slice((16 * 0x930) + 0x20, 11);
                 string ID = Encoding.ASCII.GetString(data);
-                if (ID.Equals(SystemID)) {
+                if (ID.Equals(SYSTEMID)) {
                     return true;
                 }
             } catch (ArgumentOutOfRangeException ex) {
