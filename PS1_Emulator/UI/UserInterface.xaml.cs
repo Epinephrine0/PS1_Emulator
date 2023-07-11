@@ -11,7 +11,7 @@ namespace PSXEmulator {
     /// Interaction logic for UserInterface.xaml
     /// </summary>
     public partial class UserInterface : System.Windows.Window {
-        PSX_OpenTK MainEmu;
+        //PSX_OpenTK MainEmu;
 
         string[] GamesFolders; 
         string[] SelectedGameFiles;
@@ -116,30 +116,28 @@ namespace PSXEmulator {
             if(GameList.SelectedIndex < 0 || GameList.SelectedItem.Equals("Games go here")) {
                 UserSettings.SelectedGameFolder = null;
                 UserSettings.FirstTrackIndex = -1;
-                Console.WriteLine("No game selected");
-                Console.WriteLine("Proceeding to boot without a game");
+               
                 Boot();
                 return; //No need to check games and bullshit when booting the Shell
             }
 
             UserSettings.SelectedGameFolder = GamesFolders[GameList.SelectedIndex];
             SelectedGameFiles = Directory.GetFiles(UserSettings.SelectedGameFolder);
-
-            int index = findFirstValidBinary(SelectedGameFiles);    //Make sure the game folder contains at least one valid bin
+            UserSettings.SelectedGameName = Path.GetFileName(UserSettings.SelectedGameFolder);
+            int index = 0;    //Make sure the game folder contains at least one valid bin
             UserSettings.FirstTrackIndex = index;
 
-            if (index >= 0) {
-                UserSettings.SelectedGameName = Path.GetFileName(SelectedGameFiles[index]);
+            /*if (index >= 0) {
                 Console.WriteLine("Found valid binary!");
                 Console.WriteLine("Booting: " + UserSettings.SelectedGameName);
             }
             else {
                 Console.WriteLine("Could not find a valid binary for the selected game");
-                Console.WriteLine("Proceeding to boot without a game");
+                Console.WriteLine("Proceeding to boot to the Shell");
                 UserSettings.SelectedGameFolder = null;
                 UserSettings.FirstTrackIndex = -1;
             }
-
+*/
             Boot();
         }
         private void ImportButton_Click(object sender, RoutedEventArgs e) {
@@ -200,8 +198,8 @@ namespace PSXEmulator {
 
             Console.ForegroundColor = ConsoleColor.Green;
 
-            MainEmu = new PSX_OpenTK(UserSettings);            /* Emulation loop */
-
+            PSX_OpenTK MainEmu = new PSX_OpenTK(UserSettings);            /* Emulation loop starts */
+            
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine("Main Emulation loop terminated");

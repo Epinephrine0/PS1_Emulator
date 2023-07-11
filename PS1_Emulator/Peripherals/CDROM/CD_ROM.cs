@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 namespace PSXEmulator {
     public unsafe class CD_ROM  {   
@@ -65,7 +66,8 @@ namespace PSXEmulator {
 
         public byte Padding;
         public byte CurrentCommand;
-        public bool HasDisk;
+        //public bool DiskContainsAudio;
+        //public bool IsGameDisk;
         public bool HasCue;
         public bool LedOpen = false;
 
@@ -75,27 +77,23 @@ namespace PSXEmulator {
         uint CurrentIndex;      //Offset in bytes
         int Counter = 0;        //Delay
         uint SectorOffset = 0;  //Skip headers, etc
-
-        public CD_ROM(string gameFolder, int TrackIndex) {
+        Disk Disk;
+        public CD_ROM(string path, bool isDirectFile) {
             DataController = new CDROMDataController();
             LoadLUT();
-            HasDisk = TrackIndex >= 0;  
-
-            if (HasDisk) {  //TODO Move it to a method and possibly implement disk swap 
-                CDTracks = GetTracks(gameFolder, TrackIndex);
-                DataController.Tracks = CDTracks;
-                DataController.SelectedTrack = File.ReadAllBytes(CDTracks[0].FilePath);
+            if (path != null) {
+                Disk = new Disk(path);
+                DataController.Tracks = Disk.Tracks;
+                DataController.SelectedTrack = File.ReadAllBytes(Disk.Tracks[0].FilePath);
+                HasCue = Disk.HasCue;
+                if (Disk.IsAudioDisk) {
+                    Console.WriteLine("[CDROM] Audio Disk detected");
+                }
+            } else {
+                Console.WriteLine("[CDROM] No game path provided");
+                Console.WriteLine("[CDROM] Proceeding to boot without a game");
             }
         }
-        public CD_ROM(string gamePath) {
-            LoadLUT();
-            DataController = new CDROMDataController();
-            DataController.Tracks = new Track[] { new Track(gamePath, false, 01, "00:00:00") };
-            DataController.SelectedTrack = File.ReadAllBytes(gamePath);
-            HasDisk = true;
-            HasCue = false;
-        }
-
         private void LoadLUT() {
             //Fill the functions lookUpTable with illegal first, to be safe
             for (int i = 0; i < LookUpTable.Length; i++) {
@@ -122,98 +120,12 @@ namespace PSXEmulator {
             LookUpTable[0x1A] = &GetID;
             LookUpTable[0x1B] = &ReadNS;
         }
-
-        private Track[] GetTracks(string gameFolder, int indexOfDataTrack) {
-            string[] rawFiles = Directory.GetFiles(gameFolder);
-            string cuePath = "";
-            Track[] tracks;
-            for (int i = 0; i < rawFiles.Length; i++) {
-                if (Path.GetExtension(rawFiles[i]).ToLower().Equals(".cue")) { //Find Cue sheet
-                    cuePath = rawFiles[i];
-                    Console.WriteLine("[CDROM] Found Cue sheet");
-                    HasCue = true;
-                    break;
-                } 
-            }
-
-            if (HasCue) {
-                string cueSheet = File.ReadAllText(cuePath);
-                string[] filesInCue = cueSheet.Split("FILE");
-                tracks = new Track[filesInCue.Length - 1];
-
-                ReadOnlySpan<string> spanOfCueFiles = new ReadOnlySpan<string>(filesInCue).Slice(1);   //Skip 0 as it is nothing
-
-                ParseCue(spanOfCueFiles, rawFiles, ref tracks);   
-                return tracks;
-            } else {
-                Console.WriteLine("[CDROM] Could not find a Cue sheet, CD-DA audio will not be played");
-                return new Track[] { new Track(rawFiles[indexOfDataTrack], false, 01, "00:00:00") };  //Defaule to main data track only
-            }
-
-        }
-
         private static (int,int,int) BytesToMSF(int totalSize) {
             int totalFrames = totalSize / 2352;
             int M = totalFrames / (60 * 75);
             int S = (totalFrames % (60 * 75)) / 75;
             int F = (totalFrames % (60 * 75)) % 75;
             return (M,S,F);
-        }
-
-        private void ParseCue(ReadOnlySpan<string> filesInCue, string[] rawFiles, ref Track[] tracks) {
-            int offset = 0;
-
-            for (int i = 0; i < filesInCue.Length; i++) {
-                string[] indexes = filesInCue[i].Split("INDEX");
-                string index1MSF = "";
-                for (int j = 1; j < indexes.Length; j++) {
-                    string[] details = indexes[j].Split(" ");
-                    if (details[1].Equals("01")) {
-                        index1MSF = details[2];
-                    }
-                }
-                if (indexes.Length > 3) {
-                    Console.WriteLine("[CDROM] Found file with multiple indexes!");
-                }
-
-                tracks[i] = new Track(rawFiles[i], filesInCue[i].Contains("AUDIO"), i + 1, index1MSF);
-                string[] initialMSF = index1MSF.Split(":");
-
-                int length = (int)new FileInfo(rawFiles[i]).Length;
-                int M; int S; int F;
-                (M, S, F) = BytesToMSF(offset);
-
-                int cueM = 0;
-                int cueS = 0;
-                int cueF = 0;
-                bool valid = (int.TryParse(initialMSF[0], out cueM) && int.TryParse(initialMSF[1], out cueS) && int.TryParse(initialMSF[2], out cueF));
-                if (!valid) {
-                    Console.WriteLine("[CDROM] Cue Parse error, aborting..");
-                    HasCue = false;
-                    return;
-                }
-                M += cueM;
-                S += cueS;
-                F += cueF;
-
-                tracks[i].M = M;
-                tracks[i].S = S;
-                tracks[i].F = F;
-
-                tracks[i].Length = length;
-
-                Console.WriteLine("------------------------------------------------------------");
-                Console.WriteLine("[CDROM] Added new track: ");
-                Console.WriteLine("[CDROM] Path: " + rawFiles[i]);
-                Console.WriteLine("[CDROM] CUE Index 01: " + index1MSF.Replace("\n",""));
-                Console.WriteLine("[CDROM] isAudio: " + filesInCue[i].Contains("AUDIO"));
-                Console.WriteLine("[CDROM] Number: " + (i + 1).ToString().PadLeft(2, '0'));
-                Console.WriteLine("[CDROM] Start: " + M.ToString().PadLeft(2,'0') + ":" + S.ToString().PadLeft(2, '0') + ":" + F.ToString().PadLeft(2, '0'));
-                Console.WriteLine("[CDROM] Length: " + BytesToMSF(length));
-                Console.WriteLine("------------------------------------------------------------");
-
-                offset += length;
-            }
         }
         private static byte DecToBcd(byte value) {
             return (byte)(value + 6 * (value / 10));
@@ -283,9 +195,9 @@ namespace PSXEmulator {
             uint offset = address - range.start;
 
             switch (offset) {
-                case 0: return CDROM_Status();              //Status register, all indexes are mirrors
-                case 1: return ResponseBuffer.Dequeue();    //Response fifo, all indexes are mirrors
-                case 2: return DataController.ReadByte();           //Data fifo, all indexes are mirrors
+                case 0: return CDROM_Status();                                                       //Status register, all indexes are mirrors
+                case 1: return (byte)(ResponseBuffer.Count > 0? ResponseBuffer.Dequeue() : 0xFF);    //Response fifo, all indexes are mirrors
+                case 2: return DataController.ReadByte();                                            //Data fifo, all indexes are mirrors
                 case 3:
                     switch (Index) {
                         case 0:
@@ -593,23 +505,31 @@ namespace PSXEmulator {
         private static void GetID(CD_ROM cdrom) {          
             cdrom.ResponseBuffer.Enqueue(cdrom.stat);
             cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
-
-            if (cdrom.HasDisk) {
-                cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
-
-                cdrom.ResponseBuffer.Enqueue(0x02);       //STAT
-                cdrom.ResponseBuffer.Enqueue(0x00);       //Flags (Licensed, Missing, Audio or Data CD) 
-                cdrom.ResponseBuffer.Enqueue(0x20);       //Disk type 
-                cdrom.ResponseBuffer.Enqueue(0x00);       //Usually 0x00
-                cdrom.ResponseBuffer.Enqueue(0x53);       //From here and down it is ASCII, this is "SCEA"
-                cdrom.ResponseBuffer.Enqueue(0x43);
-                cdrom.ResponseBuffer.Enqueue(0x45);
-                cdrom.ResponseBuffer.Enqueue(0x41);
-
+            if (cdrom.Disk != null) {
+                if (cdrom.Disk.IsAudioDisk) {
+                    cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT5));
+                    cdrom.ResponseBuffer.Enqueue(0x0A);
+                    cdrom.ResponseBuffer.Enqueue(0x90);
+                    cdrom.ResponseBuffer.Enqueue(0x00);
+                    cdrom.ResponseBuffer.Enqueue(0x00);
+                    cdrom.ResponseBuffer.Enqueue(0x00);
+                    cdrom.ResponseBuffer.Enqueue(0x00);
+                    cdrom.ResponseBuffer.Enqueue(0x00);
+                    cdrom.ResponseBuffer.Enqueue(0x00);
+                } else {
+                    cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT2));
+                    cdrom.ResponseBuffer.Enqueue(0x02);       //STAT
+                    cdrom.ResponseBuffer.Enqueue(0x00);       //Flags (Licensed, Missing, Audio or Data CD) 
+                    cdrom.ResponseBuffer.Enqueue(0x20);       //Disk type 
+                    cdrom.ResponseBuffer.Enqueue(0x00);       //Usually 0x00
+                    cdrom.ResponseBuffer.Enqueue(0x53);       //From here and down it is ASCII, this is "SCEA"
+                    cdrom.ResponseBuffer.Enqueue(0x43);
+                    cdrom.ResponseBuffer.Enqueue(0x45);
+                    cdrom.ResponseBuffer.Enqueue(0x41);
+                }
             } else {
                 cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT5));
-
-                cdrom.ResponseBuffer.Enqueue(0x08);       //No disk
+                cdrom.ResponseBuffer.Enqueue(0x08); //No disk inserted
                 cdrom.ResponseBuffer.Enqueue(0x40);
                 cdrom.ResponseBuffer.Enqueue(0x00);
                 cdrom.ResponseBuffer.Enqueue(0x00);
@@ -617,7 +537,7 @@ namespace PSXEmulator {
                 cdrom.ResponseBuffer.Enqueue(0x00);
                 cdrom.ResponseBuffer.Enqueue(0x00);
                 cdrom.ResponseBuffer.Enqueue(0x00);
-              }
+            }
         }
         private static void GetStat(CD_ROM cdrom) {
             if (!cdrom.LedOpen) {     //Reset shell open unless it is still opened, TODO: add disk swap

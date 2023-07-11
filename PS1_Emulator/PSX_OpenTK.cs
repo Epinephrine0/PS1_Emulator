@@ -49,8 +49,7 @@ namespace PSXEmulator {
             RAM Ram = new RAM();
             BIOS Bios = new BIOS(userSettings.BIOSPath);
             Scratchpad Scratchpad = new Scratchpad();
-            CD_ROM cdrom = userSettings.IsDirecFile? new CD_ROM(userSettings.DirecFilePath) : 
-                new CD_ROM(userSettings.SelectedGameFolder, userSettings.FirstTrackIndex);
+            CD_ROM cdrom = new CD_ROM(userSettings.SelectedGameFolder, userSettings.IsDirecFile);
             SPU Spu = new SPU(ref cdrom.DataController);         //Needs to read CD-Audio
             DMA Dma = new DMA();
             IO_PORTS IO = new IO_PORTS();
@@ -77,9 +76,9 @@ namespace PSXEmulator {
             mainWindow.Run();
 
             mainWindow.Dispose();   //Will reach this if the render window closes   
-          
+            
         }
-
+ 
         public byte[] ImageToByteArray(string Icon) {
             var image = (Image<Rgba32>)SixLabors.ImageSharp.Image.Load(Configuration.Default, Icon);
             var pixels = new byte[4 * image.Width * image.Height];
