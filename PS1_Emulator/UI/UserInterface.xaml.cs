@@ -12,10 +12,10 @@ namespace PSXEmulator {
     /// </summary>
     public partial class UserInterface : System.Windows.Window {
         //PSX_OpenTK MainEmu;
-
-        string[] GamesFolders; 
-        string[] SelectedGameFiles;
-        const string SYSTEMID = "PLAYSTATION";
+       
+        string[] GamesFolders;
+        string BootPath;
+        bool IsEXE;
         const string COPYRIGHT = "Sony Computer Entertainment Inc.";
         bool HasValidBios;  
         Settings UserSettings;
@@ -114,30 +114,10 @@ namespace PSXEmulator {
             }
 
             if(GameList.SelectedIndex < 0 || GameList.SelectedItem.Equals("Games go here")) {
-                UserSettings.SelectedGameFolder = null;
-                UserSettings.FirstTrackIndex = -1;
-               
-                Boot();
-                return; //No need to check games and bullshit when booting the Shell
+                BootPath = null;
+            } else {
+                BootPath = UserSettings.GamesFolderPath + @"\" + GameList.SelectedItem;
             }
-
-            UserSettings.SelectedGameFolder = GamesFolders[GameList.SelectedIndex];
-            SelectedGameFiles = Directory.GetFiles(UserSettings.SelectedGameFolder);
-            UserSettings.SelectedGameName = Path.GetFileName(UserSettings.SelectedGameFolder);
-            int index = 0;    //Make sure the game folder contains at least one valid bin
-            UserSettings.FirstTrackIndex = index;
-
-            /*if (index >= 0) {
-                Console.WriteLine("Found valid binary!");
-                Console.WriteLine("Booting: " + UserSettings.SelectedGameName);
-            }
-            else {
-                Console.WriteLine("Could not find a valid binary for the selected game");
-                Console.WriteLine("Proceeding to boot to the Shell");
-                UserSettings.SelectedGameFolder = null;
-                UserSettings.FirstTrackIndex = -1;
-            }
-*/
             Boot();
         }
         private void ImportButton_Click(object sender, RoutedEventArgs e) {
@@ -162,31 +142,6 @@ namespace PSXEmulator {
                 GameList.Items.Add("Games go here");
             }
         }
-        private int findFirstValidBinary(string[] selectedGameFiles) {
-            for (int i = 0; i < selectedGameFiles.Length; i++) {
-                string extension = Path.GetExtension(selectedGameFiles[i]).ToLower();
-                if (extension.Equals(".bin") || extension.Equals(".iso")) {     //Check PLAYSTAION String for a valid CD-XA track
-                    if (IsValidBin(selectedGameFiles[i])) {
-                        return i;
-                    }
-                }
-            }
-            return -1;
-        }
-
-        private bool IsValidBin(string path) {
-            ReadOnlySpan<byte> data = File.ReadAllBytes(path);
-            try {
-                data = data.Slice((16 * 0x930) + 0x20, 11);
-                string ID = Encoding.ASCII.GetString(data);
-                if (ID.Equals(SYSTEMID)) {
-                    return true;
-                }
-            } catch (ArgumentOutOfRangeException ex) {
-                return false;
-            }
-            return false;
-        }
         private void OnClose(object sender, EventArgs e) {
             SaveSettings();
         }
@@ -198,8 +153,9 @@ namespace PSXEmulator {
 
             Console.ForegroundColor = ConsoleColor.Green;
 
-            PSX_OpenTK MainEmu = new PSX_OpenTK(UserSettings);            /* Emulation loop starts */
-            
+            PSX_OpenTK MainEmu = new PSX_OpenTK(UserSettings.BIOSPath, BootPath,IsEXE);            /* Emulation loop starts */
+            ResetBootConfig();
+
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine("Main Emulation loop terminated");
@@ -209,8 +165,12 @@ namespace PSXEmulator {
         private void Window_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
             GameList.UnselectAll();
         }
+        private void ResetBootConfig() {
+            BootPath = null;
+            IsEXE = false;
+        }
         private void OnDrop(object sender, System.Windows.DragEventArgs e) {   
-            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)) {
+            /*if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)) {
                 string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
                 string extension = Path.GetExtension(files[0]).ToLower();
                 if (extension.Equals(".exe")) {
@@ -225,14 +185,12 @@ namespace PSXEmulator {
                         UserSettings.SelectedGameName = Path.GetFileName(files[0]);
                         UserSettings.IsDirecFile = true;
                         UserSettings.DirecFilePath = files[0];
-                        UserSettings.FirstTrackIndex = 0; //Not used
                         Boot();
                     }
                 }
-            }
+            }*/
         }
         
-
         private void SaveSettings() {
             byte[] serialized = JsonSerializer.SerializeToUtf8Bytes(UserSettings,
                  new JsonSerializerOptions { WriteIndented = false, IgnoreNullValues = false });

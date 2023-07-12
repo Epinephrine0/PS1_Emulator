@@ -66,8 +66,6 @@ namespace PSXEmulator {
 
         public byte Padding;
         public byte CurrentCommand;
-        //public bool DiskContainsAudio;
-        //public bool IsGameDisk;
         public bool HasCue;
         public bool LedOpen = false;
 

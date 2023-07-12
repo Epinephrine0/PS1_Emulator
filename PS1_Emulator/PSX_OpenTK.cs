@@ -17,15 +17,13 @@ using PSXEmulator.PS1_Emulator;
 namespace PSXEmulator {
     public class PSX_OpenTK {
         public Renderer mainWindow;
-        public PSX_OpenTK(Settings userSettings) { 
+        public PSX_OpenTK(string biosPath, string bootPath, bool isBootingEXE) { 
             var nativeWindowSettings = new NativeWindowSettings() {
                 Size = new Vector2i(1024, 512),
                 Title = "OpenGL",
-                // This is needed to run on macos
                 Flags = ContextFlags.ForwardCompatible,
                 APIVersion = Version.Parse("4.6.0"),
-                WindowBorder = WindowBorder.Resizable,
-               
+                WindowBorder = WindowBorder.Resizable,               
             };
 
             var Gws = GameWindowSettings.Default;
@@ -36,20 +34,19 @@ namespace PSXEmulator {
             try {
                 var windowIcon = new WindowIcon(new OpenTK.Windowing.Common.Input.Image(300, 300, ImageToByteArray(@"PSX logo.jpg")));
                 nativeWindowSettings.Icon = windowIcon;
-
             }
             catch (FileNotFoundException ex) { 
                 Console.WriteLine("Warning: PSX logo not found!");
             }
 
 
-            mainWindow = new Renderer(Gws, nativeWindowSettings, userSettings);
+            mainWindow = new Renderer(Gws, nativeWindowSettings);
 
             //Create everything here, pass relevant user settings
             RAM Ram = new RAM();
-            BIOS Bios = new BIOS(userSettings.BIOSPath);
+            BIOS Bios = new BIOS(biosPath);
             Scratchpad Scratchpad = new Scratchpad();
-            CD_ROM cdrom = new CD_ROM(userSettings.SelectedGameFolder, userSettings.IsDirecFile);
+            CD_ROM cdrom = new CD_ROM(bootPath, false);
             SPU Spu = new SPU(ref cdrom.DataController);         //Needs to read CD-Audio
             DMA Dma = new DMA();
             IO_PORTS IO = new IO_PORTS();
@@ -68,10 +65,16 @@ namespace PSXEmulator {
                 IO,MemoryControl,RamSize,CacheControl,
                 Ex1,Ex2,Timer1,Timer2,Mdec,Gpu
                 );
-            CPU CPU = new CPU(userSettings.IsEXE, userSettings.EXEPath, Bus);
+            CPU CPU = new CPU(isBootingEXE, bootPath, Bus);
 
             mainWindow.CPU = CPU;
-            mainWindow.Title += " | " + ((userSettings.FirstTrackIndex >= 0 || userSettings.IsEXE)? userSettings.SelectedGameName : "PSX-BIOS") + " | ";
+            mainWindow.Title += " | ";
+            if (bootPath != null) {
+                mainWindow.Title += Path.GetFileName(bootPath);
+            } else {
+                mainWindow.Title += "PSX-BIOS";
+            }
+            mainWindow.Title += " | ";
 
             mainWindow.Run();
 
@@ -444,7 +447,7 @@ namespace PSXEmulator {
             }";
 
 
-        public Renderer(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings, Settings userSettings )
+        public Renderer(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
              : base(gameWindowSettings, nativeWindowSettings) {
 
             //Clear the window

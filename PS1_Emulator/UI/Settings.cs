@@ -9,17 +9,7 @@ namespace PSXEmulator.UI {
         public bool HasBios => BIOSPath != null;
         public bool HasGames => GamesFolderPath != null;
 
-        public string? SelectedGameName { set; get; }
-        public string? SelectedGameFolder { set; get; }
-
-        public int FirstTrackIndex = -1;
-
-        public bool IsEXE;
-        public string? EXEPath;
-
-        public bool IsDirecFile;
-        public string? DirecFilePath;
-
+   
         //More settings later
 
         //Show Textures
