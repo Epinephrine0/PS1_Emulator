@@ -9,6 +9,7 @@ namespace PSXEmulator.Peripherals.CDROM {
         public bool HasDataTracks;
         public bool HasAudioTracks;
         public bool IsAudioDisk => HasAudioTracks && !HasDataTracks;
+        public bool IsValid => Tracks != null;
         public Disk(string folderPath) {
             Tracks = BuildTracks(folderPath);
         }
@@ -37,11 +38,13 @@ namespace PSXEmulator.Peripherals.CDROM {
                 int indexOfDataTrack = FindFirstValidBinary(rawFiles);
                 if (indexOfDataTrack < 0) {
                     HasDataTracks = false;
+                    HasAudioTracks = false;
                     Console.WriteLine("[TrackBuilder] Couldn't find a valid binary");
+                    return null;    
                 } else {
                     HasDataTracks = true;
+                    return new Track[] { new Track(rawFiles[indexOfDataTrack], false, 01, "00:00:00") };
                 }
-                return new Track[] { new Track(rawFiles[indexOfDataTrack], false, 01, "00:00:00") };
             }
         }
         private int FindFirstValidBinary(string[] rawFiles) {

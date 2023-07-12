@@ -81,9 +81,13 @@ namespace PSXEmulator {
             LoadLUT();
             if (path != null) {
                 Disk = new Disk(path);
-                DataController.Tracks = Disk.Tracks;
-                DataController.SelectedTrack = File.ReadAllBytes(Disk.Tracks[0].FilePath);
-                HasCue = Disk.HasCue;
+                if (Disk.IsValid) {
+                    DataController.Tracks = Disk.Tracks;
+                    DataController.SelectedTrack = File.ReadAllBytes(Disk.Tracks[0].FilePath);
+                    HasCue = Disk.HasCue;
+                } else {
+                    Console.WriteLine("[CDROM] Invalid Disk! will abort and boot the Shell");
+                }
                 if (Disk.IsAudioDisk) {
                     Console.WriteLine("[CDROM] Audio Disk detected");
                 }
@@ -503,7 +507,7 @@ namespace PSXEmulator {
         private static void GetID(CD_ROM cdrom) {          
             cdrom.ResponseBuffer.Enqueue(cdrom.stat);
             cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x000c4e1, INT3));
-            if (cdrom.Disk != null) {
+            if (cdrom.Disk != null && cdrom.Disk.IsValid) {
                 if (cdrom.Disk.IsAudioDisk) {
                     cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT5));
                     cdrom.ResponseBuffer.Enqueue(0x0A);
