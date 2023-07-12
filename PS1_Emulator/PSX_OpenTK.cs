@@ -46,7 +46,7 @@ namespace PSXEmulator {
             RAM Ram = new RAM();
             BIOS Bios = new BIOS(biosPath);
             Scratchpad Scratchpad = new Scratchpad();
-            CD_ROM cdrom = new CD_ROM(bootPath, false);
+            CD_ROM cdrom = isBootingEXE? new CD_ROM() : new CD_ROM(bootPath, false);
             SPU Spu = new SPU(ref cdrom.DataController);         //Needs to read CD-Audio
             DMA Dma = new DMA();
             IO_PORTS IO = new IO_PORTS();

@@ -170,25 +170,19 @@ namespace PSXEmulator {
             IsEXE = false;
         }
         private void OnDrop(object sender, System.Windows.DragEventArgs e) {   
-            /*if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)) {
+            if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)) {
                 string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
                 string extension = Path.GetExtension(files[0]).ToLower();
                 if (extension.Equals(".exe")) {
                     Console.WriteLine("Booting Executable: " + files[0]);
-                    UserSettings.IsEXE = true;
-                    UserSettings.EXEPath = files[0];
-                    UserSettings.SelectedGameName = Path.GetFileName(files[0]);
+                    IsEXE = true;
+                    BootPath = files[0];
                     Boot();
                 }else if (extension.Equals(".bin") || extension.Equals(".iso")) {
-                    if (IsValidBin(files[0])) {
-                        Console.WriteLine("Booting Direct Binary: " + files[0]);
-                        UserSettings.SelectedGameName = Path.GetFileName(files[0]);
-                        UserSettings.IsDirecFile = true;
-                        UserSettings.DirecFilePath = files[0];
-                        Boot();
-                    }
+                    Console.WriteLine("Booting Direct Binary: " + files[0]);
+                    //Boot();
                 }
-            }*/
+            }
         }
         
         private void SaveSettings() {

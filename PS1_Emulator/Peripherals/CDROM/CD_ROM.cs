@@ -96,6 +96,9 @@ namespace PSXEmulator {
                 Console.WriteLine("[CDROM] Proceeding to boot without a game");
             }
         }
+        public CD_ROM() {   //Overload for when booting EXEs
+
+        }
         private void LoadLUT() {
             //Fill the functions lookUpTable with illegal first, to be safe
             for (int i = 0; i < LookUpTable.Length; i++) {
