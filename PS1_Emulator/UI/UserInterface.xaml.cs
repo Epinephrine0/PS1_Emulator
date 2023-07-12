@@ -173,7 +173,7 @@ namespace PSXEmulator {
             if (e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)) {
                 string[] files = (string[])e.Data.GetData(System.Windows.DataFormats.FileDrop);
                 string extension = Path.GetExtension(files[0]).ToLower();
-                if (extension.Equals(".exe")) {
+                if (extension.Equals(".exe") || extension.Equals(".ps-exe")) {
                     Console.WriteLine("Booting Executable: " + files[0]);
                     IsEXE = true;
                     BootPath = files[0];

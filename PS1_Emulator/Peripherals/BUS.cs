@@ -100,7 +100,10 @@ namespace PSXEmulator {
             }else if (IO_PORTS.range.contains(physical_address)) {
                 return IO_PORTS.loadWord(physical_address);
 
-            }else if (MDEC.range.contains(physical_address)) {
+            } else if (MemoryControl.range.contains(physical_address)) {
+                return 0x00070777;
+
+            } else if (MDEC.range.contains(physical_address)) {
                return 0;
 
             }else {

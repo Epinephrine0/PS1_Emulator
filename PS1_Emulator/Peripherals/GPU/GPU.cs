@@ -212,9 +212,9 @@ namespace PSXEmulator {
         }
 
         double scanlines = 0;
-        double scanlines_per_frame = 0;
+        double scanlines_per_frame = 263;           //NTSC
         double video_cycles = 0;
-        double video_cycles_per_scanline = 0;
+        double video_cycles_per_scanline = 3413;    //NTSC
 
         public void tick(double cycles) {
             video_cycles += cycles;
@@ -244,6 +244,7 @@ namespace PSXEmulator {
                 if (!TIMER1.isUsingSystemClock()) {
                     TIMER1.tick(1);
                 }
+
                 if (verticalRes == VerticalRes.Y240Lines) {
                     currentLine = (currentLine + 1) & 1;
                 }

@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Windows.Shapes;
+using static PSXEmulator.CDROMDataController;
 
 namespace PSXEmulator {
     public unsafe class CD_ROM  {   
@@ -97,7 +99,12 @@ namespace PSXEmulator {
             }
         }
         public CD_ROM() {   //Overload for when booting EXEs
-
+            //Stub for the CDROM Tests
+            LoadLUT();
+            Disk = new Disk(@"C:\Users\Old Snake\Desktop\Archive");
+            DataController = new CDROMDataController();
+            DataController.Tracks = Disk.Tracks;
+            DataController.SelectedTrack = File.ReadAllBytes(Disk.Tracks[0].FilePath);
         }
         private void LoadLUT() {
             //Fill the functions lookUpTable with illegal first, to be safe
@@ -141,7 +148,7 @@ namespace PSXEmulator {
         private static void Illegal(CD_ROM cdrom) {
             throw new Exception("Unknown CDROM command: " + cdrom.CurrentCommand.ToString("x"));
         }
-        public void Controller(byte command) {
+        public void Controller(byte command) {      
             CurrentCommand = command;
             Interrupts.Clear();
             ResponseBuffer.Clear();
@@ -149,7 +156,7 @@ namespace PSXEmulator {
             DataController.SectorBuffer.Clear();
             LookUpTable[command](this);
             ParameterBuffer.Clear();
-            //Console.WriteLine("[CD-ROM] Command: 0x" + command.ToString("x"));
+            Console.WriteLine("[CD-ROM] Command: 0x" + command.ToString("x"));
         }
         private byte CDROM_Status() {
             DRQSTS = (byte)((DataController.DataFifo.Count > 0) ? 1 : 0);
@@ -162,6 +169,8 @@ namespace PSXEmulator {
 
         public void StoreByte(uint address, byte value) {
             uint offset = address - range.start;
+            //Console.WriteLine(value.ToString("x") + " at: " + address.ToString("x"));
+
             switch (offset) {
                 case 0: Index = (byte)(value & 3); break; //Status register, all mirrors
                 case 1:
@@ -198,11 +207,15 @@ namespace PSXEmulator {
 
         public byte LoadByte(uint address) {
             uint offset = address - range.start;
+            //Console.WriteLine("Read at:" + address.ToString("x"));
 
             switch (offset) {
-                case 0: return CDROM_Status();                                                       //Status register, all indexes are mirrors
-                case 1: return (byte)(ResponseBuffer.Count > 0? ResponseBuffer.Dequeue() : 0xFF);    //Response fifo, all indexes are mirrors
-                case 2: return DataController.ReadByte();                                            //Data fifo, all indexes are mirrors
+                case 0: return CDROM_Status();                          //Status register, all indexes are mirrors
+                case 1:
+                    byte r = ResponseBuffer.Dequeue();
+                    Console.WriteLine("Response: " + r.ToString("X"));
+                    return r;                //Response fifo, all indexes are mirrors
+                case 2: return DataController.ReadByte();               //Data fifo, all indexes are mirrors
                 case 3:
                     switch (Index) {
                         case 0:
@@ -228,7 +241,6 @@ namespace PSXEmulator {
         }
         private void InterruptFlagRegister(byte value) {
             IRQ_flag &= (byte)~(value & 0x1F);
-
             if (Interrupts.Count > 0 && Interrupts.Peek().delay <= 0) {
                 IRQ_flag |= Interrupts.Dequeue().interrupt;
             }
@@ -531,6 +543,7 @@ namespace PSXEmulator {
                     cdrom.ResponseBuffer.Enqueue(0x43);
                     cdrom.ResponseBuffer.Enqueue(0x45);
                     cdrom.ResponseBuffer.Enqueue(0x41);
+                    
                 }
             } else {
                 cdrom.Interrupts.Enqueue(new DelayedInterrupt(0x0004a00, INT5));
@@ -586,6 +599,7 @@ namespace PSXEmulator {
                 IRQ_flag |= Interrupts.Dequeue().interrupt;
                 if ((IRQ_enable & IRQ_flag) != 0) {
                     IRQ_CONTROL.IRQsignal(2);
+                    //Console.WriteLine("[CDROM] IRQ!");
                 }
             }
 
@@ -642,4 +656,6 @@ namespace PSXEmulator {
             this.interrupt = interrupt;
         }
     }
+
+
 }

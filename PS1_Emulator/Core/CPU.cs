@@ -1297,7 +1297,7 @@ namespace PSXEmulator {
                 }*/
 
                 emu_cycle();
-                emu_cycle();
+                //emu_cycle();
 
                 cycles += 2;
 
