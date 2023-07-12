@@ -1,33 +1,39 @@
-﻿using OpenTK.Graphics.OpenGL4;
+﻿using OpenTK.Compute.OpenCL;
+using OpenTK.Graphics.OpenGL4;
 using System;
 
 namespace PSXEmulator {
-    public class Shader {
-        public int Handle;
+    public class Shader {  
+        public int Program;
         public Shader(string vert, string frag) {
-            int vertexShader = GL.CreateShader(ShaderType.VertexShader);    //Create a vertex shader and ger a pointer
-            GL.ShaderSource(vertexShader, vert);                            //Bind the source code text
-            CompileShader(vertexShader);                                    //Compile
+            int vertexShader = GL.CreateShader(ShaderType.VertexShader);    //Create a vertex shader and get a pointer
+            GL.ShaderSource(vertexShader, vert);                            //Bind the source code string
+            CompileShader(vertexShader);                                    //Compile and check for errors
 
             int fragmentShader = GL.CreateShader(ShaderType.FragmentShader);    //Same thing for fragment shader
             GL.ShaderSource(fragmentShader, frag);
             CompileShader(fragmentShader);
 
-            //Create a program and attach both shaders to it
-            Handle = GL.CreateProgram();
-            GL.AttachShader(Handle, vertexShader);
-            GL.AttachShader(Handle, fragmentShader);
-            LinkProgram(Handle);
+            //Create a program, store the pointer to it, and attach to it both shaders
+            Program = GL.CreateProgram();
+            GL.AttachShader(Program, vertexShader);
+            GL.AttachShader(Program, fragmentShader);
 
-            // When the shader program is linked, it no longer needs the individual shaders attached to it;
-            // the compiled code is copied into the shader program.
-            // Detach them, and then delete them.
-            GL.DetachShader(Handle, vertexShader);
-            GL.DetachShader(Handle, fragmentShader);
+            //Link the program
+            GL.LinkProgram(Program);
+            GL.GetProgram(Program, GetProgramParameterName.LinkStatus, out var code);    // Check for linking errors
+            if (code != 1) {
+                throw new Exception($"Error occurred whilst linking Program({Program})");
+            }
+
+            //After linking them the indivisual shaders are not needed, they have been copied to the program
+            //Clean up
+            GL.DetachShader(Program, vertexShader);
+            GL.DetachShader(Program, fragmentShader);
             GL.DeleteShader(fragmentShader);
             GL.DeleteShader(vertexShader);
         }
-        private static void CompileShader(int shader) {
+        private void CompileShader(int shader) {
             GL.CompileShader(shader);
             GL.GetShader(shader, ShaderParameter.CompileStatus, out int code);  //Check for compilation errors
             if (code != (int)All.True) {
@@ -37,15 +43,8 @@ namespace PSXEmulator {
                 Console.WriteLine("[OpenGL] Shader compiled!");
             }
         }
-        private static void LinkProgram(int program) {
-            GL.LinkProgram(program);
-            GL.GetProgram(program, GetProgramParameterName.LinkStatus, out var code);    // Check for linking errors
-            if (code != (int)All.True) {
-                throw new Exception($"Error occurred whilst linking Program({program})");
-            }
-        }
         public void Use() {
-            GL.UseProgram(Handle);
+            GL.UseProgram(Program);
         }
     }
 }

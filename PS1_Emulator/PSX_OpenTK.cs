@@ -467,21 +467,21 @@ namespace PSXEmulator {
             GL.Clear(ClearBufferMask.ColorBufferBit);  
             SwapBuffers();
             
-            uniform_offset = GL.GetUniformLocation(shader.Handle, "offset");
-            fullVram = GL.GetUniformLocation(shader.Handle, "fullVram");
-            texWindow = GL.GetUniformLocation(shader.Handle, "u_texWindow");
-            texModeLoc = GL.GetUniformLocation(shader.Handle, "TextureMode");
-            clutLoc = GL.GetUniformLocation(shader.Handle, "inClut");
-            texPageLoc = GL.GetUniformLocation(shader.Handle, "inTexpage");
+            uniform_offset = GL.GetUniformLocation(shader.Program, "offset");
+            fullVram = GL.GetUniformLocation(shader.Program, "fullVram");
+            texWindow = GL.GetUniformLocation(shader.Program, "u_texWindow");
+            texModeLoc = GL.GetUniformLocation(shader.Program, "TextureMode");
+            clutLoc = GL.GetUniformLocation(shader.Program, "inClut");
+            texPageLoc = GL.GetUniformLocation(shader.Program, "inTexpage");
 
-            transparencyModeLoc = GL.GetUniformLocation(shader.Handle, "transparencyMode");
-            maskBitSettingLoc = GL.GetUniformLocation(shader.Handle, "maskBitSetting");
-            isDitheredLoc = GL.GetUniformLocation(shader.Handle, "isDithered");
+            transparencyModeLoc = GL.GetUniformLocation(shader.Program, "transparencyMode");
+            maskBitSettingLoc = GL.GetUniformLocation(shader.Program, "maskBitSetting");
+            isDitheredLoc = GL.GetUniformLocation(shader.Program, "isDithered");
 
-            display_areay_X_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x");
-            display_areay_Y_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y");
-            display_area_X_Offset_Loc = GL.GetUniformLocation(shader.Handle, "display_area_x_offset");
-            display_area_Y_Offset_Loc = GL.GetUniformLocation(shader.Handle, "display_area_y_offset");
+            display_areay_X_Loc = GL.GetUniformLocation(shader.Program, "display_area_x");
+            display_areay_Y_Loc = GL.GetUniformLocation(shader.Program, "display_area_y");
+            display_area_X_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_offset");
+            display_area_Y_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_y_offset");
 
             vertexArrayObject = GL.GenVertexArray();
             vertexBufferObject = GL.GenBuffer();                 
@@ -517,7 +517,7 @@ namespace PSXEmulator {
 
             GL.PixelStore(PixelStoreParameter.UnpackAlignment, 2);
             GL.PixelStore(PixelStoreParameter.PackAlignment, 2);
-            GL.Uniform1(GL.GetUniformLocation(shader.Handle, "u_vramTex"), 0);
+            GL.Uniform1(GL.GetUniformLocation(shader.Program, "u_vramTex"), 0);
 
         }
 
@@ -922,7 +922,7 @@ namespace PSXEmulator {
             GL.DeleteFramebuffer(vramFrameBuffer);
             GL.DeleteTexture(vram_texture);
             GL.DeleteTexture(sample_texture);
-            GL.DeleteProgram(shader.Handle);
+            GL.DeleteProgram(shader.Program);
 
             
             base.OnUnload();
