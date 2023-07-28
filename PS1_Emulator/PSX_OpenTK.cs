@@ -9,10 +9,9 @@ using SixLabors.ImageSharp;
 using System;
 using System.Threading;
 using System.IO;
-using System.Linq;
-using PSXEmulator.UI;
 using PSXEmulator.Peripherals;
 using PSXEmulator.PS1_Emulator;
+using System.Text;
 
 namespace PSXEmulator {
     public class PSX_OpenTK {
@@ -41,6 +40,8 @@ namespace PSXEmulator {
 
 
             mainWindow = new Renderer(Gws, nativeWindowSettings);
+
+            Console.OutputEncoding = Encoding.UTF8;
 
             //Create everything here, pass relevant user settings
             RAM Ram = new RAM();
@@ -91,7 +92,7 @@ namespace PSXEmulator {
         }
     }
 
-    public class Renderer : GameWindow {
+    public class Renderer : GameWindow {    //Now it gets really messy 
         public CPU CPU;
         const int VRAM_WIDTH = 1024;
         const int VRAM_HEIGHT = 512;
@@ -116,9 +117,6 @@ namespace PSXEmulator {
         private int vramFrameBuffer;
         private int transparencyModeLoc;
         private int isDitheredLoc;
-
-        Int16 offset_x;
-        Int16 offset_y;
 
         public bool isUsingMouse = false;
         public bool showTextures = true;
@@ -467,6 +465,7 @@ namespace PSXEmulator {
             GL.Clear(ClearBufferMask.ColorBufferBit);  
             SwapBuffers();
             
+            //Get Locations
             uniform_offset = GL.GetUniformLocation(shader.Program, "offset");
             fullVram = GL.GetUniformLocation(shader.Program, "fullVram");
             texWindow = GL.GetUniformLocation(shader.Program, "u_texWindow");
@@ -483,6 +482,7 @@ namespace PSXEmulator {
             display_area_X_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_offset");
             display_area_Y_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_y_offset");
 
+            //Create VAO/VBO/Buffers and Textures
             vertexArrayObject = GL.GenVertexArray();
             vertexBufferObject = GL.GenBuffer();                 
             colorsBuffer = GL.GenBuffer();
@@ -522,10 +522,7 @@ namespace PSXEmulator {
         }
 
         public void setOffset(Int16 x, Int16 y, Int16 z) {
-            offset_x = x;
-            offset_y = y;
             GL.Uniform3(uniform_offset, x, y, z);
-
         }
         public void setTextureWindow(ushort x, ushort y, ushort z, ushort w) {
             GL.Uniform4(texWindow, x, y, z, w);
@@ -879,7 +876,7 @@ namespace PSXEmulator {
                 Thread.Sleep(100);
 
             }else if (e.Key.Equals(Keys.P)) {
-                CPU.isPaused = !CPU.isPaused;
+                CPU.IsPaused = !CPU.IsPaused;
                 Thread.Sleep(100);
 
             }else if (e.Key.Equals(Keys.Tab)) {

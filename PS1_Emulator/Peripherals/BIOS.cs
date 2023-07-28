@@ -19,7 +19,7 @@ namespace PSXEmulator {
 
         public UInt32 loadWord(UInt32 address) {
             uint offset = address - range.start;
-            CPU.cycles += 20;
+            //CPU.cycles += 20;
 
             UInt32 b0 = data[offset + 0];
             UInt32 b1 = data[offset + 1];
@@ -30,13 +30,13 @@ namespace PSXEmulator {
         }
 
         public byte loadByte(UInt32 address) {
-            CPU.cycles++;
+            //CPU.cycles += 20;
             uint offset = address - range.start;
             return data[offset];
         }
 
         internal UInt16 loadHalf(uint address) {
-            CPU.cycles += 2;
+            //CPU.cycles += 20;
             uint offset = address - range.start;
 
             UInt32 b0 = data[offset + 0];

@@ -1,6 +1,8 @@
 ﻿using System.IO;
 using System.Text;
 using System;
+using NAudio.Wave;
+using OpenTK.Graphics.OpenGL;
 
 namespace PSXEmulator.Peripherals.CDROM {
     public class Disk {
@@ -43,7 +45,9 @@ namespace PSXEmulator.Peripherals.CDROM {
                     return null;    
                 } else {
                     HasDataTracks = true;
-                    return new Track[] { new Track(rawFiles[indexOfDataTrack], false, 01, "00:00:00") };
+                    Track dataTrack = new Track(rawFiles[indexOfDataTrack], false, 01, "00:00:00"); //I'm really assuming stuff 
+                    dataTrack.Length = (int)new FileInfo(dataTrack.FilePath).Length;
+                    return new Track[] { dataTrack };
                 }
             }
         }
@@ -83,8 +87,12 @@ namespace PSXEmulator.Peripherals.CDROM {
                 }
                 string[] indexes = filesInCue[i].Split("INDEX");
                 string index1MSF = "";
+                bool hasPregap = false;
                 for (int j = 1; j < indexes.Length; j++) {
                     string[] details = indexes[j].Split(" ");
+                    if (details[1].Equals("00")) {
+                        hasPregap = true;
+                    }
                     if (details[1].Equals("01")) {
                         index1MSF = details[2];
                     }
@@ -101,7 +109,6 @@ namespace PSXEmulator.Peripherals.CDROM {
                 tracks[i] = new Track(filePath, filesInCue[i].Contains("AUDIO"), i + 1, index1MSF);
                 string[] initialMSF = index1MSF.Split(":");
 
-                int length = (int)new FileInfo(filePath).Length;
                 int M; int S; int F;
                 (M, S, F) = BytesToMSF(offset);
 
@@ -114,14 +121,18 @@ namespace PSXEmulator.Peripherals.CDROM {
                     HasCue = false;
                     return;
                 }
-                M += cueM;
-                S += cueS;
-                F += cueF;
 
+                M += hasPregap ? cueM : 0;
+                S += hasPregap ? cueS : 0;
+                F += hasPregap ? cueF : 0;
+
+                if (F >= 75) { S += (F / 75); F = F % 75; }
+                if (S >= 60) { M += (S / 60); S = S % 60; }
                 tracks[i].M = M;
                 tracks[i].S = S;
                 tracks[i].F = F;
 
+                int length = ((int)new FileInfo(filePath).Length) - (hasPregap ? 0 : ((cueM * 60 * 75) + (cueS * 75) + cueF) * 0x930);
                 tracks[i].Length = length;
 
                 Console.WriteLine("------------------------------------------------------------");

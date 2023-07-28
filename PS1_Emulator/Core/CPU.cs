@@ -1,21 +1,24 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text;
+using System.Windows.Documents;
 
 namespace PSXEmulator {
     public unsafe class CPU {
-        private UInt32 pc;           //32-bit program counter
-        private UInt32 next_pc;
-        private UInt32 current_pc;
+        private UInt32 PC;           //32-bit program counter
+        private UInt32 Next_PC;
+        private UInt32 Current_PC;
         public BUS BUS;
         private UInt32[] GPR;
-        private Instruction current;
+        private Instruction CurrentInstruction;
         private UInt32 SR;           //cop0 reg12 , the status register 
-        private UInt32 cause;        //cop0 reg13 , the cause register 
-        private UInt32 epc;          //cop0 reg14 , epc
+        private UInt32 Cause;        //cop0 reg13 , the cause register 
+        private UInt32 EPC;          //cop0 reg14 , EPC
         private UInt32 HI;           //Remainder of devision
         private UInt32 LO;           //Quotient of devision
-        private bool _branch;
-        private bool delay_slot;
+        private bool Branch;
+        private bool DelaySlot;
 
         //Geometry Transformation Engine - Coprocessor 2
         GTE gte = new GTE();
@@ -31,13 +34,15 @@ namespace PSXEmulator {
         private const UInt32 IllegalInstruction = 0xa;
         private const UInt32 CoprocessorError = 0xb;
         private const UInt32 Overflow = 0xc;
-        private byte[] testRom;
+        private byte[] ExecutableData;
         private bool IsLoadingEXE;
         private string? EXEPath;
 
-        bool fastBoot = true;
-        public bool isPaused = false;
+        bool FastBoot = false;
+        public bool IsPaused = false;
+        public bool IsStopped = false;
         const uint CYCLES_PER_FRAME = 33868800 / 60;
+        List<byte> Chars = new List<byte>();
 
         private static readonly delegate*<CPU, Instruction, void>[] mainLookUpTable = new delegate*<CPU, Instruction, void>[] {
                 &special,   &bxx,       &jump,      &jal,       &beq,        &bne,       &blez,      &bgtz,
@@ -62,8 +67,8 @@ namespace PSXEmulator {
         };
 
         public CPU(bool isEXE, string? EXEPath, BUS bus) {
-            this.pc = 0xbfc00000;   //BIOS initial PC       
-            this.next_pc = pc + 4;
+            this.PC = 0xbfc00000;   //BIOS initial PC       
+            this.Next_PC = PC + 4;
             this.BUS = bus;
             this.GPR = new UInt32[32];
             this.GPR[0] = 0;
@@ -76,8 +81,8 @@ namespace PSXEmulator {
             this.registerDelayedLoad.value = 0; 
             this.HI = 0xdeadbeef;
             this.LO = 0xdeadbeef;
-            this._branch = false;
-            this.delay_slot = false;
+            this.Branch = false;
+            this.DelaySlot = false;
             this.IsLoadingEXE = isEXE;
             this.EXEPath = EXEPath;
         }
@@ -92,58 +97,60 @@ namespace PSXEmulator {
 
         public void emu_cycle() {
 
-            current_pc = pc;   //Save current pc In case of an exception
-            intercept(pc);     //TTY
+            Current_PC = PC;   //Save current pc In case of an exception
+            intercept(PC);     //TTY
 
-             /*if (fastBoot) {       //Skip Sony logo, doesn't work 
-                 if (pc == 0x80030000) {
-                    pc = GPR[31];
-                    next_pc = pc + 4;
-                    fastBoot = false;
+             if (FastBoot) {       //Skip Sony logo
+                 if (PC == 0x80030000) {
+                    PC = GPR[31];
+                    Next_PC = PC + 4;
+                    FastBoot = false;
                     registerLoad.value = 0;
                     registerLoad.registerNumber = 0;
                     registerDelayedLoad = registerLoad;
                     return;
                  }
-             }*/
+             }
             //----------------------------------------------------------------------
 
 
             //PC must be 32 bit aligned, can be ignored?
-            if ((current_pc & 0x3) != 0) {
+            if ((Current_PC & 0x3) != 0) {
                 exception(this, LoadAddressError);
                 return;
             }
 
-            current = new Instruction(BUS.loadWord(pc));
+            CurrentInstruction = new Instruction(BUS.loadWord(PC));
 
-            delay_slot = _branch;   //Branch delay 
-            _branch = false;
+            DelaySlot = Branch;   //Branch delay 
+            Branch = false;
 
-            pc = next_pc;
-            next_pc = next_pc + 4;
+            PC = Next_PC;
+            Next_PC = Next_PC + 4;
 
             if (IRQ_CONTROL.isRequestingIRQ()) {  //Interrupt check 
-                cause |= 1 << 10;
+                Cause |= 1 << 10;
 
                 if (((SR & 1) != 0) && (((SR >> 10) & 1) != 0)) {
                     exception(this, IRQ);
                     return;
                 }
             }
-
-            executeInstruction(current);
-            registerTransfer(this);
+            /*if (BUS.debug) {
+                Console.WriteLine("[" + Current_PC.ToString("x").PadLeft(8, '0') + "]" + " --- " + CurrentInstruction.getfull().ToString("x").PadLeft(8,'0'));
+            }*/
+            ExecuteInstruction(CurrentInstruction);
+            RegisterTransfer(this);
            
         }
 
-        private void executeInstruction(Instruction instruction) {
+        private void ExecuteInstruction(Instruction instruction) {
             mainLookUpTable[instruction.getOpcode()](this, instruction);
         }
         private static void special(CPU cpu, Instruction instruction) {
             specialLookUpTable[instruction.get_subfunction()](cpu, instruction);
         }
-        private void registerTransfer(CPU cpu){    //Hanlde register transfers and delay slot
+        private void RegisterTransfer(CPU cpu){    //Hanlde register transfers and delay slot
             if (cpu.registerLoad.registerNumber != cpu.registerDelayedLoad.registerNumber) {
                 cpu.GPR[cpu.registerLoad.registerNumber] = cpu.registerLoad.value;
             }
@@ -230,7 +237,17 @@ namespace PSXEmulator {
                     switch (GPR[9]) {
                         case 0x3D:                       //putchar function (Prints the char in $a0)
                             character = (char)GPR[4];
-                            Console.Write(character);
+                            if (Char.IsAscii(character)) {
+                                if (Chars.Count > 0) {
+                                    string unicoded = Encoding.UTF8.GetString(Chars.ToArray());
+                                    Console.Write(unicoded);
+                                    Chars.Clear();
+
+                                }
+                                Console.Write(character);
+                            } else {
+                                Chars.Add((byte)GPR[4]);
+                            }
                             break;
 
                         case 0x3F:                          //puts function, similar to printf but differ in dealing with 0 character
@@ -291,17 +308,17 @@ namespace PSXEmulator {
         }
 
         private void loadTestRom(string? path) {
-            testRom = File.ReadAllBytes(path);
+            ExecutableData = File.ReadAllBytes(path);
 
-            uint addressInRAM = (uint)(testRom[0x018] | (testRom[0x018 + 1] << 8) | (testRom[0x018 + 2] << 16) | (testRom[0x018 + 3] << 24));
+            uint addressInRAM = (uint)(ExecutableData[0x018] | (ExecutableData[0x018 + 1] << 8) | (ExecutableData[0x018 + 2] << 16) | (ExecutableData[0x018 + 3] << 24));
 
-            for (int i = 0x800; i < testRom.Length; i++) {
+            for (int i = 0x800; i < ExecutableData.Length; i++) {
 
-                BUS.storeByte((uint)(addressInRAM), testRom[i]);
+                BUS.storeByte((uint)(addressInRAM), ExecutableData[i]);
                 addressInRAM++;
             }
-            this.pc = (uint)(testRom[0x10] | (testRom[0x10 + 1] << 8) | (testRom[0x10 + 2] << 16) | (testRom[0x10 + 3] << 24));
-            next_pc = this.pc + 4;
+            this.PC = (uint)(ExecutableData[0x10] | (ExecutableData[0x10 + 1] << 8) | (ExecutableData[0x10 + 2] << 16) | (ExecutableData[0x10 + 3] << 24));
+            Next_PC = this.PC + 4;
         }
 
         public void CDROM_trace(uint func) {
@@ -405,10 +422,10 @@ namespace PSXEmulator {
         }
         private static void illegal(CPU cpu, Instruction instruction) {
             Console.ForegroundColor = ConsoleColor.Red; 
-            Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') + " at PC: " + cpu.pc.ToString("x"));
+            Console.WriteLine("[CPU] Illegal instruction: " + instruction.getfull().ToString("X").PadLeft(8,'0') + " at PC: " + cpu.PC.ToString("x"));
             Console.ForegroundColor = ConsoleColor.Green;
             exception(cpu, IllegalInstruction);
-
+            cpu.IsStopped = true;
         }
 
         private static void swc3(CPU cpu, Instruction instruction) {
@@ -704,15 +721,15 @@ namespace PSXEmulator {
             */
             switch (a) {
                 case Int64 x when (a >= 0x00000000 && a <= 0x000007FF) || (a >= 0xFFFFF800 && a <= 0xFFFFFFFF):
-                    CPU.cycles += 6;
+                    //CPU.cycles += 6;
                     break;
 
                 case Int64 x when (a >= 0x00000800 && a <= 0x000FFFFF) || (a >= 0xFFF00000 && a <= 0xFFFFF801):
-                    CPU.cycles += 9;
+                    //CPU.cycles += 9;
                     break;
 
                 case Int64 x when (a >= 0x00100000 && a <= 0x7FFFFFFF) || (a >= 0x80000000 && a <= 0xFFF00001):
-                    CPU.cycles += 13;
+                    //CPU.cycles += 13;
                     break;
             }
 
@@ -747,15 +764,15 @@ namespace PSXEmulator {
 
             switch (a) {
                 case UInt64 x when a >= 0x00000000 && a <= 0x000007FF:
-                    CPU.cycles += 6;
+                    //CPU.cycles += 6;
                     break;
 
                 case UInt64 x when a >= 0x00000800 && a <= 0x000FFFFF:
-                    CPU.cycles += 9;
+                    //CPU.cycles += 9;
                     break;
 
                 case UInt64 x when a >= 0x00100000 && a <= 0xFFFFFFFF:
-                    CPU.cycles += 13;
+                    //CPU.cycles += 13;
                     break;
             }
 
@@ -825,21 +842,21 @@ namespace PSXEmulator {
             cpu.SR = cpu.SR | ((mode << 2) & 0x3f);
 
 
-            cpu.cause = exceptionCause << 2;                    //Update cause register
+            cpu.Cause = exceptionCause << 2;                    //Update cause register
 
-            cpu.epc = cpu.current_pc;                 //Save the current PC in register EPC
+            cpu.EPC = cpu.Current_PC;                 //Save the current PC in register EPC
 
-            if (cpu.delay_slot) {                   //in case an exception occurs in a delay slot
-                cpu.epc -= 4;
-                cpu.cause = (UInt32)(cpu.cause | (1 << 31));
+            if (cpu.DelaySlot) {                   //in case an exception occurs in a delay slot
+                cpu.EPC -= 4;
+                cpu.Cause = (UInt32)(cpu.Cause | (1 << 31));
             }
 
-            if (exceptionCause == IRQ && (cpu.epc & 0xFE000000) == 0x4A000000) {
-                cpu.epc += 4;
+            if (exceptionCause == IRQ && (cpu.EPC & 0xFE000000) == 0x4A000000) {
+                cpu.EPC += 4;
             }
 
-            cpu.pc = handler;                          //Jump to the handler address (no delay)
-            cpu.next_pc = cpu.pc + 4;
+            cpu.PC = handler;                          //Jump to the handler address (no delay)
+            cpu.Next_PC = cpu.PC + 4;
 
             
         }
@@ -874,7 +891,7 @@ namespace PSXEmulator {
 
             */
 
-            CPU.cycles += 36;
+            //CPU.cycles += 36;
         }
 
         private static void srl(CPU cpu, Instruction instruction) {
@@ -924,7 +941,7 @@ namespace PSXEmulator {
 
              */
 
-            CPU.cycles += 36;
+            //CPU.cycles += 36;
 
         }
 
@@ -974,7 +991,7 @@ namespace PSXEmulator {
             if (((value >> 17) & 0xF) == 0x8) {
                //Store return address if the value of bits [20:17] == 0x8
                 cpu.directWrite.registerNumber = 31;
-                cpu.directWrite.value = cpu.next_pc;
+                cpu.directWrite.value = cpu.Next_PC;
             }
 
         }
@@ -1010,15 +1027,15 @@ namespace PSXEmulator {
         private static void jalr(CPU cpu, Instruction instruction) {
             // Store return address in $rd
             cpu.directWrite.registerNumber = instruction.get_rd();
-            cpu.directWrite.value = cpu.next_pc;
+            cpu.directWrite.value = cpu.Next_PC;
 
             if ((cpu.GPR[instruction.get_rs()] & 0x3) != 0) {
                 exception(cpu, LoadAddressError);
                 return;
             }
             // Jump to address in $rs
-            cpu.next_pc = cpu.GPR[instruction.get_rs()];
-            cpu._branch = true;
+            cpu.Next_PC = cpu.GPR[instruction.get_rs()];
+            cpu.Branch = true;
 
         }
 
@@ -1064,7 +1081,7 @@ namespace PSXEmulator {
 
         private static void jal(CPU cpu, Instruction instruction) {
             cpu.directWrite.registerNumber = 31;
-            cpu.directWrite.value = cpu.next_pc;             //Jump and link, store the PC to return to it later
+            cpu.directWrite.value = cpu.Next_PC;             //Jump and link, store the PC to return to it later
             jump(cpu,instruction);
         }
         private static void sh(CPU cpu, Instruction instruction) {
@@ -1179,11 +1196,11 @@ namespace PSXEmulator {
         }
 
         private static void jr(CPU cpu, Instruction instruction) {
-            cpu.next_pc = cpu.GPR[instruction.get_rs()];      //Return or Jump to address in register 
-            if ((cpu.next_pc & 0x3) != 0) {
+            cpu.Next_PC = cpu.GPR[instruction.get_rs()];      //Return or Jump to address in register 
+            if ((cpu.Next_PC & 0x3) != 0) {
                 exception(cpu, LoadAddressError);
             }
-            cpu._branch = true;
+            cpu.Branch = true;
         }
 
         private static void addu(CPU cpu, Instruction instruction) {
@@ -1212,8 +1229,8 @@ namespace PSXEmulator {
         }
 
         private static void jump(CPU cpu, Instruction instruction) {
-            cpu.next_pc = (cpu.next_pc & 0xf0000000) | (instruction.imm_jump() << 2);
-            cpu._branch = true;
+            cpu.Next_PC = (cpu.Next_PC & 0xf0000000) | (instruction.imm_jump() << 2);
+            cpu.Branch = true;
         }
 
 
@@ -1234,8 +1251,8 @@ namespace PSXEmulator {
 
             switch (instruction.get_rd()) {
                 case 12: cpu.registerDelayedLoad.value = cpu.SR; break;
-                case 13: cpu.registerDelayedLoad.value = cpu.cause; break;
-                case 14: cpu.registerDelayedLoad.value = cpu.epc; break;
+                case 13: cpu.registerDelayedLoad.value = cpu.Cause; break;
+                case 14: cpu.registerDelayedLoad.value = cpu.EPC; break;
                 default: return; //yeah no, TODO: handle the rest
                     throw new Exception("Unhandled cop0 register: " + instruction.get_rd());
             }
@@ -1277,29 +1294,18 @@ namespace PSXEmulator {
 
         private static void branch(CPU cpu, UInt32 offset) {
             offset = offset << 2;
-            cpu.next_pc = cpu.next_pc + offset;
-            cpu.next_pc = cpu.next_pc - 4;        //Cancel the +4 from the emu cycle 
-            cpu._branch = true;    
+            cpu.Next_PC = cpu.Next_PC + offset;
+            cpu.Next_PC = cpu.Next_PC - 4;        //Cancel the +4 from the emu cycle 
+            cpu.Branch = true;    
         }
      
         internal void tick() {
-            if (isPaused) { return; }
+            if (IsPaused || IsStopped) { return; }
 
             for (int i = 0; i < CYCLES_PER_FRAME;) {        //Timings are nowhere near accurate 
-
-                /*try {
-                    cpu.emu_cycle();
-
-                }
-                catch (Exception ex) {
-                    File.WriteAllTextAsync("Crash.log", ex.ToString());
-                    Close();
-                }*/
-
+                int add = IsReadingFromBIOS ? 20 : 2;
                 emu_cycle();
-                //emu_cycle();
-
-                cycles += 2;
+                cycles += add;
 
                 if (BUS.Timer1.isUsingSystemClock()) { BUS.Timer1.tick(cycles); }
                 BUS.Timer2.tick(cycles);
@@ -1312,5 +1318,6 @@ namespace PSXEmulator {
                 cycles = 0;
             }
         }
+        bool IsReadingFromBIOS => BUS.BIOS.range.contains(BUS.mask(PC));
     }
 }

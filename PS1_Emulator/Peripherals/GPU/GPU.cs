@@ -136,7 +136,7 @@ namespace PSXEmulator {
         }
 
 
-        public UInt32 read_GPUSTAT() { //TODO make this more accurite depending on GPU state
+        public UInt32 read_GPUSTAT() { //TODO make this more accurate depending on GPU state
             UInt32 status = 0;
 
             status |= ((uint)page_base_x) << 0;
@@ -184,27 +184,14 @@ namespace PSXEmulator {
 
             UInt32 dma_request;
             switch (dmaDirection) {
-                case DmaDirection.Off: 
-                    dma_request = 0;
-                    break;
-
-                case DmaDirection.Fifo: //(if full it should be 0)
-                    dma_request = 1;
-                    break;
-                case DmaDirection.CpuToGp0:
-                    dma_request = (status >> 28) & 1;
-                    break;
-
-                case DmaDirection.VRamToCpu: 
-                    dma_request = (status >> 27) & 1;
-                    break;
-
-                default:
-                    throw new Exception("Invalid DMA direction: " + this.dmaDirection);
+                case DmaDirection.Off: dma_request = 0;  break;
+                case DmaDirection.Fifo: dma_request = 1;break;      //(if full it should be 0)
+                case DmaDirection.CpuToGp0: dma_request = (status >> 28) & 1; break;
+                case DmaDirection.VRamToCpu: dma_request = (status >> 27) & 1; break;
+                default: throw new Exception("Invalid DMA direction: " + this.dmaDirection);
             }
 
             status |= ((uint)dma_request) << 25;
-
 
             //return 0b01011110100000000000000000000000;
             return status;
@@ -238,7 +225,6 @@ namespace PSXEmulator {
                     interrupt = true;
                     TIMER1.GPUinVblank = true;
                     TIMER1.GPUGotVblankOnce = true;
-                    
                 }
 
                 if (!TIMER1.isUsingSystemClock()) {

@@ -6,7 +6,7 @@ namespace PSXEmulator {
         public UInt32 control = 0x07654321;
 
         //Interrupt register
-        public UInt32 mastet_enabled;     //Bit 23
+        public UInt32 master_enabled;     //Bit 23
         public byte ch_irq_en;            //irq enable for indivisual channels Bits [22:16]
         public byte ch_irq_flags;         //Bits [30:24] indivisual channels (reset by setting 1)
         public UInt32 force_irq;          //Bit 15 (higher priority than Bit 23)
@@ -150,9 +150,9 @@ namespace PSXEmulator {
             v = v | read_write;
             v = v | (force_irq << 15);
             v = v | (((UInt32)ch_irq_en) << 16);
-            v = v | (mastet_enabled << 23);
+            v = v | (master_enabled << 23);
             v = v | (((UInt32)ch_irq_flags) << 24);
-            v = v | (irq() << 31);
+            v = v | (IRQRequest() << 31);
 
             return v;
         }
@@ -163,16 +163,15 @@ namespace PSXEmulator {
             read_write = (byte)(value & 0x3f);
             force_irq = (value >> 15) & 1;
             ch_irq_en = (byte)((value >> 16) & 0x7f);
-            mastet_enabled = (value >> 23) & 1;
+            master_enabled = (value >> 23) & 1;
             ch_irq_flags = (byte)(ch_irq_flags & (~((value >> 24) & 0x7f)));      //0x7f??
 
             for (int i = 0; i < channels.Length; i++) {
                 channels[i].finished = ((ch_irq_flags >> i) & 1) == 1;
             }
-
         }
-        public UInt32 irq() {
-            if ((force_irq == 1) || ((mastet_enabled == 1) && ((ch_irq_en & ch_irq_flags) > 0))) {
+        public UInt32 IRQRequest() {
+            if ((force_irq == 1) || ((master_enabled == 1) && ((ch_irq_en & ch_irq_flags) > 0))) {
                 return 1;
             }
             else {
