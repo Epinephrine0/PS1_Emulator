@@ -9,9 +9,11 @@ namespace PSXEmulator {
         public UInt32 LoadWord(UInt32 address) {
             //CPU.cycles++;
             uint offset = address - range.start;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
+
+            //Handle memory mirror, but without %  
+            //x % (2^n) is equal to x & ((2^n)-1)
+            //So x % 2MB = x & ((2^21)-1), and of course the power is just left shift
+            uint final = offset & ((1 << 21) - 1); 
 
             UInt32 b0 = data[final + 0];
             UInt32 b1 = data[final + 1];
