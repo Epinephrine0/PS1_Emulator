@@ -112,7 +112,7 @@ namespace PSXEmulator {
         public CD_ROM() {   //Overload for when booting EXEs
             //Stub for the CDROM Tests
             LoadLUT();
-            DataController = new CDROMDataController(@"C:\Users\Old Snake\Desktop\Archive");
+            DataController = new CDROMDataController();
         }
         private void LoadLUT() {
             //Fill the functions lookUpTable with illegal first, to be safe
@@ -175,7 +175,7 @@ namespace PSXEmulator {
                 return;
             }
             LookUpTable[command](this);
-            Console.WriteLine("[CDROM] Command: 0x" + command.ToString("x"));
+            //Console.WriteLine("[CDROM] Command: 0x" + command.ToString("x"));
         }
         private byte CDROM_Status() {
             PRMEMPT = ParameterBuffer.Count == 0 ? 1 : 0;
@@ -571,7 +571,7 @@ namespace PSXEmulator {
             cdrom.ReadRate = OneSecond / (cdrom.DoubleSpeed ? 150 : 75);
 
             if (cdrom.SetLoc) {
-                Console.WriteLine("[CDROM] Read without Seek");
+                //Console.WriteLine("[CDROM] Read without Seek");
                 cdrom.ReadRate += (int)CalculateSeekTime((int)cdrom.CurrentIndex, (int)newIndex);
                 cdrom.SetLoc = false;
             }

@@ -104,8 +104,7 @@ namespace PSXEmulator {
                 return 0x00070777;
 
             } else if (MDEC.range.contains(physical_address)) {
-                Console.WriteLine("[BUS] Ignored MDEC access");
-               return 0xFF;
+               return MDEC.read(physical_address);
 
             }else {
                 throw new Exception("cannot find address: " + address.ToString("X") + " in memory map");
@@ -158,8 +157,8 @@ namespace PSXEmulator {
                 Scratchpad.storeWord(physical_address, value);
 
             }else if (MDEC.range.contains(physical_address)) {
-                //TODO
-                Console.WriteLine("[BUS] Ignored MDEC access");
+                MDEC.write(physical_address, value);
+
             } else {
                 throw new Exception("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
             }
@@ -385,8 +384,7 @@ namespace PSXEmulator {
                     UInt32 data = RAM.LoadWord(current_address);
 
                     switch (ch.get_portnum()) {
-                        case 0: Console.WriteLine("[BUS] Ignored MDEC DMA");
-                            break;   //MDECin  (RAM to MDEC)
+                        case 0: MDEC.CommandAndParameters(data); break;   //MDECin  (RAM to MDEC)
 
                         case 2: GPU.write_GP0(data); break;
 
@@ -407,7 +405,7 @@ namespace PSXEmulator {
                 else {
                     switch (ch.get_portnum()) {
                         case 1:
-                            Console.WriteLine("[BUS] Ignored MDEC DMA");
+                            //Console.WriteLine("[BUS] Ignored MDEC DMA");
                             break; //MDECout (MDEC to RAM)
 
                         case 2:  //GPU

@@ -36,7 +36,7 @@ namespace PSXEmulator {
         enum SectorType {
             Video = 1, Audio = 2, Data = 4
         }
-        public CDROMDataController(string diskPath) {
+        public CDROMDataController(string diskPath = null) {
             if (diskPath != null) {
                 Disk = new Disk(diskPath);
                 if (Disk.IsValid) {
