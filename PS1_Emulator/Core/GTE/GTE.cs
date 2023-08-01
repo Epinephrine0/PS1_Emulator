@@ -303,169 +303,28 @@ namespace PSXEmulator {
 
             return counter;
         }
-
-        internal void loadCommand(Instruction instruction) {
-            uint opcode = instruction.get_subfunction();        //0-5
-
-            switch (opcode) {
-
-                case 0x01:
-
-                    currentCommand = new Command(instruction, 15);
-                    break;
-
-                case 0x10:
-
-                    currentCommand = new Command(instruction, 8);
-                    break;
-
-                case 0x11:
-
-                    currentCommand = new Command(instruction, 11);
-                    break;
-                case 0x12:
-
-                    currentCommand = new Command(instruction, 8);
-                    break;
-
-                 case 0x30:
-
-                     currentCommand = new Command(instruction, 23);
-                     break;
-                
-
-                case 0x13:
-
-                    currentCommand = new Command(instruction, 19);
-                    break;
-
-                case 0x14:
-
-                    currentCommand = new Command(instruction, 13);
-                    break;
-
-                case 0x16:
-
-                    currentCommand = new Command(instruction, 44);
-                    break;
-
-
-                case 0x6:
-
-                    currentCommand = new Command(instruction, 8);
-
-                    break;
-
-                case 0xC:
-
-                    currentCommand = new Command(instruction, 6);
-
-                    break;
-
-                case 0x1B:
-
-                    currentCommand = new Command(instruction, 17);
-
-                    break;
-
-                case 0x1C:
-
-                    currentCommand = new Command(instruction, 11);
-
-                    break;
-
-                case 0x1E:
-
-                    currentCommand = new Command(instruction, 14);
-
-                    break;
-
-                case 0x20:
-
-                    currentCommand = new Command(instruction, 30);
-
-                    break;
-
-                case 0x28:
-
-                    currentCommand = new Command(instruction, 5);
-
-                    break;
-
-                case 0x29:
-
-                    currentCommand = new Command(instruction, 8);
-
-                    break;
-
-                case 0x2A:
-
-                    currentCommand = new Command(instruction, 17);
-
-                    break;
-
-                 case 0x2D:
-
-                     currentCommand = new Command(instruction, 5);
-
-                     break;
-
-                case 0x2E:
-
-                    currentCommand = new Command(instruction, 6);
-
-                    break;
-
-                case 0x3D:
-
-                    currentCommand = new Command(instruction, 5);
-
-                    break;
-
-                case 0x3E:
-
-                    currentCommand = new Command(instruction, 5);
-
-                    break;
-
-                case 0x3F:
-
-                    currentCommand = new Command(instruction, 39);
-
-                    break;
-
-                default: throw new Exception("Unimplemented GTE Opcode: " + opcode.ToString("x"));
-
-            }
-
-
-        }
         public void execute(Instruction currentCommand) {
-
-            uint opcode = currentCommand.get_subfunction();        //0-5
+            uint opcode = currentCommand.Get_Subfunction();        //0-5
             FLAG = 0;
 
-            sf = (uint)((currentCommand.getfull() >> 19) & 1);
-            lm = (currentCommand.getfull() >> 10 & 1) == 1;
-            tx = currentCommand.getfull() >> 13 & 3;
-            vx = currentCommand.getfull() >> 15 & 3;
-            mx = currentCommand.getfull() >> 17 & 3;
+            sf = (uint)((currentCommand.Getfull() >> 19) & 1);
+            lm = (currentCommand.Getfull() >> 10 & 1) == 1;
+            tx = currentCommand.Getfull() >> 13 & 3;
+            vx = currentCommand.Getfull() >> 15 & 3;
+            mx = currentCommand.Getfull() >> 17 & 3;
 
             switch (opcode) {
                 case 0x01:
-
                     RTPS(0, true);
                     //CPU.cycles += 15;
                     break;
 
                 case 0x10:
-
                     DPCS(false);
                     //CPU.cycles += 8;
                     break;
 
                 case 0x30:
-
                     RTPS(0, false);
                     RTPS(1, false);
                     RTPS(2, true);
@@ -473,82 +332,69 @@ namespace PSXEmulator {
                     break;
 
                 case 0x6:
-
                     NCLIP();
                     //CPU.cycles += 8;
                     break;
 
                 case 0x11:
-
                     INTPL();
                     //CPU.cycles += 8;
                     break;
 
                 case 0x12:
-
                     MVMVA(mx, vx, tx);
                     //CPU.cycles += 8;
                     break;
 
                 case 0x13:
-
                     NCDS(0);
                     //CPU.cycles += 19;
                     break;
 
                 case 0x14:
-
                     CDP();
                     //CPU.cycles += 13;
                     break;
 
                 case 0x16:
-
                     NCDS(0);
                     NCDS(1);
                     NCDS(2);
-                   // CPU.cycles += 44;
+                    //CPU.cycles += 44;
                     break;
 
                 case 0x2D:
-
                     AVSZ3();
-                   // CPU.cycles += 5;
+                    //CPU.cycles += 5;
                     break;
 
                 case 0x2E:
-
                     AVSZ4();
-                   // CPU.cycles += 6;
+                    //CPU.cycles += 6;
                     break;
 
 
                 case 0xC:
-
                     OP();
                     //CPU.cycles += 6;
                     break;
 
                 case 0x1B:
-
                     NCCS(0);
-                   // CPU.cycles += 17;
+                    //CPU.cycles += 17;
                     break;
 
                 case 0x1C:
-
                     CC();
                     //CPU.cycles += 11;
                     break;
 
                 case 0x1E:
-
                     NCS(0);
-                   // CPU.cycles += 14;
+                    //CPU.cycles += 14;
                     break;
 
                 case 0x20:
-
                     NCS(0);
                     NCS(1);
                     NCS(2);
@@ -556,53 +402,42 @@ namespace PSXEmulator {
                     break;
 
                 case 0x28:
-
                     SQR();
-                   // CPU.cycles += 5;
+                    //CPU.cycles += 5;
                     break;
 
                 case 0x29:
-
                     DCPL();
                     //CPU.cycles += 8;
                     break;
 
                 case 0x2A:
-
                     DPCS(true);
                     DPCS(true);
                     DPCS(true);
-                  //  CPU.cycles += 17;
+                    //CPU.cycles += 17;
                     break;
 
                 case 0x3D:
-
                     GPF();
-                   // CPU.cycles += 5;
+                    //CPU.cycles += 5;
                     break;
 
                 case 0x3E:
-
                     GPL();
-                   // CPU.cycles += 5;
+                    //CPU.cycles += 5;
                     break;
 
                 case 0x3F:
-
                     NCCS(0);
                     NCCS(1);
                     NCCS(2);
-                   // CPU.cycles += 39;
+                    //CPU.cycles += 39;
                     break;
 
-                default:
-                    throw new Exception("Unimplemented GTE Opcode: " + opcode.ToString("x"));
-
+                default: throw new Exception("Unimplemented GTE Opcode: " + opcode.ToString("x"));
             }
-
         }
-
-       
         private void GPL() {
             /*
              * [MAC1,MAC2,MAC3] = [0,0,0]                            ;<--- for GPF only
