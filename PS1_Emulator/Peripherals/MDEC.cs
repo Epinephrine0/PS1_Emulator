@@ -1,10 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Net;
-using System.Numerics;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using static PSXEmulator.CDROMDataController;
+using System.Linq;
 
 namespace PSXEmulator.Peripherals {
     public class MDEC { //Macroblock Decoder
@@ -35,6 +31,16 @@ namespace PSXEmulator.Peripherals {
         private List<byte> ColorQuantTable = new List<byte>(64);
         private List<short> ScaleTable = new List<short>(64);
 
+        public Queue<ushort> Compresssed = new Queue<ushort>();
+        public short[][] blk = {
+            new short[64], new short[64], new short[64],
+            new short[64], new short[64], new short[64]
+        };
+        short[] dst = new short[64];
+
+        //Final Colors
+        public List<byte> OutputBuffer = new List<byte>();
+
         private int[] ZigZag = {
             0 ,1 ,5 ,6 ,14,15,27,28,
             2 ,4 ,7 ,13,16,26,29,42,
@@ -55,7 +61,6 @@ namespace PSXEmulator.Peripherals {
         }
         MDECState CurrentState = MDECState.Idle;
 
-        public Macroblock CurrentMacroblock;
         public MDEC() {
             WriteStatus(InitialStatus);   //Reset
         }
@@ -63,10 +68,8 @@ namespace PSXEmulator.Peripherals {
             uint offset = address - range.start;
             switch (offset) {
                 case 0:
-                    Console.WriteLine("[MDEC] Reading Response!");
-                    uint data = CurrentMacroblock.OutputData[CurrentMacroblock.DataPtr++];
-
-                    return data;              //Response/Data read
+                    Console.WriteLine("\n[MDEC] Reading Data Non-DMA");
+                    return ReadCurrentMacroblock();              //Response/Data read
 
                 case 4:
                     //Console.WriteLine("[MDEC] Reading Status!");
@@ -118,7 +121,7 @@ namespace PSXEmulator.Peripherals {
             DataInRequestEnabled = (value >> 30) & 1;
             DataOutRequestEnabled = (value >> 29) & 1;
             if (reset) {
-                Console.WriteLine("[MDEC] Reset!");
+                Console.WriteLine("\n[MDEC] Reset!");
                 WriteStatus(InitialStatus);   //Reset
                 LuminanceQuantTable.Clear();
                 ColorQuantTable.Clear();
@@ -130,19 +133,19 @@ namespace PSXEmulator.Peripherals {
             switch (CurrentState) {
                 case MDECState.LoadingScaleTable:
                     //WordsRemaining -= 2;
-                    ScaleTable.AddRange(new short[] { (short)value, (short)(value >> 16)});
+                    ScaleTable.AddRange(new short[] { (short)value, (short)(value >> 16) });
                     if (ScaleTable.Count == 64) {
-                        Console.WriteLine("[MDEC] Finished loading Luminance Quant Table!");
+                        Console.WriteLine("\n[MDEC] Finished loading Scale Table!");
                         CurrentState = MDECState.Idle;
                     }
                     return;
 
                 case MDECState.LoadingLuminanceQuantTable:
                     //WordsRemaining -= 4;
-                    LuminanceQuantTable.AddRange(new byte[] {(byte)value, (byte)(value >> 8), (byte)(value >> 16), (byte)(value >> 24) });
+                    LuminanceQuantTable.AddRange(new byte[] { (byte)value, (byte)(value >> 8), (byte)(value >> 16), (byte)(value >> 24) });
 
                     if (LuminanceQuantTable.Count == 64) {
-                        Console.WriteLine("[MDEC] Finished loading Luminance Quant Table!");
+                        Console.WriteLine("\n[MDEC] Finished loading Luminance Quant Table!");
                         CurrentState = MDECState.Idle;
                     }
                     return;
@@ -157,79 +160,87 @@ namespace PSXEmulator.Peripherals {
                         return;
                     } else {
                         //WordsRemaining = 0xFFFF;
-                        Console.WriteLine("[MDEC] Finished loading both Tables!, R: " + WordsRemaining.ToString("x")) ;
+                        Console.WriteLine("\n[MDEC] Finished loading both Tables!, R: " + WordsRemaining.ToString("x"));
                         CurrentState = MDECState.Idle;
                         break;  //Break out of the switch instead of returning 
                     }
 
                 case MDECState.LoadingData:
-                     //Console.WriteLine("Added: " + value.ToString("x"));
-                     CurrentMacroblock.CompressedData[CurrentMacroblock.DataPtr++] = (byte)value;
-                     CurrentMacroblock.CompressedData[CurrentMacroblock.DataPtr++] = (byte)(value >> 16);
-                     //Console.WriteLine(CurrentMacroblock.DataPtr);
-                    if (CurrentMacroblock.IsFull) {
-                        Console.WriteLine("Loaded Compressed Data!");
+                    Compresssed.Enqueue((ushort)value);
+                    Compresssed.Enqueue((ushort)(value >> 16));
+                    Console.WriteLine("Enq: " + value.ToString("x") + " Size: " + Compresssed.Count);
+                    WordsRemaining--;
+
+                    if (WordsRemaining == 0xFFFF) {
+                        Console.WriteLine("\nLoaded Compressed Data!");
                         CurrentState = MDECState.Idle;
                         DataInRequest = 0;
                         DataInFifoFull = 1;
                         DataOutRequest = 1;
-                        CurrentBlock = 4;
-                        CurrentMacroblock.DataPtr = 0;
+                        DataOutFifoEmpty = 0;
+                        CommandBusy = 0;
+                        CurrentBlock = 0;
 
-                        Span<uint> blk = new Span<uint>(CurrentMacroblock.OutputData);
-                        Span<uint> blk_unsliced = new Span<uint>(CurrentMacroblock.OutputData);
-                        Span<ushort> src = new Span<ushort>(CurrentMacroblock.CompressedData);
-
-                        if (CurrentMacroblock.Depth > 1) {
-                            Console.WriteLine("15/24 bit");
-                            rl_decode_block(ref blk, ref src, ref ColorQuantTable); blk = blk.Slice(64);
-                            rl_decode_block(ref blk, ref src, ref ColorQuantTable); blk = blk.Slice(64);
-                            rl_decode_block(ref blk, ref src, ref LuminanceQuantTable); yuv_to_rgb(ref blk_unsliced, 3, CurrentMacroblock.Sign == 1, 0, 0); blk = blk.Slice(64);
-                            rl_decode_block(ref blk, ref src, ref LuminanceQuantTable); yuv_to_rgb(ref blk_unsliced, 3, CurrentMacroblock.Sign == 1, 0, 8); blk = blk.Slice(64);
-                            rl_decode_block(ref blk, ref src, ref LuminanceQuantTable); yuv_to_rgb(ref blk_unsliced, 3, CurrentMacroblock.Sign == 1, 8, 0); blk = blk.Slice(64);
-                            rl_decode_block(ref blk, ref src, ref LuminanceQuantTable); yuv_to_rgb(ref blk_unsliced, 3, CurrentMacroblock.Sign == 1, 8, 8); 
-
+                        if (DataOutputDepth > 1) {
+                            Console.WriteLine("\n15/24 bit");
+                            
 
                         } else {
-                     
-                            rl_decode_block(ref blk, ref src, ref LuminanceQuantTable);
-                            y_to_mono(ref blk, CurrentMacroblock.Sign == 1);
+                            while(Compresssed.Count > 0) {
+                                rl_decode_block(ref blk[CurrentBlock], ref Compresssed, LuminanceQuantTable);
+                                if (k < 64) {
+                                    return;     //Incomplete block
+                                }
+                                idct_core(ref blk[CurrentBlock]);
+                                y_to_mono(ref blk[CurrentBlock], DataOutputSigned == 1);
+                                CurrentBlock = (CurrentBlock + 1) % 6;
+                            }
                         }
                     }
                     return;
-
             }
 
             //If we reach here then the value isn't a parameter of anything
             //Decode and Execute
             ExecuteCommand(value);
         }
-        private void y_to_mono(ref Span<uint> yblk, bool IsSigned) {
-            uint y;
+
+        public uint ReadCurrentMacroblock() {
+            uint data = (uint)(OutputBuffer[0] | (OutputBuffer[1] << 8) | (OutputBuffer[2] << 16) | (OutputBuffer[3] << 24));
+            OutputBuffer.RemoveRange(0,4);
+
+            //if (WithinBlockIndex >= 64) { WithinBlockIndex = 0; BlkNumber++; }
+            //if (BlkNumber >= 6) { BlkNumber = 0; WithinBlockIndex = 0; DataOutFifoEmpty = 1; Console.WriteLine("Reached Last Block"); }
+
+            return data;
+        }
+
+        private void y_to_mono(ref short[] yblk, bool IsSigned) {
+            short y;
+            int signedY;
+
             for (int i = 0; i < 64; i++) {
                 y = yblk[i];
                 y &= 0x1FF;
-                y = (ushort)Math.Clamp(y, -128, 127);
+                signedY = signed9Bits((int)y);
+                signedY = Math.Clamp(signedY, -128, 127);
                 if (!IsSigned) {
-                    y ^= 0x80;
+                    signedY += 128;
                 }
-                yblk[i] = y;
+                OutputBuffer.Add((byte)signedY);
             }
         }
-        private void yuv_to_rgb(ref Span<uint> cblks, int blockN, bool IsSigned, int xx, int yy) {
-            int crPos = 0;
-            int cbPos = 64;
-            int yblk = 64 * blockN;
 
+        private void yuv_to_rgb(ref uint[] cblks, bool IsSigned, int xx, int yy) {
             double R,G,B,C_Y;   //Idk what to call Y, there is already small y
             ushort outR,outG,outB;
 
             for (int y = 0; y <= 7; y++) {
                 for (int x = 0; x <= 7; x++) {
-                    R = cblks[crPos + ((x + xx) / 2) + ((y + yy) / 2) * 8];
-                    B = cblks[cbPos + ((x + xx) / 2) + ((y + yy) / 2) * 8];
+                    R = blk[0][((x + xx) / 2) + ((y + yy) / 2) * 8];
+                    B = blk[1][((x + xx) / 2) + ((y + yy) / 2) * 8];
                     G = (-0.3437 * B) + (-0.7143 * R); R = (1.402 * R); B = (1.772 * B);
-                    C_Y = cblks[yblk + (x) + (y) * 8];
+                    C_Y = cblks[(x) + (y) * 8];
                     outR = (ushort)Math.Clamp(C_Y + R,- 128, 127);
                     outG = (ushort)Math.Clamp(C_Y + G, -128, 127);
                     outB = (ushort)Math.Clamp(C_Y + B, -128, 127);
@@ -237,67 +248,74 @@ namespace PSXEmulator.Peripherals {
                         outR ^= 0x80; 
                         outG ^= 0x80;
                         outB ^= 0x80;
-                        cblks[(x + xx) + (y + yy) * 16] = ((uint)outB << 16) | ((uint)outG << 8) | outR;
+                        //Output[(x + xx) + (y + yy) * 16] = ((uint)outB << 16) | ((uint)outG << 8) | outR;
                     }
                 }
             }
         }
+        ushort k = 64;
+        ushort n;
+        ushort q_scale;
+        int val;
 
-        private void rl_decode_block(ref Span<uint> blk, ref Span<ushort> src, ref List<byte> qt) {   //Passed by refrence so that changes affect the actual input
-            int q_scale;
-            int val;
-            ushort n;
-            int k;
-            for (;;) {      //@skip
-                n = src[0];
-                src = src.Slice(2);
+        private void rl_decode_block(ref short[] blk, ref Queue<ushort> src, List<byte> qt) {   //Passed by refrence so that changes affect the actual input
+
+            if(k >= blk.Length) {
+                for (int i = 0; i < blk.Length; i++) { blk[i] = 0; }
                 k = 0;
-                if (n == 0xFE00) {   //Loop until you skip all paddings
-                    continue;
-                }
-                q_scale = (n >> 10) & 0x3F;
-                val = signed10bit(n & 0x3FF) * qt[k];
-                break;
+                n = src.Dequeue();
+                q_scale = (ushort)((n >> 10) & 0x3F);
+                val = signed10bits(signed10bits((n & 0x3FF) * qt[k]) & 0x3FF);
+                k = (ushort)(k + ((n >> 10) & 0x3F) + 1);
             }
-            for (;;) {     //@lop
-                if (q_scale == 0) { val = signed10bit(n & 0x3FF) * 2; }
+
+            while(src.Count > 0 && src.Peek() == 0xFE00) { src.Dequeue(); }
+            if (src.Count == 0) { return; }
+
+         
+            Console.WriteLine("First:" + n.ToString("x") + " --- K: " + k);
+            while (k < 64) {
+                if (q_scale == 0) { val = signed10bits(n & 0x3FF) * 2; }
                 val = Math.Clamp(val, -0x400, +0x3FF);
-                if (q_scale > 0) { blk[ZigZag[k]] = (uint)val; }
-                if (q_scale == 0) { blk[k] = (uint)val; }
-                n = src[0]; src = src.Slice(2);
-                k = k + ((n >> 10) & 0x3F) + 1;
-                if (k <= 63) {
-                    val = (signed10bit(n & 0x3FF) * qt[k] * q_scale + 4) / 8;
-                    if (src.Length > 0) {
-                        continue;
-                    }
-                }
-                idct_core(ref blk);
-                return;
+                if (q_scale > 0) { blk[ZigZag[k]] = (short)val; }
+                if (q_scale == 0) { blk[k] = (short)val; }
+                if(src.Count == 0) { return; }
+                n = src.Dequeue();
+
+                k = (ushort)(k + ((n >> 10) & 0x3F) + 1);
+
+                Console.WriteLine("Next:" + n.ToString("x") + " --- K: " + k);
+
+                val = (signed10bits(n & 0x3FF) * qt[k & 0x3F] * q_scale + 4) / 8;
             }
         }
 
-        private void idct_core(ref Span<uint> src) {
-            Span<uint> dst = new uint[src.Length]; Span<uint> tmp; int sum;
-            for (int pass = 0; pass <= 1; pass++) { //Inclusive?
+        private void idct_core(ref short[] src) {
+
+            int sum;
+
+            for (int pass = 0; pass < 2; pass++) { 
                 for (int x = 0; x <= 7; x++) {
                     for (int y = 0; y <= 7; y++) {
                         sum = 0;
                         for (int z = 0; z <= 7; z++) {
-                            sum = (int)(sum + src[y + z * 8] * (ScaleTable[x + z * 8] / 8));
+                            sum = (int)(sum + ((int)src[y + z * 8]) * (ScaleTable[x + z * 8] / 8));
                         }
-                        dst[x + y * 8] = (ushort)((sum + 0x0fff) / 0x2000);
+                        dst[x + y * 8] = (short)((sum + 0x0fff) / 0x2000);
                     }
                 }
-                tmp = dst;
-                dst = src;
-                src = tmp;
+                (src, dst) = (dst, src);
             }
         }
 
-        private int signed10bit(int v) {
-            return ((v << 22) >> 22);
+        private int signed10bits(int val) {
+            return (val << 22) >> 22;
         }
+
+        private int signed9Bits(int val) {
+            return (val << 23) >> 23;
+        }
+
         private void ExecuteCommand(uint value) {
             uint opcode = value >> 29;
             switch (opcode) {
@@ -319,7 +337,7 @@ namespace PSXEmulator.Peripherals {
             /* This command has no function. Command bits 25-28 are reflected to Status bits 23-26 as usually. 
             Command bits 0-15 are reflected to Status bits 0-15 (similar as the "number of parameter words" for MDEC(1),
             but without the "minus 1" effect, and without actually expecting any parameters). */
-            Console.WriteLine("[MDEC] NOP");
+            Console.WriteLine("\n[MDEC] NOP");
             DataOutputBit15 = (value >> 25) & 1;
             DataOutputSigned = (value >> 26) & 1;
             DataOutputDepth = (value >> 27) & 0x3;
@@ -329,11 +347,12 @@ namespace PSXEmulator.Peripherals {
             LuminanceQuantTable.Clear();
             bool loadingBoth = ((command & 1) == 1);
             if (loadingBoth) {
-                Console.WriteLine("[MDEC] Loading Both Tables");
+                Console.WriteLine("\n[MDEC] Loading Both Tables");
                 CurrentState = MDECState.LoadingLuminanceAndColorQuantTable;
-            } else {
-                Console.WriteLine("[MDEC] Loading Luminance Quant Table ");
                 ColorQuantTable.Clear();
+
+            } else {
+                Console.WriteLine("\n[MDEC] Loading Luminance Quant Table ");
                 CurrentState = MDECState.LoadingLuminanceQuantTable;
             }
             //Bit25-28 are copied to STAT.23-26
@@ -355,38 +374,32 @@ namespace PSXEmulator.Peripherals {
             uint depth = (value >> 27) & 0x3;
             uint signed = (value >> 26) & 1;
             uint outBit15 = (value >> 25) & 1;
-            uint numberOfParameters = (value & 0xFFFF);
-            CurrentMacroblock = new Macroblock(depth, signed, outBit15, numberOfParameters * 2);
+            ushort numberOfParameters = ((ushort)(value & 0xFFFF));
+
+            this.DataOutputDepth = depth;
+            this.DataOutputSigned = signed;
+            this.DataOutputBit15 = outBit15;
+            this.WordsRemaining = (ushort)(numberOfParameters - 1);
+
             CurrentState = MDECState.LoadingData;
+
             DataInRequest = 1;
             DataOutFifoEmpty = 0;
             DataInFifoFull = 0;
             CommandBusy = 1;
 
-            Console.WriteLine("Decode Macroblock -> " + value.ToString("x"));
+            for (int i = 0; i < blk.Length; i++) {
+                for (int j = 0; j < 64; j++) {
+                    blk[i][j] = 0;
+                }
+            }
+
+            Console.WriteLine("\nDecode Macroblock -> " + value.ToString("x"));
             Console.WriteLine("Data Output Depth: " + depth);
             Console.WriteLine("Data Output Sign: " + signed);
             Console.WriteLine("Data Output Bit15: " + outBit15);
             Console.WriteLine("Number of parameters: " + numberOfParameters);
+
         }
     }
-    public class Macroblock {      //Struct or class??
-        public int DataPtr;
-        public ushort[] CompressedData;
-        public uint[] OutputData;
-        public uint Depth;
-        public uint Sign;
-        public uint Bit15;
-        public bool IsFull => DataPtr == CompressedData.Length;
-
-        public Macroblock(uint depth, uint sign, uint bit15, uint inputDataLengthInHalfWords) { 
-            this.Depth = depth;
-            this.Sign = sign;
-            this.Bit15 = bit15;
-            this.CompressedData = new ushort[inputDataLengthInHalfWords];
-            Console.WriteLine(inputDataLengthInHalfWords);
-            this.OutputData = new uint[64 * (depth > 1? 6 : 1)];
-        }
-    }
-
 }

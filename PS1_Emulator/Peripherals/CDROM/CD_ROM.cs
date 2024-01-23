@@ -100,7 +100,7 @@ namespace PSXEmulator {
 
         private delegate*<CD_ROM, void>[] LookUpTable = new delegate*<CD_ROM, void>[0xFF + 1];
         public CDROMDataController DataController;
-        int ReadRate = 0;
+        long ReadRate = 0;
         uint SectorOffset = 0;  //Skip headers, etc
 
         bool SeekedP;
@@ -112,7 +112,7 @@ namespace PSXEmulator {
         public CD_ROM() {   //Overload for when booting EXEs
             //Stub for the CDROM Tests
             LoadLUT();
-            DataController = new CDROMDataController();
+            //DataController = new CDROMDataController(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Archive");
         }
         private void LoadLUT() {
             //Fill the functions lookUpTable with illegal first, to be safe
@@ -454,7 +454,7 @@ namespace PSXEmulator {
                 cdrom.F = cdrom.DataController.Disk.Tracks[cdrom.DataController.SelectedTrackNumber - 1].F;
                 cdrom.CurrentIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F) * 0x930;
             } else {
-                Console.WriteLine("[CDROM] Play CD-DA, no track specified, at MSF: " + cdrom.M + ":" + cdrom.S + ":" + cdrom.F);
+                Console.WriteLine("[CDROM] CD-DA at MSF: " + cdrom.M + ":" + cdrom.S + ":" + cdrom.F);
             }
         }
         private static void Stop(CD_ROM cdrom) {
@@ -546,7 +546,9 @@ namespace PSXEmulator {
             //Todo: Pause while paused timings?
         }
         private static void Init(CD_ROM cdrom) {
+   
             if (cdrom.ParameterBuffer.Count > 0) {
+                cdrom.ParameterBuffer.Clear();
                 Error(cdrom, Errors.InvalidNumberOfParameters);
                 Console.WriteLine("[CDROM] Init error, too many parameters");
                 return;
@@ -572,7 +574,7 @@ namespace PSXEmulator {
 
             if (cdrom.SetLoc) {
                 //Console.WriteLine("[CDROM] Read without Seek");
-                cdrom.ReadRate += (int)CalculateSeekTime((int)cdrom.CurrentIndex, (int)newIndex);
+                cdrom.ReadRate += CalculateSeekTime(cdrom.CurrentIndex, newIndex);
                 cdrom.SetLoc = false;
             }
             cdrom.CurrentIndex = newIndex;
@@ -680,7 +682,7 @@ namespace PSXEmulator {
                 cdrom.M = MM;
                 cdrom.S = SS;
                 cdrom.F = FF;
-                cdrom.Responses.Enqueue(new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, CDROMState.Idle));
+                cdrom.Responses.Enqueue(new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State));
             } else {
                 Error(cdrom, Errors.InvalidParameter);
             }
@@ -722,6 +724,7 @@ namespace PSXEmulator {
                 cdrom.stat |= 0x2;
             }
             if (cdrom.ParameterBuffer.Count > 0) {
+                cdrom.ParameterBuffer.Clear();
                 Error(cdrom, Errors.InvalidNumberOfParameters);
                 cdrom.stat = 0x2;
                 return;
@@ -880,7 +883,7 @@ namespace PSXEmulator {
             long wait = (long)((long)OneSecond * 2 * 0.001 * (Math.Abs((position - destination)) / (75 * 0x930)));
             //Console.WriteLine("Difference of: " + (Math.Abs((position - destination)) / (75 * 0x930)) + " Seconds");
             //Console.WriteLine("Seek time: " + wait);
-            return wait;
+            return (long)Delays.INT3_General;  //Returning INT2_Init seems to work for Driver. At least to reach the menu
         }
     }
 }

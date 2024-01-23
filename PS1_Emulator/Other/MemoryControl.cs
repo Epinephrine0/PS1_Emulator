@@ -12,13 +12,13 @@ namespace PSXEmulator {
             switch (offset) {
                 case 0:
                     if (value != 0x1f000000) {
-                        throw new Exception("Bad expansion 1 base address: " + value.ToString("X"));
+                        //throw new Exception("Bad expansion 1 base address: " + value.ToString("X"));
                     }
                     break;
 
                 case 4:
                     if (value != 0x1f802000) {
-                        throw new Exception("Bad expansion 1 base address: " + value.ToString("X"));
+                        //throw new Exception("Bad expansion 1 base address: " + value.ToString("X"));
                     }
                     break;
 

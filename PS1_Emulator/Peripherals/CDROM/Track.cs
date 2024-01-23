@@ -1,8 +1,11 @@
-﻿namespace PSXEmulator.Peripherals.CDROM {
+﻿using System.IO;
+
+namespace PSXEmulator.Peripherals.CDROM {
     public class Track {
         public int TrackNumber;
         public bool IsAudioTrack;       //CD-DA
         public string FilePath;         //Direct path to binary
+        public byte[] Data; 
         public string Index01MSF;       //Initial
         public int M;   //Actual
         public int S;   //Actual
@@ -17,7 +20,7 @@
             IsAudioTrack = isAudio;
             TrackNumber = trackNumber;
             Index01MSF = index1;
-      
+            Data = File.ReadAllBytes(path); 
         }
     }
 }

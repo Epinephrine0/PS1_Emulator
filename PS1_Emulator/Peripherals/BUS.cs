@@ -62,7 +62,11 @@ namespace PSXEmulator {
         }
 
         public UInt32 loadWord(UInt32 address) {
+           
             uint physical_address = mask(address);
+            /*if (debug && !RAM.range.contains(physical_address)) {
+                Console.WriteLine(address.ToString("x"));
+            }*/
             //CPU.cycles++;
             if (RAM.range.contains(physical_address)) {
                 return RAM.LoadWord(physical_address);
@@ -81,7 +85,6 @@ namespace PSXEmulator {
 
             }else if (TIMER0.contains(physical_address)) { 
                 return 0;  
-
             }else if (Timer1.range.contains(physical_address)) {
                 return Timer1.read(physical_address);  
 
@@ -93,21 +96,24 @@ namespace PSXEmulator {
 
             }else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
                 return 0x200931E1;
-            }
-            else if (Scratchpad.range.contains(physical_address)) {
+            }else if (Scratchpad.range.contains(physical_address)) {
                 return Scratchpad.loadWord(physical_address);
 
             }else if (IO_PORTS.range.contains(physical_address)) {
                 return IO_PORTS.loadWord(physical_address);
 
-            } else if (MemoryControl.range.contains(physical_address)) {
+            }else if (MemoryControl.range.contains(physical_address)) {
                 return 0x00070777;
 
-            } else if (MDEC.range.contains(physical_address)) {
-                return 0x808080; // MDEC.read(physical_address);
+            }else if (MDEC.range.contains(physical_address)) {
+                //Console.WriteLine("[BUS] MDEC read at: " + address.ToString("x"));
+                return MDEC.read(physical_address);
 
             }else {
                 throw new Exception("cannot find address: " + address.ToString("X") + " in memory map");
+
+                Console.WriteLine("cannot find address: " + address.ToString("X") + " in memory map");
+                return 0;
             }
         }
 
@@ -134,7 +140,7 @@ namespace PSXEmulator {
                 DMA.storeWord(physical_address, value);
                 DMAChannel activeCH = DMA.is_active(physical_address);  //Handle active DMA transfer (if any)
                 if (activeCH != null) {
-                    if(activeCH.get_sync() == activeCH.Sync["LinkedList"]) {
+                    if(activeCH.get_sync() == ((uint)DMAChannel.Sync.LinkedList)) {
                         dma_LinkedList_transfer(ref activeCH);
                     }
                     else {
@@ -157,16 +163,26 @@ namespace PSXEmulator {
                 Scratchpad.storeWord(physical_address, value);
 
             }else if (MDEC.range.contains(physical_address)) {
-                //MDEC.write(physical_address, value);
+                MDEC.write(physical_address, value);
+                //Console.WriteLine("[BUS] MDEC write at:" + address.ToString("x") + " - value: " + value.ToString("x"));  
+            }else if ((address >= 0x1F800400) && (address <= (0x1F800400 + 0xC00))) {
+                return;
 
-            } else {
+            }else if ((address >= 0x1F801024) && (address <= (0x1F801024 + 0x1C))) {
+                return;
+
+            }else {
                 throw new Exception("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
+                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
             }
         }
 
         internal UInt16 loadHalf(UInt32 address) {
             uint physical_address = mask(address);
             //CPU.cycles++;
+            /*if (debug && !RAM.range.contains(physical_address)) {
+                Console.WriteLine(address.ToString("x"));
+            }*/
 
             if (RAM.range.contains(physical_address)) {
                 return RAM.LoadHalf(physical_address);
@@ -205,9 +221,12 @@ namespace PSXEmulator {
             } else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
                 return 0x31E1;
             } else {
-                throw new Exception("Unhandled loadHalf at address : " + address.ToString("x") + "\n" +
-                               "Physical address: " + physical_address.ToString("x"));
+                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
+                 throw new Exception("Unhandled loadHalf at address : " + address.ToString("x") + "\n" +
+                                "Physical address: " + physical_address.ToString("x"));
+                return 0;
             }
+
         }
 
         public void storeHalf(UInt32 address, UInt16 value) {
@@ -236,7 +255,7 @@ namespace PSXEmulator {
                 DMA.storeWord(physical_address, value);         //DMA only 32-bits?
                 DMAChannel activeCH = DMA.is_active(physical_address);  //Handle active DMA transfer (if any)
                 if (activeCH != null) {
-                    if (activeCH.get_sync() == activeCH.Sync["LinkedList"]) {
+                    if (activeCH.get_sync() == ((uint)DMAChannel.Sync.LinkedList)) {
                         dma_LinkedList_transfer(ref activeCH);
                     } else {
                         dma_transfer(ref activeCH);
@@ -255,12 +274,16 @@ namespace PSXEmulator {
 
             } else {
                 throw new Exception("Unhandled store16 at address : " + address.ToString("x"));
+                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
+
             }
         }
         internal byte loadByte(UInt32 address) {
             uint physical_address = mask(address);
             //CPU.cycles++;
-  
+            /*if (debug && !RAM.range.contains(physical_address)) {
+                Console.WriteLine(address.ToString("x"));
+            }*/
             if (RAM.range.contains(physical_address)) {
                 return RAM.LoadByte(physical_address);
 
@@ -286,6 +309,9 @@ namespace PSXEmulator {
                 return 0;
             }else {
                 throw new Exception("Unhandled load8 at address : " + address.ToString("x"));
+
+                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
+                return 0;
             } 
         }
 
@@ -307,11 +333,16 @@ namespace PSXEmulator {
 
             }else if (Expansion2.range.contains(physical_address)) {
                 //Console.WriteLine("Unhandled write to EXPANTION2 at address : " + address.ToString("x"));
+                /*if (address == 0x1F802041) {
+                    Console.WriteLine("POST: " + value.ToString("x"));
+                }*/
 
-            }else if (address == 0x1f8010f6) {
+            } else if (address == 0x1f8010f6) {
                 //Weird DMA register
                 //throw new Exception();
             }else {
+                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
+
                 throw new Exception("Unhandled store8 at address : " + address.ToString("x"));
             }
             //address 0x1f8010f6 ?? 
@@ -324,8 +355,8 @@ namespace PSXEmulator {
         }
         private void dma_LinkedList_transfer(ref DMAChannel activeCH) {     
             DMAChannel ch = activeCH;
-
-            if (ch.get_direction() == ch.Direction["ToRam"]) {
+         
+            if (ch.get_direction() == ((uint)DMAChannel.Direction.ToRam)) {
                 throw new Exception("Invalid direction for LinkedList transfer");
             }
             if (ch.get_portnum() != 2) {
@@ -361,7 +392,7 @@ namespace PSXEmulator {
         private void dma_transfer(ref DMAChannel activeCH) {
             DMAChannel ch = activeCH;
             int step;
-            if (ch.get_step() == ch.Step["Increment"]) {
+            if (ch.get_step() == ((uint)DMAChannel.Step.Increment)) {
                 step = 4;
             }
             else {
@@ -370,44 +401,35 @@ namespace PSXEmulator {
 
             UInt32 base_address = ch.read_base_addr();
             UInt32? transfer_size = ch.get_transfer_size();
-            
+            Console.WriteLine("Here: " + transfer_size);
+
             if (transfer_size == null) {
                 throw new Exception("transfer size is null, LinkedList mode?");
             }
-            bool isSPUIRQ = false;
 
             while (transfer_size > 0) {
                 UInt32 current_address = base_address & 0x1ffffc;
 
-                if (ch.get_direction() == ch.Direction["FromRam"]) {
+                if (ch.get_direction() == ((uint)DMAChannel.Direction.FromRam)) {
 
                     UInt32 data = RAM.LoadWord(current_address);
 
                     switch (ch.get_portnum()) {
-                        case 0: //MDEC.CommandAndParameters(data);
+                        case 0:
+                            //Console.WriteLine("[BUS] MDEC DMA write - value: " + data.ToString("x"));
+                            MDEC.CommandAndParameters(data);
                             break;   //MDECin  (RAM to MDEC)
-
                         case 2: GPU.write_GP0(data); break;
-
-                        case 4:
-                            SPU.DMAtoSPU(data);
-                            isSPUIRQ = true;
-                            /*if(transfer_size - 1 <= 0) {
-                                SPU.DMA_Read_Request = 0;
-                            }*/
-
-                            break;
-
+                        case 4: SPU.DMAtoSPU(data);  break;
                         default: throw new Exception("Unhandled DMA destination port: " + ch.get_portnum());
-
                     }
-                }
-
-                else {
+                } else {
+                    
                     switch (ch.get_portnum()) {
                         case 1:
-                            //Console.WriteLine("[BUS] MDEC to RAM DMA");
-                            RAM.StoreWord(current_address, 0x000000FF); 
+                            uint w = MDEC.ReadCurrentMacroblock();
+                            Console.WriteLine("[BUS] MDEC to RAM DMA: " + w.ToString("x"));
+                            RAM.StoreWord(current_address, w);
                             break;
 
                         case 2:  //GPU
@@ -421,11 +443,7 @@ namespace PSXEmulator {
                             break;
 
                         case 3: RAM.StoreWord(current_address, CD_ROM.DataController.ReadWord()); break;  //CD-ROM
-
-                        case 4:  //SPU
-                            isSPUIRQ = true;
-                            RAM.StoreWord(current_address, SPU.SPUtoDMA());
-                            break;
+                        case 4: RAM.StoreWord(current_address, SPU.SPUtoDMA()); break;                     //SPU
 
                         case 6:
                             switch (transfer_size) {
@@ -439,7 +457,7 @@ namespace PSXEmulator {
                     }
                 }
 
-                base_address = (UInt32)(base_address + step);
+                base_address = (uint)(base_address + step);
                 transfer_size -= 1;
             }
             //if (isSPUIRQ) { SPU.SPU_IRQ(); }    //Causes problems with MGS

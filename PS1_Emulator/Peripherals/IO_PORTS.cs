@@ -21,8 +21,8 @@ namespace PSXEmulator {
         bool fifoFull = false;
 
         public static int delay = 0;
-        MemoryCard memoryCard;
-        public Controller controller1;
+        MemoryCard MemoryCard;
+        public Controller Controller1;
         public Controller controller2;
 
         //JOYSTAT
@@ -86,8 +86,8 @@ namespace PSXEmulator {
             }
 
 
-            memoryCard = new MemoryCard(memoryCardData);
-            controller1 = new Controller();
+            MemoryCard = new MemoryCard(memoryCardData);
+            Controller1 = new Controller();
             controller2 = new Controller();
 
 
@@ -97,7 +97,7 @@ namespace PSXEmulator {
 
             switch (offset) {
 
-                 case 0:
+                 case 0x00:
                    
                     fifoFull = false;
                     //counter = 1500;
@@ -113,13 +113,8 @@ namespace PSXEmulator {
 
                     return (byte)JOY_RX_DATA;
 
-                case 4:
-
-                    return (byte)JOY_STAT;
-
-
-                default:
-                    throw new Exception("Unhandled reading from IO Ports at offset: " + offset.ToString("x"));
+                case 0x04: return (byte)JOY_STAT;
+                default: throw new Exception("Unhandled reading from IO Ports at offset: " + offset.ToString("x"));
             }
 
         }
@@ -153,10 +148,8 @@ namespace PSXEmulator {
             if (counter <= 0 && en) {
                 ACKLevel = false;
                 IRQ = true;
-                IRQ_CONTROL.IRQsignal(7);  
-                
+                IRQ_CONTROL.IRQsignal(7);   
             }
-
         }
         public void storeHalf(uint address, ushort value) {
             uint offset = address - range.start;
@@ -170,92 +163,51 @@ namespace PSXEmulator {
                     TXREADY1 = true;
                     //Console.WriteLine(value.ToString("x"));
 
-                    if (JOYoutput) {
+                    if (JOYoutput && SlotNum == 0) {
                         TXREADY2 = true;
+                        //If something is already selected then I assume the communication is going to it. Since you can only choose one at a time
                         if (selectedDevice == SelectedDevice.Controller) {
-                            JOY_RX_DATA = controller1.response(JOY_TX_DATA) ;
-                            ACKLevel = controller1.ack;
-                            //Console.WriteLine("Sent: " + JOY_TX_DATA.ToString("x"));
-                            //Console.WriteLine("Response: " + JOY_RX_DATA.ToString("x") + " ACK: " + ACKLevel);
+                            JOY_RX_DATA = Controller1.Response(JOY_TX_DATA) ;
+                            ACKLevel = Controller1.ACK;
 
-                        }
-                        else if(selectedDevice == SelectedDevice.MemoryCard) {
-                            JOY_RX_DATA = memoryCard.response(JOY_TX_DATA);
-                            ACKLevel = memoryCard.ack;
-                        }
-                        else {
-                            if (JOY_TX_DATA == 0x01) {
-                                selectedDevice = SelectedDevice.Controller;
-                                JOY_RX_DATA = 0xFF;
-                                ACKLevel = true;
+                        } else if(selectedDevice == SelectedDevice.MemoryCard) {
+                            JOY_RX_DATA = MemoryCard.response(JOY_TX_DATA);
+                            ACKLevel = MemoryCard.ACK;
 
+                        } else {
+                            //Otherwise it should be the first byte of the communication sequence, that is supposed to choose the device
+                            switch (JOY_TX_DATA) {
+                                case 0x01: selectedDevice = SelectedDevice.Controller; break; //Controller Access
+                                case 0x81: selectedDevice = SelectedDevice.MemoryCard; break; //MemoryCard Access
+                                default: throw new Exception("[IO] Unknown device selected: " + JOY_TX_DATA.ToString("X"));
                             }
-                            else if (JOY_TX_DATA == 0x81) {
-                                selectedDevice = SelectedDevice.MemoryCard;
-                                JOY_RX_DATA = 0xFF;
-                                ACKLevel = true;
-                            }
-                            
+                            ACKLevel = true;
                         }
-
-                    }
-                    else {
+                    } else {
                         ACKLevel = false;
-
                     }
 
                     if (!ACKLevel) {
-                        controller1.sequenceNum = 0;
-                        memoryCard.reset();
+                        Controller1.SequenceNum = 0;
+                        MemoryCard.Reset();
                         counter = -1;
                         selectedDevice = SelectedDevice.None;
                         en = false;
-
                     }
                     else {
                         counter = 1500;
                         en = true;  
                     }
-
-                  
                     break;
 
-                
-
-                case 8:
-                    set_joy_mode((ushort)value);
-                    break;
-
-                case 0xA:
-
-                    set_joy_ctrl((ushort)value);
-
-                    break;
-
-                case 0xE:
-                    JOY_BAUD = (ushort)value;
-                    break;
-
-                case 0x1A:
-                    SIO_CTRL = value;
-                    break;
-
-                case 0x18:
-                    SIO_MODE = value;
-                    break;
-
-                case 0x1E:
-
-                    SIO_BAUD = value;
-                    break;
-
-                case 0x10:
-                    SIO_DATA = value;
-                    break; 
-
-                default:
-                    throw new Exception("Unkown JOY port: " + offset.ToString("X"));
-                    
+                case 0x08: set_joy_mode(value); break;
+                case 0x0A: set_joy_ctrl(value); break;
+                case 0x0E: JOY_BAUD = value; break;
+                case 0x10: SIO_DATA = value; break;
+                case 0x18: SIO_MODE = value; break;
+                case 0x1A: SIO_CTRL = value; break;
+                case 0x1E: SIO_BAUD = value; break;
+                default: throw new Exception("Unkown JOY port: " + offset.ToString("X"));               
             }
 
         }
@@ -316,17 +268,17 @@ namespace PSXEmulator {
             }
 
             if (!JOYoutput) {
-                memoryCard.reset();
+                MemoryCard.Reset();
                 selectedDevice = SelectedDevice.None;
-                controller1.sequenceNum = 0;
+                Controller1.SequenceNum = 0;
 
             }
 
             if (Reset) {
                 reset();
-                memoryCard.reset();
+                MemoryCard.Reset();
                 selectedDevice = SelectedDevice.None;
-                controller1.sequenceNum = 0;
+                Controller1.SequenceNum = 0;
                 en = false;
             }
 
@@ -343,7 +295,6 @@ namespace PSXEmulator {
             JOY_BAUD = 0;
 
             Reset = false;
-
         }
 
         private void set_joy_mode(ushort value) {
@@ -352,10 +303,6 @@ namespace PSXEmulator {
             parityEnable = ((value >> 4) & 0x1) != 0;
             parityTypeOdd = ((value >> 5) & 0x1) != 0;
             clkOutputPolarity = ((value >> 8) & 0x1) != 0;
-
         }
-
     }
-
-   
 }

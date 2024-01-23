@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using OpenTK.Graphics.OpenGL;
+using System;
+using System.Collections.Generic;
 
 namespace PSXEmulator {
     internal class Rectangle : Primitive {
@@ -15,8 +17,8 @@ namespace PSXEmulator {
         uint semi_transparency = 0;
         ushort texPage; //Unlike for Textured-Polygons, the "Texpage" must be set up separately for Rectangles, via GP0(E1h)
                         //I also added texmode in texpage (bits 7-8)
-
-        public Rectangle(uint value, ushort texPage, uint semi_transparency) {  //TODO: Fix broken rectangles in Puzzle Bobble 2 
+        bool drawToDisplay = true;
+        public Rectangle(uint value, ushort texPage, uint semi_transparency, bool drawToDisplay) {  //TODO: Fix broken rectangles in Puzzle Bobble 2 
             //this.numOfParameters = numOfParameters;
             this.opcode = (value >> 24) & 0xff;
             this.texPage = texPage;
@@ -34,7 +36,8 @@ namespace PSXEmulator {
             if (size == 0) {
                 this.numOfParameters++;
             }
-
+            this.drawToDisplay = drawToDisplay;
+          
             /*Console.WriteLine("Rectangle : " + opcode.ToString("x") + " - expected number of parameters: " + this.numOfParameters);
             Console.WriteLine("isTextured: " + isTextured);
             Console.WriteLine("isRawTextured: " + isRawTextured);
@@ -47,11 +50,12 @@ namespace PSXEmulator {
         public bool isReady() {
             return buffer.Count == numOfParameters;
         }
-
         public void draw(ref Renderer window) {
+        
             //...and, of course, the GPU does render Rectangles as a single entity, without splitting them into two triangles.
             //Width and Height can be up to 1023x511
 
+            
             if (isTextured && isRawTextured) {
                 R = G = B = 0x80;            //No blend color
             }
@@ -74,11 +78,11 @@ namespace PSXEmulator {
                 case 2: width = height = 8;  break;                  //8x8
                 case 3: width = height = 16; break;                  //16x16
             }
-           
-            short x1 = (short)buffer[1];                    //Upper left 
-            short y1 = (short)(buffer[1] >> 16);
+            
+            short x1 = (short)(buffer[1] & 0x7FF);                   //Upper left 
+            short y1 = (short)((buffer[1] >> 16) & 0x7FF);
 
-            short x2 = (short)(x1 + width);                  //Lower right
+            short x2 = (short)(x1 + width);                          //Lower right
             short y2 = (short)(y1 + height);
 
             ushort tx1 = 0;
@@ -91,19 +95,18 @@ namespace PSXEmulator {
                  tx1 = (ushort)(buffer[2] & 0xFF);          //Texture Upper left 
                  ty1 = (ushort)((buffer[2] >> 8) & 0xFF);
 
-                 tx2 = (ushort)(tx1 + width);              //Texture Lower right
+                 tx2 = (ushort)(tx1 + width);               //Texture Lower right
                  ty2 = (ushort)(ty1 + height);
 
                  clut = (ushort)(buffer[2] >> 16);
             }
-       
+
             if (isSemiTransparent) {        
                 window.setBlendingFunction(semi_transparency);
             }
             else {
                 window.disableBlending();
             }
-            
 
             window.drawRectangle(
                 x1, y1, 
@@ -112,8 +115,7 @@ namespace PSXEmulator {
                 x1, y2, 
                 R, G, B, R, G, B, R, G, B, R, G, B,
                 tx1, ty1, tx2, ty1, tx2, ty2, tx1, ty2,
-                isTextured, clut, texPage
-                );
+                isTextured, clut, texPage);
 
             /*window.drawTrinangle(
                 x1, y1,
@@ -121,11 +123,11 @@ namespace PSXEmulator {
                 x1, y2,
                 R, G, B,
                 R, G, B,
-                R, G, G,
+                R, G, B,
                 tx1, ty1,
                 tx2, ty1,
                 tx1, ty2,
-                isTextured, clut, texPage
+                isTextured, clut, texPage, false
                 );
             window.drawTrinangle(
                 x2, y1,
@@ -133,11 +135,11 @@ namespace PSXEmulator {
                 x1, y2,
                 R, G, B,
                 R, G, B,
-                R, G, G,
+                R, G, B,
                 tx2, ty1,
                 tx2, ty2,
                 tx1, ty2,
-                isTextured, clut, texPage
+                isTextured, clut, texPage, false
                 );*/
         }
     }

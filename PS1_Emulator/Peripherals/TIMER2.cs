@@ -1,4 +1,5 @@
 ﻿using System;
+using static PSXEmulator.CDROMDataController;
 
 namespace PSXEmulator.Peripherals {
     public class TIMER2 {
@@ -30,8 +31,10 @@ namespace PSXEmulator.Peripherals {
 
             switch (offset) {
 
-                case 0: currentValue = value; break;
+                case 0:
+                    currentValue = value; break;
                 case 4:
+                    currentValue = 0;
                     mode = value;
                     mode |= 1 << 10;     //Set bit 10
                     synchronization = (mode & 1) != 0;
@@ -65,11 +68,17 @@ namespace PSXEmulator.Peripherals {
 
             switch (offset) {
 
-                case 0: return currentValue;        //0x000016b0 random value that works for entering shell
+                case 0:
+                   // Console.WriteLine("[TIMER2] Reading current value: " + currentValue.ToString("x"));
+
+                    return currentValue;        //0x000016b0 random value that works for entering shell
 
                 case 4:
+
                     uint temp = mode;
                     mode &= 0b0000_0111_1111_1111;    //Reset bits 11-12 (above 12 are garbage)
+                    //Console.WriteLine("[TIMER2] Reading Mode: " + temp.ToString("x"));
+
                     return temp;
 
                 case 8: return target;
@@ -130,7 +139,6 @@ namespace PSXEmulator.Peripherals {
             //Reached target?
             if ((mode >> 3 & 1) == 1) {       //(0=After Counter=FFFFh, 1=After Counter=Target)
                 reachedTarget = currentValue >= target;
-
                 if ((mode >> 4 & 1) == 1) {
                     IRQenabled = true;
                 }

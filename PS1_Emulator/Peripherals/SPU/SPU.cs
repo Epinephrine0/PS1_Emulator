@@ -158,14 +158,10 @@ namespace PSXEmulator {
                 case 0x1b4: external_Audio_Input_Volume = external_Audio_Input_Volume & 0xFFFF0000 | value; break;
                 case 0x1b6: external_Audio_Input_Volume = external_Audio_Input_Volume & 0x0000FFFF | (uint)value << 16; break;
                 case 0x1ac: transfer_Control = value; break;
-                case 0x1a4: SPU_IRQ_Address = ((uint)value) << 3;
-                    /*if (SPU_IRQ_Address <= 0x3FF) {
-                        //Console.WriteLine("[SPU] Capture address: " + SPU_IRQ_Address.ToString("x"));
-                    }*/
-                    break;
+                case 0x1a4: SPU_IRQ_Address = ((uint)value) << 3; break;    
                 case 0x1a6:
                     transfer_address = value;            //Store adress devided by 8
-                    currentAddress = ((uint)value) << 3; //Store adress multiplied by 8
+                    currentAddress = ((uint)value) << 3; //Store adress multiplied by 8, this one increments while the other does not
                     break;
 
                 case 0x1a8:
@@ -281,7 +277,8 @@ namespace PSXEmulator {
                 case 0x1b0: return (ushort)CDInputVolume;
                 case 0x1b2: return (ushort)(CDInputVolume >> 16);
                 case 0x1b8: return (ushort)mainVolumeLeft;  
-                case 0x1ba: return (ushort)mainVolumeRight;  
+                case 0x1ba: return (ushort)mainVolumeRight;
+                case 0x1a4: return (ushort)(SPU_IRQ_Address >> 3);
                 case 0x1a6: return (ushort)transfer_address;
                 case 0x1b4: return (ushort)external_Audio_Input_Volume;
                 case 0x1b6: return (ushort)(external_Audio_Input_Volume >> 16);
@@ -330,6 +327,17 @@ namespace PSXEmulator {
 
             if (!IRQ9Enable) {
                 IRQ_Flag = 0;
+            }
+            uint dmaMode = ((uint)((value >> 4) & 0x3));
+            switch (dmaMode) {
+                case 0: //Stop
+                case 1: //Manual
+                    DMA_Read_Request = 0;
+                    DMA_Write_Request = 0;
+                    break;
+
+                case 2: DMA_Write_Request = 1; break;
+                case 3: DMA_Read_Request = 1;  break;
             }
 
         }
@@ -386,7 +394,7 @@ namespace PSXEmulator {
                     voices[i].checkSamplesIndex();
                 }
                 else {
-                    Console.WriteLine("[SPU] Noise generator !");   
+                    Console.WriteLine("[SPU] Noise generator !"); //Haven't seen something use it yet
                     voices[i].adsr.adsrVolume = 0;
                     voices[i].lastSample = 0;
                 }
@@ -405,21 +413,24 @@ namespace PSXEmulator {
                
             }
 
-            //Merge in CD-Audio (CD-DA and compressed XA-ADPCM), read one L/R sample each tick (tick rate is 44.1khz)
+            //Merge in CD-Audio (CD-DA and uncompressed XA-ADPCM), read one L/R sample each tick (tick rate is 44.1khz so it should match the sample rate)
             //CD Samples are consumed even if CD audio is disabled, they will also end up in the capture buffer 
             int cdSamples = CDDataControl.CDAudioSamples.Count;
             short CDAudioLeft = 0;
             short CDAudioRight = 0;
+            short CDAudioLeft_BeforeVol = 0;
+            short CDAudioRight_BeforeVol = 0;
             if (cdSamples > 0) {              
                 short CDLeftVolume = (short)CDInputVolume;
                 short CDRightVolume = (short)(CDInputVolume >> 16);
-                short leftSample = CDDataControl.CDAudioSamples.Dequeue();
-                short rightSample = CDDataControl.CDAudioSamples.Dequeue();
-                CDAudioLeft += (short)((leftSample * CDLeftVolume) >> 15);
-                CDAudioRight += (short)((rightSample * CDRightVolume) >> 15);
-                captureBuffers(0x000 + captureOffset, CDAudioLeft);               //Capture CD Audio left (before *volume)
-                captureBuffers(0x400 + captureOffset, CDAudioRight);              //Capture CD Audio right (before *volume)
+                CDAudioLeft_BeforeVol = CDDataControl.CDAudioSamples.Dequeue();
+                CDAudioRight_BeforeVol = CDDataControl.CDAudioSamples.Dequeue();
+                CDAudioLeft += (short)((CDAudioLeft_BeforeVol * CDLeftVolume) >> 15);
+                CDAudioRight += (short)((CDAudioRight_BeforeVol * CDRightVolume) >> 15);
             }
+            captureBuffers(0x000 + captureOffset, CDAudioLeft_BeforeVol);               //Capture CD Audio left (before *volume)
+            captureBuffers(0x400 + captureOffset, CDAudioRight_BeforeVol);              //Capture CD Audio right (before *volume)
+
             sumLeft += CDAudioEnable ? CDAudioLeft : 0;
             sumRight += CDAudioEnable ? CDAudioRight : 0;
             reverbLeft_Input += (CDAudioEnable && CDReverbEnable) ? CDAudioLeft : 0;

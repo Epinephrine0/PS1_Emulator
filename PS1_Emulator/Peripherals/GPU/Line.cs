@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace PSXEmulator {
@@ -7,13 +8,15 @@ namespace PSXEmulator {
         bool isPolyLine;
         bool isSemiTransparent;
         uint semi_transparency = 0;
+        bool isDithered;
         uint opcode;
         List<uint> buffer = new List<uint>();
         short[] vertices;
         byte[] colors;
-        public Line(uint value, uint semi_transparency) {
+        public Line(uint value, uint semi_transparency, bool isDithered) {
             opcode = (value >> 24);
             this.semi_transparency = semi_transparency;
+            this.isDithered = isDithered;
             isGouraud = ((value >> 28) & 1) == 1;
             isPolyLine = ((value >> 27) & 1) == 1;
             isSemiTransparent = ((value >> 25) & 1) == 1;
@@ -75,7 +78,7 @@ namespace PSXEmulator {
                 window.disableBlending();
             }
 
-            window.drawLines(ref vertices, ref colors, isPolyLine);
+            window.DrawLines(ref vertices, ref colors, isPolyLine, isDithered);
         }
     }
  }

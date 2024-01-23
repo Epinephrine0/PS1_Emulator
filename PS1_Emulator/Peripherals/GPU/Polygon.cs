@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Windows.Media.Media3D;
 
 namespace PSXEmulator {
     public unsafe class Polygon : Primitive {
@@ -32,7 +34,7 @@ namespace PSXEmulator {
         int numOfParameters = -1;
         int numberOfVertices = 0;
         uint semi_transparency = 0;
-        bool isDithered = false;    //TODO
+        bool isDithered = false;  
       
         public Polygon(uint value , uint semi_transparency, bool ditherEnabled) {
             opcode = (value >> 24);
@@ -124,9 +126,10 @@ namespace PSXEmulator {
                 (ushort)(uv[1] & 0xFF), (ushort)((uv[1] >> 8) & 0xFF),
                 (ushort)(uv[2] & 0xFF), (ushort)((uv[2] >> 8) & 0xFF),
 
-                isTextured, clut, page, false
+                isTextured, clut, page, isDithered
             );
             if (isQuad) {
+
                 window.drawTrinangle(
                 (short)vertices[1], (short)(vertices[1] >> 16),
                 (short)vertices[2], (short)(vertices[2] >> 16),
@@ -141,7 +144,7 @@ namespace PSXEmulator {
                 (ushort)(uv[2] & 0xFF), (ushort)((uv[2] >> 8) & 0xFF),
                 (ushort)(uv[3] & 0xFF), (ushort)((uv[3] >> 8) & 0xFF),
 
-                isTextured, clut, page, false
+                isTextured, clut, page, isDithered
                 );
             }
         }

@@ -23,6 +23,7 @@ namespace PSXEmulator {
                 case 4: I_MASK = value; break;
                 default: throw new Exception("unhandled IRQ write at offset " + offset);
             }
+            //Console.WriteLine("IRQ EN: " + (I_STAT & I_MASK));
         }
 
         public static void IRQsignal(int bitNumber) {

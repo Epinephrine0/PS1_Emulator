@@ -11,7 +11,7 @@ namespace PSXEmulator {
         char accessType = 'X';                 
         int sequenceNumber;
         byte CHK;
-        public bool ack;
+        public bool ACK;
 
         public MemoryCard(byte[] data) {
 
@@ -22,7 +22,7 @@ namespace PSXEmulator {
 
         internal byte response(uint command) {
             sequenceNumber++;
-            ack = true;
+            ACK = true;
 
             switch (sequenceNumber) {
                 case 1:
@@ -76,7 +76,7 @@ namespace PSXEmulator {
                 case 7: return 0x00;    //Receive 00h
                 case 8: return 0x00;    //Receive 00h
                 case 9:
-                    reset();
+                    Reset();
                     return 0x80;        //Receive 80h
 
                 default:
@@ -127,7 +127,7 @@ namespace PSXEmulator {
 
                 case 10 + 128: return CHK;              //Receive Checksum (MSB xor LSB xor Data bytes)
                 case 11 + 128:
-                    reset();
+                    Reset();
                     return 0x47;                        //Receive Memory End Byte (should be always 47h="G"=Good for Read)
 
                 default:
@@ -184,8 +184,8 @@ namespace PSXEmulator {
 
                 case 9 + 128:                           //Receive Memory End Byte (47h=Good, 4Eh=BadChecksum, FFh=BadSector)
 
-                    saveMemoryContent();
-                    reset();
+                    SaveMemoryContent();
+                    Reset();
 
                     return 0x47;
 
@@ -199,19 +199,17 @@ namespace PSXEmulator {
 
         }
 
-        private void saveMemoryContent() {
-
+        private void SaveMemoryContent() {
             File.WriteAllBytes("memoryCard.mcd",data);
             FLAG  = (byte)(FLAG & (~0x8));
             Console.ForegroundColor = ConsoleColor.Blue;
             Console.WriteLine("[MEMORYCARD] SAVED!");
             Console.ForegroundColor = ConsoleColor.Green;
-
         }
-        public void reset() {
+        public void Reset() {
             sequenceNumber = 0;
             accessType = 'X';
-            ack = false;
+            ACK = false;
             CHK = 0;
         }
 

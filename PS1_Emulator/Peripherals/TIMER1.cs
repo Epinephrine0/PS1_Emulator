@@ -1,4 +1,5 @@
 ﻿using System;
+using static PSXEmulator.CDROMDataController;
 
 namespace PSXEmulator {
     namespace PS1_Emulator {
@@ -25,7 +26,8 @@ namespace PSXEmulator {
 
                     case 0: currentValue = value; break;
 
-                    case 4:  
+                    case 4:
+                        currentValue = 0;   
                         mode = value;
                         synchronization = (mode & 1) != 0;
                         mode |= 1 << 10;     //Set bit 10
@@ -41,25 +43,26 @@ namespace PSXEmulator {
                         }
                         break;
 
-                    case 8: target = value; break;
+                    case 8: Console.WriteLine("[TIMER1] Write Target: " + value.ToString("x")); target = value; break;
 
                     default: throw new Exception("Unknown TIMER1 offset: " + offset);
 
                 }
-
-
-
             }
             public uint read(uint address) {
                 uint offset = address - range.start;
 
                 switch (offset) {
 
-                    case 0: return currentValue;        
+                    case 0:
+                        //Console.WriteLine("[TIMER1] Reading current value: " + currentValue.ToString("x"));
+                        return currentValue;        
 
                     case 4:
                         uint temp = mode;
                         mode &= 0b0000_0111_1111_1111;    //Reset bits 11-12 (above 12 are garbage)
+                        //Console.WriteLine("[TIMER1] Reading current Mode: " + temp.ToString("x"));
+
                         return temp;
 
                     case 8: return target;
@@ -128,7 +131,6 @@ namespace PSXEmulator {
                         IRQenabled = true;
                     }
                     flag = 1 << 11;
-
                 }
                 else {
                     reachedTarget = currentValue >= 0xffff;

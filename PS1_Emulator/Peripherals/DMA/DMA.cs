@@ -29,8 +29,6 @@ namespace PSXEmulator {
             UInt32 ch = (offset & 0x70) >> 4;           //Bits [7:5] for the channel number
             UInt32 field = (offset & 0xf);              //Bits [3:0] for the field number
 
-
-
             switch (ch) {               //Reading a field for a specific channel
                 case 0:
                 case 1:
@@ -41,100 +39,62 @@ namespace PSXEmulator {
                 case 6:
 
                     switch (field) {
-                        case 0:
-                            return channels[ch].read_base_addr();
-                            
-
-                        case 4:
-
-                            return channels[ch].read_block_control();
-
-                        case 8:
-                            return channels[ch].read_control();
-
-                        default:
-                            throw new Exception("Unhandled DMA read at offset: " + offset.ToString("X"));
+                        case 0: return channels[ch].read_base_addr();                           
+                        case 4: return channels[ch].read_block_control();
+                        case 8: return channels[ch].read_control();
+                        default: throw new Exception("Unhandled DMA read at offset: " + offset.ToString("X"));
                     }
 
-                   
                 case 7:         //case 7 is general fields 
                     switch (field) {
-                        case 0:
-                            return control;
-
-                        case 4:
-                            return read_interrupt_reg();
-
-                        default:
-                            throw new Exception("Unhandled DMA read at offset: " + offset.ToString("X"));
+                        case 0: return control;
+                        case 4: return read_interrupt_reg();
+                        default: throw new Exception("Unhandled DMA read at offset: " + offset.ToString("X"));
                     }
 
-                default:
-                    throw new Exception("Unhandled DMA read at offset: " + offset.ToString("X"));
+                default: throw new Exception("Unhandled DMA read at offset: " + offset.ToString("X"));
 
             }
-
-
         }
         public void storeWord(UInt32 address, UInt32 value) {
-            uint offset = address - range.start;
+            //uint offset = address - range.start;
 
-            UInt32 ch = (offset & 0x70) >> 4;       //Bits [7:5] for the channel number
-            UInt32 field = (offset & 0xf);              //Bits [3:0] for the field number
+            UInt32 ch = (address & 0x70) >> 4;       //Bits [7:5] for the channel number
+            UInt32 field = (address & 0xf);              //Bits [3:0] for the field number
 
 
 
             switch (ch) {               //writing a field for a specific channel
-                case 0:
-                case 1:
-                case 2:
-                case 3:
-                case 4:
-                case 5:
-                case 6:
+                case 0x0:
+                case 0x1:
+                case 0x2:
+                case 0x3:
+                case 0x4:
+                case 0x5:
+                case 0x6:
 
                     switch (field) {
-                        case 0:
-                            channels[ch].set_base_addr(value);
-                            break;
+                        case 0x0: channels[ch].set_base_addr(value); break;
+                        case 0x4: channels[ch].set_block_control(value); break;
 
-                        case 4:
-                            channels[ch].set_block_control(value);  
-                            break;
+                        case 0x8:
+                        case 0xC: channels[ch].set_control(value); break;
 
-                        case 8:
-                            channels[ch].set_control(value);
-                            break;
-
-                        default:
-                            throw new Exception("Unhandled DMA write at offset: " + offset.ToString("X") + " field: " + field + " val: " + value.ToString("X"));
+                        default:  throw new Exception("Unhandled DMA write at offset: " + address.ToString("X") + " field: " + field + " val: " + value.ToString("X"));
                     }
 
                 break;
 
-
-
-                case 7:         //case 7 is general fields 
+                case 0x7:         //case 7 is general fields 
                     switch (field) {
-                        case 0:
-                            this.control = value;
-                            break;
-                        case 4:
-                            set_interrupt_reg(value);
-                            break;
-
-                        default:
-                            throw new Exception("Unhandled DMA write at offset: " + offset.ToString("X") + " val: " + value.ToString("X"));
+                        case 0x0: control = value; break;
+                        case 0x4: set_interrupt_reg(value); break;
+                        default: throw new Exception("Unhandled DMA write at offset: " + address.ToString("X") + " val: " + value.ToString("X"));
                     }
                     break;
 
-                default:
-                    throw new Exception("Unhandled DMA write at offset: " + offset.ToString("X") + " val: " + value.ToString("X"));
-
+                default: throw new Exception("Unhandled DMA write at offset: " + address.ToString("X") + " val: " + value.ToString("X"));
             }
-
-           
-
         }
 
         private UInt32 read_interrupt_reg() {

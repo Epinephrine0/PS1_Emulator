@@ -137,7 +137,7 @@ namespace PSXEmulator {
             }
         }
         public void SelectTrack(int trackNumber) {  //Should be called on Read and Play Commands to switch Files
-            SelectedTrack = File.ReadAllBytes(Disk.Tracks[trackNumber - 1].FilePath);
+            SelectedTrack = Disk.Tracks[trackNumber - 1].Data; 
             SelectedTrackNumber = Disk.Tracks[trackNumber - 1].TrackNumber;
         }
 

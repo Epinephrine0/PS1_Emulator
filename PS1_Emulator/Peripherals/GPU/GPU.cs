@@ -1,6 +1,8 @@
-﻿using PSXEmulator.PS1_Emulator;
+﻿using OpenTK.Graphics.ES20;
+using PSXEmulator.PS1_Emulator;
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace PSXEmulator {
     public class GPU {
@@ -46,8 +48,8 @@ namespace PSXEmulator {
         byte texture_depth;
         bool draw_to_display;
         bool dithering;
-        bool force_set_mask_bit;
-        bool preserve_masked_pixels;
+        public bool force_set_mask_bit;
+        public bool preserve_masked_pixels;
         byte field;
         bool texture_disable;
         public HorizontalRes horizontalRes;
@@ -69,8 +71,8 @@ namespace PSXEmulator {
         UInt16 drawing_area_bottom;
         Int16 drawing_x_offset;
         Int16 drawing_y_offset;
-        UInt16 display_vram_x_start;
-        UInt16 display_vram_y_start;
+        public UInt16 display_vram_x_start;
+        public UInt16 display_vram_y_start;
         public UInt16 display_horiz_start;
         public UInt16 display_horiz_end;
         public UInt16 display_line_start;
@@ -92,7 +94,7 @@ namespace PSXEmulator {
 
             //Xsiz=((Xsiz AND 3FFh)+0Fh) AND (NOT 0Fh) for vram fill?
             public ushort width => (ushort)(transferType == TransferType.VramFill?
-                (resolution & 0x3FF) : ((((resolution & 0xFFFF) - 1) & 0x3FF) + 1));
+                ((resolution & 0x3FF) + 0x0F) & (~ 0x0F) : ((((resolution & 0x3FFF) - 1) & 0x3FF) + 1));
 
             public ushort height => (ushort)(transferType == TransferType.VramFill?
               ((resolution >> 16) & 0x1FF) : ((((resolution >> 16) - 1) & 0x1FF) + 1));
@@ -101,12 +103,12 @@ namespace PSXEmulator {
             public bool dataEnd => size == dataPtr;
             public ushort destination_X => (ushort)(parameters[1] & (transferType == TransferType.VramFill ? 0x3F0 : 0x3FF));
             public ushort destination_Y => (ushort)((parameters[1] >> 16) & 0x1FF);
-            public float fillColor_R => (float)((parameters[0] & 0xFF) / 255.0);
-            public float fillColor_G => (float)(((parameters[0] >> 8) & 0xFF) / 255.0);
-            public float fillColor_B => (float)(((parameters[0] >> 16) & 0xFF) / 255.0);
+            public float fillColor_R => (float)((parameters[0] & 0xFF) / 255.0f);
+            public float fillColor_G => (float)(((parameters[0] >> 8) & 0xFF) / 255.0f);
+            public float fillColor_B => (float)(((parameters[0] >> 16) & 0xFF) / 255.0f);
 
             public TransferType transferType;        //CPU seems to set the main direction to off in the middle
-                                                   //of the transfer, this should keep the direction saved
+                                                    //of the transfer, this should keep the direction saved
         }
         public GPUTransfer gpuTransfer;
         GPUState currentState = GPUState.ReadyToDecode;
@@ -132,9 +134,7 @@ namespace PSXEmulator {
             this.dmaDirection = DmaDirection.Off;
             this.window = rederingWindow;
             this.TIMER1 = timer1;
-
         }
-
 
         public UInt32 read_GPUSTAT() { //TODO make this more accurate depending on GPU state
             UInt32 status = 0;
@@ -175,12 +175,16 @@ namespace PSXEmulator {
 
             bool notReady = currentState == GPUState.LoadingPrimitive || (gpuTransfer.transferType != TransferType.Off && gpuTransfer.paramsReady);
 
-            status |= ((uint)(notReady ? 0 : 1)) << 28;   //Ready to recive DMA block
+            /*if (notReady) {
+                status &= (~((uint)1 << 28));   //Ready to recive DMA block, this is wrong so I hardcoded 1 
+            } else {
+                status |= (1 << 28);
+            }*/
+            status |= (1 << 28);
 
             status |= ((uint)dmaDirection) << 29;
 
             status |= ((uint)currentLine) << 31;
-
 
             UInt32 dma_request;
             switch (dmaDirection) {
@@ -197,21 +201,22 @@ namespace PSXEmulator {
             return status;
 
         }
-
+        
         double scanlines = 0;
-        double scanlines_per_frame = 263;           //NTSC
         double video_cycles = 0;
+        double scanlines_per_frame = 263;           //NTSC
         double video_cycles_per_scanline = 3413;    //NTSC
+        int cyclesPerPixel = 4;                     //x=640
 
         public void tick(double cycles) {
             video_cycles += cycles;
             TIMER1.GPUinVblank = false;
 
-            if (video_cycles >= video_cycles_per_scanline && video_cycles_per_scanline > 0) {
+            if (video_cycles >= video_cycles_per_scanline) {
                 video_cycles -= video_cycles_per_scanline;
                 scanlines++;
 
-                if (scanlines >= scanlines_per_frame && scanlines_per_frame > 0) {
+                if (scanlines >= scanlines_per_frame) {
                     scanlines -= scanlines_per_frame;
 
                     if (!display_disabled) {
@@ -234,11 +239,11 @@ namespace PSXEmulator {
                 if (verticalRes == VerticalRes.Y240Lines) {
                     currentLine = (currentLine + 1) & 1;
                 }
-
             }
-
-        }       
+        }  
+        
         public void write_GP0(UInt32 value) {
+
             switch (currentState) {
                 case GPUState.ReadyToDecode: gp0_decode(value); break;
 
@@ -280,13 +285,13 @@ namespace PSXEmulator {
                     break;
 
                 case 0x02:      //Line Commands
-                    primitive = new Line(value, semi_transparency);
+                    primitive = new Line(value, semi_transparency, dithering);
                     currentState = GPUState.LoadingPrimitive;
                     break;
 
                 case 0x03:      //Rectangle Commands
                     ushort page = (ushort)(page_base_x | (((uint)page_base_y) << 4) | (((uint)texture_depth) << 7));
-                    primitive = new Rectangle(value, page, semi_transparency);
+                    primitive = new Rectangle(value, page, semi_transparency, draw_to_display);
                     currentState = GPUState.LoadingPrimitive;
                     break;
 
@@ -319,21 +324,23 @@ namespace PSXEmulator {
                             gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
                         currentState = GPUState.ReadyToDecode;
                         gpuTransfer.transferType = TransferType.Off;
+
                     }
                     break;
 
                 case TransferType.VRamToCpu:
-                    window.readBackTexture(gpuTransfer.destination_X, gpuTransfer.destination_Y,
+                    window.ReadBackTexture(gpuTransfer.destination_X, gpuTransfer.destination_Y,
                         gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
                     //gpuTransfer.transferType = TransferType.Off;
                     currentState = GPUState.ReadyToDecode;
                     break;
 
-                case TransferType.VramToVram:
-                    //Console.WriteLine("Vram to Vram"); 
-                    /*window.VramToVramCopy((int)(gpuTransfer.parameters[1] & 0xFFFF), (int)((gpuTransfer.parameters[1] >> 16) & 0xFFFF),
-                    (int)(gpuTransfer.parameters[2] & 0xFFFF), (int)((gpuTransfer.parameters[2] >> 16) & 0xFFFF), (int)(gpuTransfer.parameters[3] & 0xFFFF), (int)((gpuTransfer.parameters[3] >> 16) & 0xFFFF)
-                    );*/
+                case TransferType.VramToVram:  
+                    //Console.WriteLine("[GPU] Vram to Vram"); 
+
+                    window.VramToVramCopy((int)(gpuTransfer.parameters[1] & 0xFFFF), (int)((gpuTransfer.parameters[1] >> 16) & 0xFFFF),
+                    (int)(gpuTransfer.parameters[2] & 0xFFFF), (int)((gpuTransfer.parameters[2] >> 16) & 0xFFFF), (int)(gpuTransfer.parameters[3] & 0xFFFF), (int)((gpuTransfer.parameters[3] >> 16) & 0xFFFF));
+                  
                     gpuTransfer.transferType = TransferType.Off;
                     currentState = GPUState.ReadyToDecode;
                     break;
@@ -356,7 +363,6 @@ namespace PSXEmulator {
 
 
                     throw new NotImplementedException();
-
             }
         }
         private void misc(uint command) {
@@ -396,7 +402,6 @@ namespace PSXEmulator {
                 case uint when opcode >= 0xE7 && opcode <= 0xEF: break; //NOP
                 default: throw new Exception("Unknown GP0 Environment command: " + opcode.ToString("x"));
             }
-
         }
 
         public void ClearMemory<T>(ref List<T> list) {
@@ -409,6 +414,10 @@ namespace PSXEmulator {
             this.force_set_mask_bit = ((value & 1) != 0);
             this.preserve_masked_pixels = (((value >> 1) & 1) != 0);
             window.maskBitSetting((int)value);
+
+            if (preserve_masked_pixels) {
+                Console.WriteLine("[GPU] Unimplemented Mask bit preserve!");
+            }
         }
 
         private void gp0_texture_window(UInt32 value) {
@@ -427,25 +436,27 @@ namespace PSXEmulator {
    
         private void gp0_drawing_offset(UInt32 value) {
             UInt16 x = (UInt16)(value & 0x7ff);
-            UInt16 y = (UInt16)((value>>11) & 0x7ff);
+            UInt16 y = (UInt16)((value >> 11) & 0x7ff);
 
             //Signed 11 bits, need to extend to signed 16 then shift down to 11
             this.drawing_x_offset = (Int16)(((Int16)(x << 5)) >> 5);
             this.drawing_y_offset = (Int16)(((Int16)(y << 5)) >> 5);
 
-            window.setOffset(drawing_x_offset, drawing_y_offset,0);
+            window.SetOffset(drawing_x_offset, drawing_y_offset);
         }
 
         private void gp0_drawing_area_BottomRight(UInt32 value) {
             this.drawing_area_bottom = (UInt16)((value >> 10) & 0x3ff);
             this.drawing_area_right = (UInt16)(value & 0x3ff);
             window.setScissorBox(drawing_area_left, drawing_area_top,
-                drawing_area_right-drawing_area_left, drawing_area_bottom-drawing_area_top);
+                drawing_area_right - drawing_area_left, drawing_area_bottom - drawing_area_top);
         }
 
         private void gp0_drawing_area_TopLeft(UInt32 value) {
             this.drawing_area_top = (UInt16)((value >> 10) & 0x3ff);
             this.drawing_area_left = (UInt16)(value & 0x3ff);
+            window.setScissorBox(drawing_area_left, drawing_area_top,
+                drawing_area_right - drawing_area_left, drawing_area_bottom - drawing_area_top);
         }
 
         private void write_GP1(UInt32 value) {
@@ -465,7 +476,6 @@ namespace PSXEmulator {
 
                 default: throw new Exception("Unhandled GP1 command :" + value.ToString("X") + " Opcode: " + opcode.ToString("x"));
             }
-
         }
 
         private void gp1_reset_command_buffer() {
@@ -488,11 +498,14 @@ namespace PSXEmulator {
         private void gp1_display_vertical_range(UInt32 value) {
             this.display_line_start = (UInt16)(value & 0x3ff);
             this.display_line_end = (UInt16)((value>>10) & 0x3ff);
+            UpdateVerticalRange();
         }
+
 
         private void gp1_display_horizontal_range(UInt32 value) {
             this.display_horiz_start = (UInt16)(value & 0xfff);
             this.display_horiz_end = (UInt16)((value>>12) & 0xfff);
+            UpdateHorizontalRange();
         }
 
         private void gp1_display_VRam_start(UInt32 value) {
@@ -507,9 +520,10 @@ namespace PSXEmulator {
         private void gp1_display_mode(UInt32 value) {
             byte hr1 = ((byte)(value & 3));
             byte hr2 = ((byte)((value >> 6) & 1));
+            byte interlace = (byte)((value >> 5) & 1);
 
             horizontalRes = new HorizontalRes(hr1, hr2);
-            verticalRes = (VerticalRes)((value >> 2) & 1);
+            verticalRes = (VerticalRes)(((value >> 2) & 1) & interlace);
             vmode = (VMode)((value >> 3) & 1);
             displayDepth = (DisplayDepth)((value >> 4) & 1);
 
@@ -528,6 +542,20 @@ namespace PSXEmulator {
                 throw new Exception("Unsupported display mode: " + value.ToString("X"));
             }
 
+            switch (horizontalRes.getHR()) {
+                case 320f: cyclesPerPixel = 8; break;
+                case 640f: cyclesPerPixel = 4; break;
+                case 256f: cyclesPerPixel = 10; break;
+                case 512f: cyclesPerPixel = 5; break;
+                case 368f: cyclesPerPixel = 7; break;
+            }
+
+            UpdateHorizontalRange();
+            UpdateVerticalRange();
+
+            //Console.WriteLine("[GPU] Res: " + horizontalRes.getHR() + "x" + verticalRes);
+            //Console.WriteLine("[GPU] Interlace: " + (interlace == 1));
+
         }
 
         private void gp0_draw_mode(UInt32 value) {
@@ -538,10 +566,10 @@ namespace PSXEmulator {
             this.texture_depth = (byte)((value >> 7) & 3);
             this.dithering = ((value >> 9) & 1) != 0;
             this.draw_to_display = ((value >> 10) & 1) != 0;
-            this.texture_disable = ((value >> 11) & 1) != 0;
+            this.texture_disable = ((value >> 11) & 1) != 0;                    //Texture page Y Base 2 (N*512) (only for 2MB VRAM)
             this.rectangle_texture_x_flip = ((value >> 12) & 1) != 0;
             this.rectangle_texture_y_flip = ((value >> 13) & 1) != 0;
-
+            
         }
         private void gp1_reset() {
             this.interrupt = false;
@@ -589,6 +617,9 @@ namespace PSXEmulator {
 
             //...Clear Fifo
 
+            window.disableBlending();
+            //Probably more window reset stuff
+
         }
 
         uint lastGPURead = 0x0;
@@ -601,6 +632,7 @@ namespace PSXEmulator {
                 if (gpuTransfer.dataEnd) {
                     gpuTransfer.transferType = TransferType.Off;
                 }
+                lastGPURead = merged_Pixels;
                 return merged_Pixels;
             }
 
@@ -636,6 +668,18 @@ namespace PSXEmulator {
 
         }
 
+        public float HorizontalRange = 640f;
+        public float VerticalRange = 240f;
+
+        public void UpdateHorizontalRange() {
+            HorizontalRange = (((display_horiz_end - display_horiz_start) / cyclesPerPixel) + 2) & (~3);
+        }
+
+        public void UpdateVerticalRange() {
+            float verticalRange = display_line_end - display_line_start;
+            VerticalRange = interlaced? verticalRange * 2 : verticalRange;
+        }
+
         public uint loadWord(uint address) {
             uint offset = address - range.start;
             switch (offset) {
@@ -654,7 +698,6 @@ namespace PSXEmulator {
                                         + "Physical address: " + offset.ToString("x"));
             }
         }
-
     }
 
     public class HorizontalRes {
@@ -679,7 +722,6 @@ namespace PSXEmulator {
                     case 1: return 320f;
                     case 2: return 512f;
                     case 3: return 640f;
-
                 }
 
             }
@@ -690,7 +732,5 @@ namespace PSXEmulator {
         public uint intoStatus() {      //Bits [18:16] of GPUSTAT
             return ((uint)this.HR) << 16;
         }
-
     }
-
 }
