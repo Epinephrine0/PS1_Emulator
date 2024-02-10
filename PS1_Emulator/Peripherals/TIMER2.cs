@@ -26,7 +26,7 @@ namespace PSXEmulator.Peripherals {
         */
 
 
-        public void write(uint address, uint value) {
+        public void Write(uint address, uint value) {
             uint offset = address - range.start;
 
             switch (offset) {
@@ -63,7 +63,7 @@ namespace PSXEmulator.Peripherals {
 
 
         }
-        public uint read(uint address) {
+        public uint Read(uint address) {
             uint offset = address - range.start;
 
             switch (offset) {

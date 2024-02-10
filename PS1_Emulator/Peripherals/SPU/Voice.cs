@@ -111,7 +111,7 @@ namespace PSXEmulator.Peripherals.SPU {
             adsr.adsrHI = v;
         }
         public void loadSamples(ref byte[] SPU_RAM, uint IRQ_Address) {
-            hit_IRQ_Address = IRQ_Address >= current_address << 3 && IRQ_Address <= (current_address << 3) + samples.Length - 1;
+            hit_IRQ_Address = (IRQ_Address >= current_address << 3) && (IRQ_Address <= ((current_address << 3) + samples.Length - 1));
             //Possible optimization using Span
             for (int i = 0; i < samples.Length; i++) {
                 int index = (current_address << 3) + i;
@@ -123,7 +123,7 @@ namespace PSXEmulator.Peripherals.SPU {
             //Handle Loop Start/End/Repeat flags
             uint flags = samples[1];
 
-            if ((flags >> 2 & 1) != 0) {     //Loop Start bit
+            if (((flags >> 2) & 1) != 0) {     //Loop Start bit
                 ADPCM_RepeatAdress = current_address;
             }
 
@@ -150,7 +150,7 @@ namespace PSXEmulator.Peripherals.SPU {
             int nibble = 1;
 
             for (int i = 0; i < 28; i++) {
-                nibble = nibble + 1 & 0x1;        //sample number inside the byte (either 0 or 1)
+                nibble = (nibble + 1) & 0x1;        //sample number inside the byte (either 0 or 1)
 
                 t = signed4bits((byte)(samples[position] >> (nibble << 2) & 0x0F));
                 s = (t << shift) + (old * f0 + older * f1 + 32) / 64;
@@ -225,17 +225,17 @@ namespace PSXEmulator.Peripherals.SPU {
             isLoaded = false;
         }
         public uint getCurrentSampleIndex() {
-            return pitchCounter >> 12 & 0x1F;
+            return (pitchCounter >> 12) & 0x1F;
         }
         public uint getInterpolationIndex() {
-            return pitchCounter >> 3 & 0xFF; // >> 4 ??
+            return (pitchCounter >> 3) & 0xFF; // >> 4 ??
         }
         int signed4bits(byte value) {
             return value << 28 >> 28;
         }
         public short getVolumeLeft() {
             short vol;
-            if ((volumeLeft >> 15 & 1) == 0) {
+            if (((volumeLeft >> 15) & 1) == 0) {
                 vol = (short)(volumeLeft << 1);
                 return vol;
             } else {
@@ -245,7 +245,7 @@ namespace PSXEmulator.Peripherals.SPU {
         public short getVolumeRight() {
             short vol;
 
-            if ((volumeRight >> 15 & 1) == 0) {
+            if (((volumeRight >> 15) & 1) == 0) {
                 vol = (short)(volumeRight << 1);
                 return vol;
             } else {
@@ -303,7 +303,7 @@ namespace PSXEmulator.Peripherals.SPU {
 
                     case Phase.Attack:
 
-                        switch (adsrLOW >> 15 & 1) {
+                        switch ((adsrLOW >> 15) & 1) {
                             case 0:
                                 mode = Mode.Linear;
                                 break;
@@ -316,8 +316,8 @@ namespace PSXEmulator.Peripherals.SPU {
                         }
 
                         direction = Direction.Increase; //Fixed for attack mode
-                        shift = adsrLOW >> 10 & 0X1F;
-                        step = positiveSteps[adsrLOW >> 8 & 0x3];
+                        shift = (adsrLOW >> 10) & 0X1F;
+                        step = positiveSteps[(adsrLOW >> 8) & 0x3];
                         limit = 0x7FFF;       //Maximum for attack mode
                         nextphase = Phase.Decay;
                         break;
@@ -327,7 +327,7 @@ namespace PSXEmulator.Peripherals.SPU {
 
                         mode = Mode.Exponential;          //Fixed for decay mode
                         direction = Direction.Decrease;   //Fixed, always Decrease until sustain lever
-                        shift = adsrLOW >> 4 & 0x0F;   //Only 4 bits, not 5
+                        shift = (adsrLOW >> 4) & 0x0F;   //Only 4 bits, not 5
                         step = -8;      //Fixed for decay mode
                         limit = ((adsrLOW & 0xF) + 1) * 0x800; //Level=(N+1)*800h
                         nextphase = Phase.Sustain;
@@ -337,28 +337,21 @@ namespace PSXEmulator.Peripherals.SPU {
                     case Phase.Sustain:
                         //Debug.WriteLine("sustain!");
 
-                        switch (adsrHI >> 15 & 1) {
-                            case 0:
-                                mode = Mode.Linear;
-                                break;
-                            case 1:
-                                mode = Mode.Exponential;
-                                break;
-
-                            default:
-                                throw new Exception("Unkown mode value");
+                        switch ((adsrHI >> 15) & 1) {
+                            case 0: mode = Mode.Linear; break;
+                            case 1: mode = Mode.Exponential; break;
+                            default: throw new Exception("Unkown mode value");
                         }
 
-                        switch (adsrHI >> 14 & 1) {
+                        switch ((adsrHI >> 14) & 1) {
                             case 0:
                                 direction = Direction.Increase;
-                                step = positiveSteps[adsrHI >> 6 & 0x3];
-
+                                step = positiveSteps[(adsrHI >> 6) & 0x3];
                                 break;
+
                             case 1:
                                 direction = Direction.Decrease;
-                                step = negativeSteps[adsrHI >> 6 & 0x3];
-
+                                step = negativeSteps[(adsrHI >> 6) & 0x3];
                                 break;
 
                             default:
@@ -366,7 +359,7 @@ namespace PSXEmulator.Peripherals.SPU {
                         }
 
 
-                        shift = adsrHI >> 8 & 0x1F;
+                        shift = (adsrHI >> 8) & 0x1F;
                         limit = 0x0000;         //Questionable 
                         nextphase = Phase.Sustain;
 
@@ -374,7 +367,7 @@ namespace PSXEmulator.Peripherals.SPU {
 
                     case Phase.Release:
 
-                        switch (adsrHI >> 5 & 1) {
+                        switch ((adsrHI >> 5) & 1) {
                             case 0:
                                 mode = Mode.Linear;
                                 break;

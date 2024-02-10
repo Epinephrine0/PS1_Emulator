@@ -92,7 +92,7 @@ namespace PSXEmulator {
 
 
         }
-        public byte loadByte(uint address) {
+        public byte LoadByte(uint address) {
             uint offset = address - range.start;
 
             switch (offset) {
@@ -118,14 +118,14 @@ namespace PSXEmulator {
             }
 
         }
-        public uint loadWord(uint address) {
+        public uint LoadWord(uint address) {
             uint offset = address - range.start;
             switch (offset) {
                 case 4: return JOY_STAT;
                 default: throw new Exception("Unhandled reading from IO Ports at offset: " + offset.ToString("x"));
             }
         }
-        public UInt16 loadHalf(uint address) {
+        public UInt16 LoadHalf(uint address) {
             uint offset = address - range.start;
             switch (offset) {
                 case 0x4: return getStatu();        //3
@@ -151,7 +151,7 @@ namespace PSXEmulator {
                 IRQ_CONTROL.IRQsignal(7);   
             }
         }
-        public void storeHalf(uint address, ushort value) {
+        public void StoreHalf(uint address, ushort value) {
             uint offset = address - range.start;
 
             switch (offset) {

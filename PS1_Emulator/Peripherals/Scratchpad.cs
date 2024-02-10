@@ -5,7 +5,7 @@ namespace PSXEmulator {
         public Range range = new Range(0x1F800000, 0x3FF+1);
         byte[] data = new byte[1024];       
 
-        public UInt32 loadWord(UInt32 address) {
+        public UInt32 LoadWord(UInt32 address) {
             uint offset = address - range.start;
 
             UInt32 b0 = data[offset + 0];
@@ -15,7 +15,7 @@ namespace PSXEmulator {
 
             return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
         }
-        public void storeWord(UInt32 address, UInt32 value) {
+        public void StoreWord(UInt32 address, UInt32 value) {
             uint offset = address - range.start;
 
             byte b0 = (byte)value;
@@ -29,7 +29,7 @@ namespace PSXEmulator {
             data[offset + 3] = b3;
 
         }
-        internal UInt16 loadHalf(UInt32 address) {
+        internal UInt16 LoadHalf(UInt32 address) {
             uint offset = address - range.start;
 
             UInt16 b0 = data[offset + 0];
@@ -37,7 +37,7 @@ namespace PSXEmulator {
 
             return (UInt16)(b0 | (b1 << 8));
         }
-        internal void storeHalf(UInt32 address, UInt16 value) {
+        internal void StoreHalf(UInt32 address, UInt16 value) {
             uint offset = address - range.start;
 
             byte b0 = (byte)value;
@@ -46,11 +46,11 @@ namespace PSXEmulator {
             data[offset + 0] = b0;
             data[offset + 1] = b1;
         }
-        internal byte loadByte(UInt32 address) {
+        internal byte LoadByte(UInt32 address) {
             uint offset = address - range.start;
             return data[offset];
         }
-        internal void storeByte(UInt32 address, byte value) {
+        internal void StoreByte(UInt32 address, byte value) {
             uint offset = address - range.start;
             data[offset] = value;
         }

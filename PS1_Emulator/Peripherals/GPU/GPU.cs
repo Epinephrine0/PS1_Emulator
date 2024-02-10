@@ -680,7 +680,7 @@ namespace PSXEmulator {
             VerticalRange = interlaced? verticalRange * 2 : verticalRange;
         }
 
-        public uint loadWord(uint address) {
+        public uint LoadWord(uint address) {
             uint offset = address - range.start;
             switch (offset) {
                 case 0: return gpuReadReg();
@@ -688,7 +688,7 @@ namespace PSXEmulator {
                 default: throw new Exception("Unhandled read to offset " + offset);
             }
         }
-        public void storeWord(uint address, uint value) {
+        public void StoreWord(uint address, uint value) {
             uint offset = address - range.start;
             switch (offset) {
                 case 0: write_GP0(value); break;

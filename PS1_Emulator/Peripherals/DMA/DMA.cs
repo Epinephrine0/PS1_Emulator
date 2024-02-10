@@ -23,7 +23,7 @@ namespace PSXEmulator {
             }   
         }
 
-    public UInt32 loadWord(UInt32 address) {
+    public UInt32 Read(UInt32 address) {
             uint offset = address - range.start;
 
             UInt32 ch = (offset & 0x70) >> 4;           //Bits [7:5] for the channel number
@@ -56,7 +56,7 @@ namespace PSXEmulator {
 
             }
         }
-        public void storeWord(UInt32 address, UInt32 value) {
+        public void Write(UInt32 address, UInt32 value) {
             //uint offset = address - range.start;
 
             UInt32 ch = (address & 0x70) >> 4;       //Bits [7:5] for the channel number
@@ -99,13 +99,13 @@ namespace PSXEmulator {
 
         private UInt32 read_interrupt_reg() {
             UInt32 v = 0;
-            for (int i = 0; i < channels.Length; i++) {
+            /*for (int i = 0; i < channels.Length; i++) {
                 if (channels[i].finished) {
-                    if ((ch_irq_en >> i & 1) == 1) {
+                    if (((ch_irq_en >> i) & 1) == 1) {
                         ch_irq_flags = (byte)(ch_irq_flags | (1 << i));
                     }
                 }
-            }
+            }*/
 
             v = v | read_write;
             v = v | (force_irq << 15);
@@ -117,8 +117,6 @@ namespace PSXEmulator {
             return v;
         }
         
-
-
         private void set_interrupt_reg(UInt32 value) {
             read_write = (byte)(value & 0x3f);
             force_irq = (value >> 15) & 1;

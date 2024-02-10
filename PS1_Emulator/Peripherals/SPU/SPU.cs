@@ -114,7 +114,7 @@ namespace PSXEmulator {
             this.CDDataControl = CDControl;
 
         }
-        public void storeHalf(uint address, UInt16 value) {
+        public void StoreHalf(uint address, UInt16 value) {
             uint offset = address - range.start;
             switch (offset) {
 
@@ -228,7 +228,7 @@ namespace PSXEmulator {
                                                       +"Full address: 0x" + (offset+0x1f801c00).ToString("x"));
             }
         }
-        public UInt16 loadHalf(uint address) {
+        public UInt16 LoadHalf(uint address) {
             uint offset = address - range.start;
 
             switch (offset) {
@@ -374,7 +374,7 @@ namespace PSXEmulator {
                 }
 
                 if (voices[i].adsr.phase == Voice.ADSR.Phase.Off) {
-                    voices[i].lastSample = 0;
+                    //voices[i].lastSample = 0;
                     continue;
                 }
 

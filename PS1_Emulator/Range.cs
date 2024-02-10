@@ -8,7 +8,7 @@
             this.length = length;
         }
 
-        public bool contains(uint address) {
+        public bool Contains(uint address) {
             return address >= start && address < start + length;
         }
 

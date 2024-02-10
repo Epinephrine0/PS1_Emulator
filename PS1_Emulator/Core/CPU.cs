@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace PSXEmulator {
@@ -41,12 +40,12 @@ namespace PSXEmulator {
         private bool IsLoadingEXE;
         private string? EXEPath;
 
-        bool FastBoot = false;
+        bool FastBoot = false;                  //Skips the boot animation 
         public bool IsPaused = false;
         public bool IsStopped = false;
         const uint CYCLES_PER_FRAME = 33868800 / 60;
         const double GPU_FACTOR = ((double)715909) / 451584;
-        List<byte> Chars = new List<byte>();
+        List<byte> Chars = new List<byte>();    //Temporarily stores characters 
 
         private static readonly delegate*<CPU, Instruction, void>[] mainLookUpTable = new delegate*<CPU, Instruction, void>[] {
                 &special,   &bxx,       &jump,      &jal,       &beq,        &bne,       &blez,      &bgtz,
@@ -104,9 +103,19 @@ namespace PSXEmulator {
             fp = 30,
             ra = 31
         }
+        struct RegisterLoad {
+            public uint registerNumber;
+            public uint value;
+        }
+
+        RegisterLoad registerLoad;
+        RegisterLoad registerDelayedLoad;
+        RegisterLoad directWrite;       //Not memory access, will overwrite memory loads
+
+        Instruction CurrentInstruction = new Instruction();
 
         public CPU(bool isEXE, string? EXEPath, BUS bus) {
-            this.PC = 0xbfc00000;   //BIOS initial PC       
+            this.PC = 0xbfc00000;                   //BIOS initial PC       
             this.Next_PC = PC + 4;
             this.BUS = bus;
             this.GPR = new UInt32[32];
@@ -125,23 +134,13 @@ namespace PSXEmulator {
             this.IsLoadingEXE = isEXE;
             this.EXEPath = EXEPath;
         }
-        struct RegisterLoad {
-            public uint registerNumber;
-            public uint value;
-        }
-        
-        RegisterLoad registerLoad;      
-        RegisterLoad registerDelayedLoad;
-        RegisterLoad directWrite;       //Not memory access, will overwrite memory loads
-
-        Instruction CurrentInstruction = new Instruction();
-
+       
         public void emu_cycle() {
 
             Current_PC = PC;   //Save current pc In case of an exception
-            intercept(PC);     //TTY
+            intercept(PC);     //For TTY
 
-             if (FastBoot) {       //Skip Sony logo
+             if (FastBoot) {
                  if (PC == 0x80030000) {
                     PC = GPR[(int)Register.ra];
                     Next_PC = PC + 4;
@@ -152,8 +151,6 @@ namespace PSXEmulator {
                     return;
                  }
              }
-            //----------------------------------------------------------------------
-
 
             //PC must be 32 bit aligned, can be ignored?
             if ((Current_PC & 0x3) != 0) {
@@ -161,7 +158,7 @@ namespace PSXEmulator {
                 return;
             }
 
-            CurrentInstruction.FullValue = BUS.loadWord(PC);    
+            CurrentInstruction.FullValue = BUS.LoadWord(PC);    
 
             DelaySlot = Branch;   //Branch delay 
             Branch = false;
@@ -215,7 +212,7 @@ namespace PSXEmulator {
         private void intercept(uint pc) {
 
             switch (pc) {
-               case 0x80030000: if (IsLoadingEXE) { loadTestRom(EXEPath); IsLoadingEXE = false; }   break;
+               case 0x80030000: if (IsLoadingEXE) { loadTestRom(EXEPath); IsLoadingEXE = false; } break;
 
                 case 0xA0:      //Intercepting prints to the TTY Console and printing it in console 
                     char character;
@@ -233,8 +230,8 @@ namespace PSXEmulator {
                                 Console.Write("\\<NULL>");
                             }
                             else {
-                                while (BUS.loadByte(address) != 0) {
-                                    character = (char)BUS.loadByte(address);
+                                while (BUS.LoadByte(address) != 0) {
+                                    character = (char)BUS.LoadByte(address);
                                     Console.Write(character);
                                     address++;
                                 }
@@ -303,8 +300,8 @@ namespace PSXEmulator {
                             }
                             else {
 
-                                while (BUS.loadByte(address) != 0) {
-                                    character = (char)BUS.loadByte(address);
+                                while (BUS.LoadByte(address) != 0) {
+                                    character = (char)BUS.LoadByte(address);
                                     Console.Write(character);
                                     address++;
                                 }
@@ -358,7 +355,7 @@ namespace PSXEmulator {
             uint addressInRAM = (uint)(EXE[0x018] | (EXE[0x018 + 1] << 8) |  (EXE[0x018 + 2] << 16) | (EXE[0x018 + 3] << 24));
 
             for (int i = 0x800; i < EXE.Length; i++) {
-                BUS.storeByte(addressInRAM, EXE[i]);
+                BUS.StoreByte(addressInRAM, EXE[i]);
                 addressInRAM++;
             }
          
@@ -493,7 +490,7 @@ namespace PSXEmulator {
 
             uint rt = instruction.Get_rt();
             uint word = cpu.Gte.read(rt);
-            cpu.BUS.storeWord(address, word);
+            cpu.BUS.StoreWord(address, word);
 
         }
 
@@ -519,7 +516,7 @@ namespace PSXEmulator {
                 return;
             }
 
-            uint word = cpu.BUS.loadWord(address);
+            uint word = cpu.BUS.LoadWord(address);
             uint rt = instruction.Get_rt();
             cpu.Gte.write(rt, word);
 
@@ -543,7 +540,7 @@ namespace PSXEmulator {
             UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             UInt32 value =  cpu.GPR[instruction.Get_rt()];               
-            UInt32 current_value = cpu.BUS.loadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            UInt32 current_value = cpu.BUS.LoadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -556,7 +553,7 @@ namespace PSXEmulator {
                 default: throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            cpu.BUS.storeWord((UInt32)(final_address & (~3)), finalValue);
+            cpu.BUS.StoreWord((UInt32)(final_address & (~3)), finalValue);
         }
 
         private static void swl(CPU cpu, Instruction instruction) {
@@ -567,7 +564,7 @@ namespace PSXEmulator {
             UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             UInt32 value = cpu.GPR[instruction.Get_rt()];           
-            UInt32 current_value = cpu.BUS.loadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            UInt32 current_value = cpu.BUS.LoadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
@@ -580,7 +577,7 @@ namespace PSXEmulator {
                 default: throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            cpu.BUS.storeWord((UInt32)(final_address & (~3)), finalValue);
+            cpu.BUS.StoreWord((UInt32)(final_address & (~3)), finalValue);
 
         }
 
@@ -597,7 +594,7 @@ namespace PSXEmulator {
                 current_value = cpu.registerLoad.value;                         //Bypass load delay
             }
 
-            UInt32 word = cpu.BUS.loadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            UInt32 word = cpu.BUS.LoadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
 
@@ -626,7 +623,7 @@ namespace PSXEmulator {
                 current_value = cpu.registerLoad.value;             //Bypass load delay
             }
 
-            UInt32 word = cpu.BUS.loadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            UInt32 word = cpu.BUS.LoadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
             UInt32 finalValue;
             UInt32 pos = final_address & 3;
 
@@ -705,7 +702,7 @@ namespace PSXEmulator {
             if(final_address >= 0x1F800400 && final_address <= (0x1F800400 + 0xC00)) { Exception(cpu, (uint)Exceptions.BUSDataError); return; }
             
             //aligned?
-            Int16 halfWord = (Int16)cpu.BUS.loadHalf(final_address);
+            Int16 halfWord = (Int16)cpu.BUS.LoadHalf(final_address);
             if ((final_address & 0x1) == 0) {
                 cpu.registerDelayedLoad.registerNumber = instruction.Get_rt();         //Position
                 cpu.registerDelayedLoad.value = (UInt32)halfWord;                     //Value
@@ -723,7 +720,7 @@ namespace PSXEmulator {
             UInt32 final_address = cpu.GPR[base_] + addressRegPos;
 
             if ((final_address & 0x1) == 0) {
-                UInt32 halfWord = (UInt32)cpu.BUS.loadHalf(final_address);
+                UInt32 halfWord = (UInt32)cpu.BUS.LoadHalf(final_address);
                 cpu.registerDelayedLoad.registerNumber = instruction.Get_rt();  //Position
                 cpu.registerDelayedLoad.value = halfWord;                       //Value
                
@@ -1032,8 +1029,8 @@ namespace PSXEmulator {
             }
 
             if (((value >> 17) & 0xF) == 0x8) {
-               //Store return address if the value of bits [20:17] == 0x8
-                cpu.directWrite.registerNumber = 31;
+               //Store return address in $31 if the value of bits [20:17] == 0x8
+                cpu.directWrite.registerNumber = (uint)Register.ra;
                 cpu.directWrite.value = cpu.Next_PC;
             }
 
@@ -1044,7 +1041,7 @@ namespace PSXEmulator {
             UInt32 addressRegPos = instruction.GetSignedImmediate();
             UInt32 base_ = instruction.Get_rs();
 
-            byte byte_ = cpu.BUS.loadByte(cpu.GPR[base_] + addressRegPos);
+            byte byte_ = cpu.BUS.LoadByte(cpu.GPR[base_] + addressRegPos);
             cpu.registerDelayedLoad.registerNumber = instruction.Get_rt();  //Position
             cpu.registerDelayedLoad.value = (UInt32)byte_;                     //Value
             
@@ -1092,7 +1089,7 @@ namespace PSXEmulator {
             if (cpu.IscIsolateCache) { return; }
             UInt32 addressRegPos = instruction.GetSignedImmediate();
             UInt32 base_ = instruction.Get_rs();
-            sbyte sb = (sbyte)cpu.BUS.loadByte(cpu.GPR[base_] + addressRegPos);
+            sbyte sb = (sbyte)cpu.BUS.LoadByte(cpu.GPR[base_] + addressRegPos);
             cpu.registerDelayedLoad.registerNumber = instruction.Get_rt();  //Position
             cpu.registerDelayedLoad.value = (UInt32)sb;                     //Value
         }
@@ -1103,7 +1100,7 @@ namespace PSXEmulator {
             UInt32 targetReg = instruction.Get_rt();
             UInt32 addressRegPos = instruction.GetSignedImmediate();
             UInt32 base_ = instruction.Get_rs();
-            cpu.BUS.storeByte(cpu.GPR[base_] + addressRegPos, (byte)cpu.GPR[targetReg]);
+            cpu.BUS.StoreByte(cpu.GPR[base_] + addressRegPos, (byte)cpu.GPR[targetReg]);
         }
 
         private static void andi(CPU cpu,Instruction instruction) {
@@ -1115,7 +1112,7 @@ namespace PSXEmulator {
         }
 
         private static void jal(CPU cpu, Instruction instruction) {
-            cpu.directWrite.registerNumber = 31;
+            cpu.directWrite.registerNumber = (uint)Register.ra;
             cpu.directWrite.value = cpu.Next_PC;             //Jump and link, store the PC to return to it later
             jump(cpu,instruction);
         }
@@ -1130,7 +1127,7 @@ namespace PSXEmulator {
 
             //Address must be 16 bit aligned
             if ((final_address & 1) == 0) {
-                cpu.BUS.storeHalf(final_address, (UInt16)cpu.GPR[targetReg]);
+                cpu.BUS.StoreHalf(final_address, (UInt16)cpu.GPR[targetReg]);
             }
             else {
                 Exception(cpu, (uint)Exceptions.StoreAddressError);
@@ -1183,7 +1180,7 @@ namespace PSXEmulator {
 
             //Address must be 32 bit aligned
             if ((final_address & 0x3) == 0) {
-                cpu.BUS.storeWord(final_address, cpu.GPR[targetReg]);
+                cpu.BUS.StoreWord(final_address, cpu.GPR[targetReg]);
             }
             else {
                 Exception(cpu, (uint)Exceptions.StoreAddressError);
@@ -1201,7 +1198,7 @@ namespace PSXEmulator {
             //Address must be 32 bit aligned
             if ((final_address & 0x3) == 0) {
                  cpu.registerDelayedLoad.registerNumber = instruction.Get_rt();              //Position
-                 cpu.registerDelayedLoad.value = cpu.BUS.loadWord(final_address);           //Value
+                 cpu.registerDelayedLoad.value = cpu.BUS.LoadWord(final_address);           //Value
             }
             else {
                 Exception(cpu, (uint)Exceptions.LoadAddressError);
@@ -1342,11 +1339,11 @@ namespace PSXEmulator {
                 BUS.SPU.SPU_Tick(cycles);
                 BUS.GPU.tick(cycles * GPU_FACTOR);
                 BUS.IO_PORTS.tick(cycles);
-                BUS.CD_ROM.tick(cycles);
+                BUS.CDROM.tick(cycles);
                 i += cycles;
                 cycles = 0;
             }
         }
-        bool IsReadingFromBIOS => BUS.BIOS.range.contains(BUS.mask(PC));
+        bool IsReadingFromBIOS => BUS.BIOS.range.Contains(BUS.Mask(PC));
     }
 }

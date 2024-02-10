@@ -1,6 +1,8 @@
 ﻿using PSXEmulator.Peripherals;
 using PSXEmulator.PS1_Emulator;
 using System;
+using System.Net.NetworkInformation;
+using System.Windows;
 
 namespace PSXEmulator {
     public class BUS {      //Main BUS, connects the CPU to everything
@@ -14,7 +16,7 @@ namespace PSXEmulator {
         public Expansion2 Expansion2;
         public DMA DMA;
         public GPU GPU;
-        public CD_ROM CD_ROM;
+        public CD_ROM CDROM;
         public TIMER1 Timer1;
         public TIMER2 Timer2;
         public IO_PORTS IO_PORTS;
@@ -32,7 +34,7 @@ namespace PSXEmulator {
         };
 
         //No class for now
-        public Range TIMER0 = new Range(0x1F801100, 0xF+1);        //Assumption 
+        public Range Timer0 = new Range(0x1F801100, 0xF+1);        //Assumption 
         public bool debug = false;
 
         //TODO: Imeplement ignored stuff 
@@ -46,7 +48,7 @@ namespace PSXEmulator {
             this.BIOS = BIOS;
             this.RAM = RAM;
             this.Scratchpad = Scratchpad;
-            this.CD_ROM = CDROM;
+            this.CDROM = CDROM;
             this.SPU = SPU;
             this.DMA = DMA;
             this.IO_PORTS = IO;
@@ -61,299 +63,143 @@ namespace PSXEmulator {
             this.GPU = GPU;
         }
 
-        public UInt32 loadWord(UInt32 address) {
-           
-            uint physical_address = mask(address);
-            /*if (debug && !RAM.range.contains(physical_address)) {
-                Console.WriteLine(address.ToString("x"));
-            }*/
+        public UInt32 LoadWord(UInt32 address) {           
+            uint physicalAddress = Mask(address);
             //CPU.cycles++;
-            if (RAM.range.contains(physical_address)) {
-                return RAM.LoadWord(physical_address);
-
-            }else if (BIOS.range.contains(physical_address)) {                
-                return BIOS.loadWord(physical_address);                   
-                
-            }else if (IRQ_CONTROL.range.contains(physical_address)) {
-                return IRQ_CONTROL.read(physical_address);
-
-            }else if (DMA.range.contains(physical_address)) {
-                return DMA.loadWord(physical_address);
-
-            }else if (GPU.range.contains(physical_address)) {
-                return GPU.loadWord(physical_address);
-
-            }else if (TIMER0.contains(physical_address)) { 
-                return 0;  
-            }else if (Timer1.range.contains(physical_address)) {
-                return Timer1.read(physical_address);  
-
-            }else if (Timer2.range.contains(physical_address)) {
-                return Timer2.read(physical_address);
-
-            }else if (address == 0x1F801060) {                          //Memory Control 2
-                return 0X00000B88;
-
-            }else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
-                return 0x200931E1;
-            }else if (Scratchpad.range.contains(physical_address)) {
-                return Scratchpad.loadWord(physical_address);
-
-            }else if (IO_PORTS.range.contains(physical_address)) {
-                return IO_PORTS.loadWord(physical_address);
-
-            }else if (MemoryControl.range.contains(physical_address)) {
-                return 0x00070777;
-
-            }else if (MDEC.range.contains(physical_address)) {
-                //Console.WriteLine("[BUS] MDEC read at: " + address.ToString("x"));
-                return MDEC.read(physical_address);
-
-            }else {
-                throw new Exception("cannot find address: " + address.ToString("X") + " in memory map");
-
-                Console.WriteLine("cannot find address: " + address.ToString("X") + " in memory map");
-                return 0;
+            switch (physicalAddress) {
+                case uint when RAM.range.Contains(physicalAddress): return RAM.LoadWord(physicalAddress);
+                case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadWord(physicalAddress);
+                case uint when IRQ_CONTROL.range.Contains(physicalAddress): return IRQ_CONTROL.Read(physicalAddress);
+                case uint when DMA.range.Contains(physicalAddress): return DMA.Read(physicalAddress);
+                case uint when GPU.range.Contains(physicalAddress): return GPU.LoadWord(physicalAddress);
+                case uint when Timer0.Contains(physicalAddress): return 0x0;    //TODO
+                case uint when Timer1.range.Contains(physicalAddress): return Timer1.Read(physicalAddress);
+                case uint when Timer2.range.Contains(physicalAddress): return Timer2.Read(physicalAddress);
+                case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadWord(physicalAddress);
+                case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadWord(physicalAddress);
+                case uint when MemoryControl.range.Contains(physicalAddress): return MemoryControl.Read(physicalAddress);
+                case uint when MDEC.range.Contains(physicalAddress): return 0x0;
+                case uint when RamSize.range.Contains(physicalAddress): return RamSize.LoadWord();
+                default: throw new Exception("Unhandled LoadWord from: " + address.ToString("X"));
             }
         }
 
-        public void storeWord(UInt32 address,UInt32 value) {
-            uint physical_address = mask(address);
+        public void StoreWord(UInt32 address,UInt32 value) {
+            uint physicalAddress = Mask(address);
             //CPU.cycles++;
-
-            if (MemoryControl.range.contains(physical_address)) {
-                MemoryControl.storeWord(physical_address, value);
-
-            }else if (RamSize.range.contains(physical_address)) {        
-                RamSize.storeWord(physical_address, value);                         
-
-            }else if (RAM.range.contains(physical_address)) {             
-               RAM.StoreWord(physical_address, value);
-
-            }else if (CacheControl.range.contains(physical_address)) {
-                //Console.WriteLine("Unhandled write to CACHECONTROL register, address: " + address.ToString("X"));
-
-            }else if (IRQ_CONTROL.range.contains(physical_address)) {
-                IRQ_CONTROL.write(physical_address, (ushort)value);   
-
-            }else if (DMA.range.contains(physical_address)) {
-                DMA.storeWord(physical_address, value);
-                DMAChannel activeCH = DMA.is_active(physical_address);  //Handle active DMA transfer (if any)
-                if (activeCH != null) {
-                    if(activeCH.get_sync() == ((uint)DMAChannel.Sync.LinkedList)) {
-                        dma_LinkedList_transfer(ref activeCH);
+            switch (physicalAddress) {
+                case uint when RAM.range.Contains(physicalAddress): RAM.StoreWord(physicalAddress, value); break;
+                case uint when RamSize.range.Contains(physicalAddress): RamSize.StoreWord(value); break;
+                case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
+                case uint when IRQ_CONTROL.range.Contains(physicalAddress): IRQ_CONTROL.Write(physicalAddress, (ushort)value); break; //Cast? could be wrong
+                case uint when GPU.range.Contains(physicalAddress): GPU.StoreWord(physicalAddress, value); break;
+                case uint when CacheControl.range.Contains(physicalAddress): break; //...?
+                case uint when Timer0.Contains(physicalAddress): break;     //TODO
+                case uint when Timer1.range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
+                case uint when Timer2.range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
+                case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreWord(physicalAddress, value); break;
+                case uint when MDEC.range.Contains(physicalAddress): break;
+                case uint when DMA.range.Contains(physicalAddress):
+                    DMA.Write(physicalAddress, value);
+                    DMAChannel activeCH = DMA.is_active(physicalAddress);  //Handle active DMA transfer (if any)
+                    if (activeCH != null) {
+                        if (activeCH.GetSync() == ((uint)DMAChannel.Sync.LinkedList)) {
+                            HandleDMALinkedList(ref activeCH);
+                        } else {
+                            HandleDMA(ref activeCH);
+                        }
                     }
-                    else {
-                        dma_transfer(ref activeCH);
+                    break;
+                default: throw new Exception("Unhandled StoreWord to: " + address.ToString("X"));
+            }
+        }
+
+        public UInt16 LoadHalf(UInt32 address) {
+            uint physicalAddress = Mask(address);
+            //CPU.cycles++;
+            switch (physicalAddress) {
+                case uint when RAM.range.Contains(physicalAddress): return RAM.LoadHalf(physicalAddress);
+                case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadHalf(physicalAddress);
+                case uint when SPU.range.Contains(physicalAddress): return SPU.LoadHalf(physicalAddress);
+                case uint when IRQ_CONTROL.range.Contains(physicalAddress): return (ushort)IRQ_CONTROL.Read(physicalAddress);
+                case uint when DMA.range.Contains(physicalAddress): return (ushort)DMA.Read(physicalAddress); //DMA only 32-bits?
+                case uint when Timer0.Contains(physicalAddress): return 0x0;      //TODO
+                case uint when Timer1.range.Contains(physicalAddress): return (ushort)Timer1.Read(physicalAddress);
+                case uint when Timer2.range.Contains(physicalAddress): return (ushort)Timer2.Read(physicalAddress);
+                case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadHalf(physicalAddress);
+                case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadHalf(physicalAddress);
+                case uint when MemoryControl.range.Contains(physicalAddress): return (ushort)MemoryControl.Read(physicalAddress);
+                default: throw new Exception("Unhandled LoadHalf from: " + address.ToString("X"));
+
+            }    
+        }
+
+        public void StoreHalf(UInt32 address, UInt16 value) {
+            uint physicalAddress = Mask(address);
+            //CPU.cycles++;
+            switch (physicalAddress) {
+                case uint when RAM.range.Contains(physicalAddress): RAM.StoreHalf(physicalAddress, value); break;
+                case uint when SPU.range.Contains(physicalAddress): SPU.StoreHalf(physicalAddress, value); break;
+                case uint when Timer0.Contains(physicalAddress): break;     //TODO
+                case uint when Timer1.range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
+                case uint when Timer2.range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
+                case uint when IRQ_CONTROL.range.Contains(physicalAddress): IRQ_CONTROL.Write(physicalAddress, value); break;
+                case uint when IO_PORTS.range.Contains(physicalAddress): IO_PORTS.StoreHalf(physicalAddress, value); break;
+                case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreHalf(physicalAddress, value); break;
+                case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
+                case uint when DMA.range.Contains(physicalAddress):
+                    DMA.Write(physicalAddress, value);
+                    DMAChannel activeCH = DMA.is_active(physicalAddress);  //Handle active DMA transfer (if any)
+                    if (activeCH != null) {
+                        if (activeCH.GetSync() == ((uint)DMAChannel.Sync.LinkedList)) {
+                            HandleDMALinkedList(ref activeCH);
+                        } else {
+                            HandleDMA(ref activeCH);
+                        }
                     }
-                }
-            }else if (GPU.range.contains(physical_address)) {
-                GPU.storeWord(physical_address, value);
-
-            }else if (TIMER0.contains(physical_address)) {   
-                //Console.WriteLine("Unhandled write to TIMER0 register at address: " + address.ToString("X"));
-                
-            }else if (Timer1.range.contains(physical_address)) {
-                Timer1.write(physical_address, value);
-
-            }else if (Timer2.range.contains(physical_address)) {
-                Timer2.write(physical_address, value);    
-
-            }else if (Scratchpad.range.contains(physical_address)) {  
-                Scratchpad.storeWord(physical_address, value);
-
-            }else if (MDEC.range.contains(physical_address)) {
-                MDEC.write(physical_address, value);
-                //Console.WriteLine("[BUS] MDEC write at:" + address.ToString("x") + " - value: " + value.ToString("x"));  
-            }else if ((address >= 0x1F800400) && (address <= (0x1F800400 + 0xC00))) {
-                return;
-
-            }else if ((address >= 0x1F801024) && (address <= (0x1F801024 + 0x1C))) {
-                return;
-
-            }else {
-                throw new Exception("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
-                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
+                    break;
+                case 0x1f802082: Console.WriteLine("Redux-Expansion Exit code: " + value.ToString("x")); break;
+                default: throw new Exception("Unhandled StoreHalf from: " + address.ToString("X"));
             }
         }
 
-        internal UInt16 loadHalf(UInt32 address) {
-            uint physical_address = mask(address);
+        public byte LoadByte(UInt32 address) {
+            uint physicalAddress = Mask(address);
             //CPU.cycles++;
-            /*if (debug && !RAM.range.contains(physical_address)) {
-                Console.WriteLine(address.ToString("x"));
-            }*/
-
-            if (RAM.range.contains(physical_address)) {
-                return RAM.LoadHalf(physical_address);
-
-            }else if (BIOS.range.contains(physical_address)) {
-                return BIOS.loadHalf(physical_address);
-
-            }else if (SPU.range.contains(physical_address)) {
-                return SPU.loadHalf(physical_address);
-
-            }else if (IRQ_CONTROL.range.contains(physical_address)) {
-                return (ushort)IRQ_CONTROL.read(physical_address);
-
-            } else if (DMA.range.contains(physical_address)) {  //DMA only 32-bits?
-                return (ushort)DMA.loadWord(physical_address);
-
-            } else if (TIMER0.contains(physical_address)) {
-                //Console.WriteLine("Unhandled read to TIMER0 register at address: " + address.ToString("X"));
-                return 0;
-
-            }else if (Timer1.range.contains(physical_address)) {
-                return (ushort)Timer1.read(physical_address);
-
-            }else if (Timer2.range.contains(physical_address)) {
-                return (ushort)Timer2.read(physical_address);
-
-            }else if (IO_PORTS.range.contains(physical_address)) {
-                return IO_PORTS.loadHalf(physical_address);
-
-            }else if (Scratchpad.range.contains(physical_address)) {
-                return Scratchpad.loadHalf(physical_address);
-
-            }else if (Expansion1.range.contains(physical_address)) {    //Ignore expansion 1
-                return 0xFF;
-
-            } else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
-                return 0x31E1;
-            } else {
-                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
-                 throw new Exception("Unhandled loadHalf at address : " + address.ToString("x") + "\n" +
-                                "Physical address: " + physical_address.ToString("x"));
-                return 0;
-            }
-
-        }
-
-        public void storeHalf(UInt32 address, UInt16 value) {
-            uint physical_address = mask(address);
-            //CPU.cycles++;
-
-            if (RAM.range.contains(physical_address)) {
-                RAM.StoreHalf(physical_address, value);
-
-            }else if (SPU.range.contains(physical_address)) {
-                SPU.storeHalf(physical_address, value);
-
-            }else if (TIMER0.contains(physical_address)) {
-                //Console.WriteLine("Unhandled write to TIMER0 register at address: " + address.ToString("X"));
-
-            }else if (Timer1.range.contains(physical_address)) {
-                Timer1.write(physical_address, value);
-
-            }else if (Timer2.range.contains(physical_address)) {
-                Timer2.write(physical_address, value);
-
-            }else if (IRQ_CONTROL.range.contains(physical_address)) {
-                IRQ_CONTROL.write(physical_address, value);
-
-            } else if (DMA.range.contains(physical_address)) {  
-                DMA.storeWord(physical_address, value);         //DMA only 32-bits?
-                DMAChannel activeCH = DMA.is_active(physical_address);  //Handle active DMA transfer (if any)
-                if (activeCH != null) {
-                    if (activeCH.get_sync() == ((uint)DMAChannel.Sync.LinkedList)) {
-                        dma_LinkedList_transfer(ref activeCH);
-                    } else {
-                        dma_transfer(ref activeCH);
-                    }
-                }
-
-            } else if (IO_PORTS.range.contains(physical_address)) {
-                IO_PORTS.storeHalf(physical_address, value);
-
-            }else if (Scratchpad.range.contains(physical_address)) {
-                Scratchpad.storeHalf(physical_address, value);
-            
-            } else if (address == 0x1f802082) {
-                Console.WriteLine("Redux-Expansion Exit code: " + value.ToString("x"));
-            } else if (address >= 0x1F801014 && address < 0x1F801018) {  //SPU delay 
-
-            } else {
-                throw new Exception("Unhandled store16 at address : " + address.ToString("x"));
-                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
-
+            switch (physicalAddress) {
+                case uint when RAM.range.Contains(physicalAddress): return RAM.LoadByte(physicalAddress);
+                case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadByte(physicalAddress);
+                case uint when CDROM.range.Contains(physicalAddress): return CDROM.LoadByte(physicalAddress);
+                case uint when MemoryControl.range.Contains(physicalAddress): return (byte)MemoryControl.Read(physicalAddress);
+                case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadByte(physicalAddress);
+                case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadByte(physicalAddress);
+                case uint when Expansion1.range.Contains(physicalAddress):   
+                case uint when Expansion2.range.Contains(physicalAddress): return 0xFF;   //Ignore Expansions 1 and 2 
+                default: throw new Exception("Unhandled LoadByte from: " + address.ToString("X"));
             }
         }
-        internal byte loadByte(UInt32 address) {
-            uint physical_address = mask(address);
+
+        public void StoreByte(uint address, byte value) {
+            uint physicalAddress = Mask(address);
             //CPU.cycles++;
-            /*if (debug && !RAM.range.contains(physical_address)) {
-                Console.WriteLine(address.ToString("x"));
-            }*/
-            if (RAM.range.contains(physical_address)) {
-                return RAM.LoadByte(physical_address);
-
-            }else if (BIOS.range.contains(physical_address)) {
-                return BIOS.loadByte(physical_address);
-
-            }else if (Expansion1.range.contains(physical_address)) {
-                return 0xff;
-
-            }else if (CD_ROM.range.contains(physical_address)) {
-                return CD_ROM.LoadByte(physical_address);
-
-            }else if (IO_PORTS.range.contains(physical_address)) {
-                return IO_PORTS.loadByte(physical_address);
-
-            }else if (Scratchpad.range.contains(physical_address)) {
-                return Scratchpad.loadByte(physical_address);
-
-            }else if (address == 0x1f8010f6) {
-                //Weird DMA register
-                //throw new Exception();
-
-                return 0;
-            }else {
-                throw new Exception("Unhandled load8 at address : " + address.ToString("x"));
-
-                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
-                return 0;
-            } 
+            switch (physicalAddress) {
+                case uint when RAM.range.Contains(physicalAddress): RAM.StoreByte(physicalAddress, value); break;
+                case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreByte(physicalAddress, value); break;
+                case uint when CDROM.range.Contains(physicalAddress): CDROM.StoreByte(physicalAddress, value); break;
+                case uint when IO_PORTS.range.Contains(physicalAddress): IO_PORTS.StoreHalf(physicalAddress, value); break; //Should store byte..?
+                case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
+                case uint when Expansion1.range.Contains(physicalAddress):
+                case uint when Expansion2.range.Contains(physicalAddress): break;   //Ignore Expansions 1 and 2
+                default: throw new Exception("Unhandled StoreByte to: " + address.ToString("X"));
+            }           
         }
 
-        public void storeByte(UInt32 address, byte value) {
-            uint physical_address = mask(address);
-            //CPU.cycles++;
-
-            if (RAM.range.contains(physical_address)) {
-                RAM.StoreByte(physical_address, value);
-
-            }else if (CD_ROM.range.contains(physical_address)) {
-                CD_ROM.StoreByte(physical_address, value);
-
-            }else if (IO_PORTS.range.contains(physical_address)) {
-                IO_PORTS.storeHalf(physical_address, value);
-
-            }else if (Scratchpad.range.contains(physical_address)) {
-                Scratchpad.storeByte(physical_address, value);
-
-            }else if (Expansion2.range.contains(physical_address)) {
-                //Console.WriteLine("Unhandled write to EXPANTION2 at address : " + address.ToString("x"));
-                /*if (address == 0x1F802041) {
-                    Console.WriteLine("POST: " + value.ToString("x"));
-                }*/
-
-            } else if (address == 0x1f8010f6) {
-                //Weird DMA register
-                //throw new Exception();
-            }else {
-                Console.WriteLine("unknown address: " + address.ToString("X") + " - " + " Physical: " + physical_address.ToString("x"));
-
-                throw new Exception("Unhandled store8 at address : " + address.ToString("x"));
-            }
-            //address 0x1f8010f6 ?? 
-        }
-
-        public UInt32 mask(UInt32 address) { 
+        public UInt32 Mask(UInt32 address) { 
             UInt32 index = address >> 29;
             UInt32 physical_address = address & RegionMask[index];
             return physical_address;
         }
-        private void dma_LinkedList_transfer(ref DMAChannel activeCH) {     
+        private void HandleDMALinkedList(ref DMAChannel activeCH) {     
             DMAChannel ch = activeCH;
          
             if (ch.get_direction() == ((uint)DMAChannel.Direction.ToRam)) {
@@ -389,7 +235,7 @@ namespace PSXEmulator {
             };
         }
 
-        private void dma_transfer(ref DMAChannel activeCH) {
+        private void HandleDMA(ref DMAChannel activeCH) {
             DMAChannel ch = activeCH;
             int step;
             if (ch.get_step() == ((uint)DMAChannel.Step.Increment)) {
@@ -401,7 +247,6 @@ namespace PSXEmulator {
 
             UInt32 base_address = ch.read_base_addr();
             UInt32? transfer_size = ch.get_transfer_size();
-            Console.WriteLine("Here: " + transfer_size);
 
             if (transfer_size == null) {
                 throw new Exception("transfer size is null, LinkedList mode?");
@@ -417,7 +262,7 @@ namespace PSXEmulator {
                     switch (ch.get_portnum()) {
                         case 0:
                             //Console.WriteLine("[BUS] MDEC DMA write - value: " + data.ToString("x"));
-                            MDEC.CommandAndParameters(data);
+                            //MDEC.CommandAndParameters(data);
                             break;   //MDECin  (RAM to MDEC)
                         case 2: GPU.write_GP0(data); break;
                         case 4: SPU.DMAtoSPU(data);  break;
@@ -427,9 +272,8 @@ namespace PSXEmulator {
                     
                     switch (ch.get_portnum()) {
                         case 1:
-                            uint w = MDEC.ReadCurrentMacroblock();
-                            Console.WriteLine("[BUS] MDEC to RAM DMA: " + w.ToString("x"));
-                            RAM.StoreWord(current_address, w);
+                            //uint w = MDEC.ReadCurrentMacroblock();                           
+                            RAM.StoreWord(current_address, 0xFFFFFFFF);
                             break;
 
                         case 2:  //GPU
@@ -442,7 +286,7 @@ namespace PSXEmulator {
                             RAM.StoreWord(current_address, merged_Pixels);
                             break;
 
-                        case 3: RAM.StoreWord(current_address, CD_ROM.DataController.ReadWord()); break;  //CD-ROM
+                        case 3: RAM.StoreWord(current_address, CDROM.DataController.ReadWord()); break;  //CD-ROM
                         case 4: RAM.StoreWord(current_address, SPU.SPUtoDMA()); break;                     //SPU
 
                         case 6:

@@ -7,7 +7,7 @@ namespace PSXEmulator {
          static UInt32 I_STAT = 0;  //IRQ Status 
          static UInt32 I_MASK = 0;  //IRQ Mask 
 
-        public static uint read(uint address) {
+        public static uint Read(uint address) {
             uint offset = address - range.start;
             switch (offset) {
                 case 0: return I_STAT;       //& mask?
@@ -16,7 +16,7 @@ namespace PSXEmulator {
             }
         }
 
-        public static void write(uint address, ushort value) {
+        public static void Write(uint address, ushort value) {
             uint offset = address - range.start;
             switch (offset) {
                 case 0: I_STAT = I_STAT & value; break;

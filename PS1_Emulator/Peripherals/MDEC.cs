@@ -1,6 +1,8 @@
-﻿using System;
+﻿using SixLabors.ImageSharp.PixelFormats;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows.Input;
 
 namespace PSXEmulator.Peripherals {
     public class MDEC { //Macroblock Decoder
@@ -37,9 +39,12 @@ namespace PSXEmulator.Peripherals {
             new short[64], new short[64], new short[64]
         };
         short[] dst = new short[64];
+        byte[] buffer = new byte[0x30000];
+        int bufferOutPtr = 0;
+        int colorPtr = 0;
 
         //Final Colors
-        public List<byte> OutputBuffer = new List<byte>();
+        //public List<byte> OutputBuffer = new List<byte>(1024);
 
         private int[] ZigZag = {
             0 ,1 ,5 ,6 ,14,15,27,28,
@@ -68,7 +73,7 @@ namespace PSXEmulator.Peripherals {
             uint offset = address - range.start;
             switch (offset) {
                 case 0:
-                    Console.WriteLine("\n[MDEC] Reading Data Non-DMA");
+                    //Console.WriteLine("\n[MDEC] Reading Data Non-DMA");
                     return ReadCurrentMacroblock();              //Response/Data read
 
                 case 4:
@@ -111,6 +116,8 @@ namespace PSXEmulator.Peripherals {
             DataOutputBit15 = (value >> 23) & 1;
             CurrentBlock = (value >> 16) & 0x7;
             WordsRemaining = (ushort)(value & 0xF);
+      
+        
         }
         private void WriteControl(uint value) {
             /*  31    Reset MDEC (0=No change, 1=Abort any command, and set status=80040000h)
@@ -127,9 +134,15 @@ namespace PSXEmulator.Peripherals {
                 ColorQuantTable.Clear();
                 ScaleTable.Clear();
                 CurrentState = MDECState.Idle;
+                bufferOutPtr = 0;
+                colorPtr = 0;
+                for (int i = 0; i < buffer.Length; i++) {
+                    buffer[i] = 0;
+                }
             }
         }
         public void CommandAndParameters(uint value) { //Find a better name for this thing
+
             switch (CurrentState) {
                 case MDECState.LoadingScaleTable:
                     //WordsRemaining -= 2;
@@ -179,21 +192,40 @@ namespace PSXEmulator.Peripherals {
                         DataOutRequest = 1;
                         DataOutFifoEmpty = 0;
                         CommandBusy = 0;
-                        CurrentBlock = 0;
 
                         if (DataOutputDepth > 1) {
                             Console.WriteLine("\n15/24 bit");
-                            
+                            while (Compresssed.Count > 0) {
+                                while (CurrentBlock < 6) {
+                                    Console.WriteLine(CurrentBlock);
+                                    rl_decode_block(ref blk[CurrentBlock], ref Compresssed, CurrentBlock > 1? LuminanceQuantTable : ColorQuantTable);
+                                    if(k < 64) { return; }
+                                    idct_core(ref blk[CurrentBlock]);
+                                    CurrentBlock++;
+                                }
+                                CurrentBlock = 0;
+                                k = 64;
+
+                                yuv_to_rgb(ref blk[2], DataOutputSigned == 1, 0, 0);
+                                yuv_to_rgb(ref blk[3], DataOutputSigned == 1, 8, 0);
+                                yuv_to_rgb(ref blk[4], DataOutputSigned == 1, 0, 8);
+                                yuv_to_rgb(ref blk[5], DataOutputSigned == 1, 8, 8);
+                                colorPtr += (256 * (DataOutputDepth == 2 ? 3 : 2));
+                            }
 
                         } else {
                             while(Compresssed.Count > 0) {
+                                Console.WriteLine("Decoding Block: " + CurrentBlock);
+
                                 rl_decode_block(ref blk[CurrentBlock], ref Compresssed, LuminanceQuantTable);
                                 if (k < 64) {
                                     return;     //Incomplete block
                                 }
                                 idct_core(ref blk[CurrentBlock]);
                                 y_to_mono(ref blk[CurrentBlock], DataOutputSigned == 1);
-                                CurrentBlock = (CurrentBlock + 1) % 6;
+                                Console.WriteLine("Block: " + CurrentBlock + " Ready");
+                                //CurrentBlock = (CurrentBlock + 1) % 6;
+                                cI = 0;
                             }
                         }
                     }
@@ -204,89 +236,111 @@ namespace PSXEmulator.Peripherals {
             //Decode and Execute
             ExecuteCommand(value);
         }
-
+        int cB = 4;
+        int cI = 0;
         public uint ReadCurrentMacroblock() {
-            uint data = (uint)(OutputBuffer[0] | (OutputBuffer[1] << 8) | (OutputBuffer[2] << 16) | (OutputBuffer[3] << 24));
-            OutputBuffer.RemoveRange(0,4);
-
-            //if (WithinBlockIndex >= 64) { WithinBlockIndex = 0; BlkNumber++; }
-            //if (BlkNumber >= 6) { BlkNumber = 0; WithinBlockIndex = 0; DataOutFifoEmpty = 1; Console.WriteLine("Reached Last Block"); }
-
-            return data;
+            
+            byte data0 = buffer[bufferOutPtr++];
+            byte data1 = buffer[bufferOutPtr++];
+            byte data2 = buffer[bufferOutPtr++];
+            byte data3 = buffer[bufferOutPtr++];
+            
+            return (uint)(data0 | (data1 << 8) | (data2 << 16) | (data3 << 24));
         }
 
         private void y_to_mono(ref short[] yblk, bool IsSigned) {
             short y;
             int signedY;
-
             for (int i = 0; i < 64; i++) {
                 y = yblk[i];
                 y &= 0x1FF;
                 signedY = signed9Bits((int)y);
                 signedY = Math.Clamp(signedY, -128, 127);
                 if (!IsSigned) {
-                    signedY += 128;
+                    signedY = signedY ^ 0x80;   //y += 128
                 }
-                OutputBuffer.Add((byte)signedY);
+                yblk[i] = (short)signedY;
             }
         }
 
-        private void yuv_to_rgb(ref uint[] cblks, bool IsSigned, int xx, int yy) {
-            double R,G,B,C_Y;   //Idk what to call Y, there is already small y
-            ushort outR,outG,outB;
+        private void yuv_to_rgb(ref short[] cblks, bool IsSigned, int xx, int yy) {
+            int R, G, B, C_Y;   //Idk what to call Y, there is already small y
+            int outR, outG, outB;
 
             for (int y = 0; y <= 7; y++) {
                 for (int x = 0; x <= 7; x++) {
-                    R = blk[0][((x + xx) / 2) + ((y + yy) / 2) * 8];
-                    B = blk[1][((x + xx) / 2) + ((y + yy) / 2) * 8];
-                    G = (-0.3437 * B) + (-0.7143 * R); R = (1.402 * R); B = (1.772 * B);
-                    C_Y = cblks[(x) + (y) * 8];
-                    outR = (ushort)Math.Clamp(C_Y + R,- 128, 127);
-                    outG = (ushort)Math.Clamp(C_Y + G, -128, 127);
-                    outB = (ushort)Math.Clamp(C_Y + B, -128, 127);
+                    R = blk[0][((x + xx) / 2) + (y + yy) / 2 * 8];
+                    B = blk[1][((x + xx) / 2) + (y + yy) / 2 * 8];
+                    G = (int)((-0.3437 * B) + (-0.7143 * R)); R = (int)(1.402 * R); B = (int)(1.772 * B);
+                    C_Y = cblks[(x) + (y * 8)];
+
+                    outR = Math.Clamp(C_Y + R, -128, 127);
+                    outG = Math.Clamp(C_Y + G, -128, 127);
+                    outB = Math.Clamp(C_Y + B, -128, 127);
+
                     if (!IsSigned) {
-                        outR ^= 0x80; 
+                        outR ^= 0x80;
                         outG ^= 0x80;
-                        outB ^= 0x80;
-                        //Output[(x + xx) + (y + yy) * 16] = ((uint)outB << 16) | ((uint)outG << 8) | outR;
+                        outB ^= 0x80;                      
+                    }
+
+                    if (DataOutputDepth == 2) {                         //24 bpp
+                        int index = (((x + xx) + ((y + yy) * 16)) * 3) + colorPtr;
+                        buffer[index++] = (byte)(outR & 0xFF);
+                        buffer[index++] = (byte)(outG & 0xFF);
+                        buffer[index++] = (byte)(outB & 0xFF);
+
+                    } else {                                          //15 bpp 
+                        int index = (((x + xx) + ((y + yy) * 16)) * 2) + colorPtr;
+                        byte r5 = (byte)((outR & 0xFF) >> 3);        //Convert to BGR555
+                        byte g5 = (byte)((outG & 0xFF) >> 3);
+                        byte b5 = (byte)((outB & 0xFF) >> 3);
+
+                        ushort color = (ushort)(r5 | (g5 << 5) | (b5 << 10));
+
+                        buffer[index++] = (byte)(color & 0xFF);
+                        buffer[index++] = (byte)((color >> 8) & 0xFF);
                     }
                 }
             }
         }
+
         ushort k = 64;
         ushort n;
         ushort q_scale;
         int val;
-
+        
         private void rl_decode_block(ref short[] blk, ref Queue<ushort> src, List<byte> qt) {   //Passed by refrence so that changes affect the actual input
+           
+            while (src.Count > 0 && src.Peek() == 0xFE00) { src.Dequeue(); }
+            if (src.Count == 0) { return; }
 
-            if(k >= blk.Length) {
+            if (k >= blk.Length) {
                 for (int i = 0; i < blk.Length; i++) { blk[i] = 0; }
+
                 k = 0;
                 n = src.Dequeue();
                 q_scale = (ushort)((n >> 10) & 0x3F);
                 val = signed10bits(signed10bits((n & 0x3FF) * qt[k]) & 0x3FF);
-                k = (ushort)(k + ((n >> 10) & 0x3F) + 1);
+                //k = (ushort)(k + ((n >> 10) & 0x3F) + 1);
             }
 
-            while(src.Count > 0 && src.Peek() == 0xFE00) { src.Dequeue(); }
-            if (src.Count == 0) { return; }
-
          
-            Console.WriteLine("First:" + n.ToString("x") + " --- K: " + k);
+            //Console.WriteLine("First:" + n.ToString("x") + " --- K: " + k);
+
             while (k < 64) {
                 if (q_scale == 0) { val = signed10bits(n & 0x3FF) * 2; }
                 val = Math.Clamp(val, -0x400, +0x3FF);
                 if (q_scale > 0) { blk[ZigZag[k]] = (short)val; }
                 if (q_scale == 0) { blk[k] = (short)val; }
-                if(src.Count == 0) { return; }
-                n = src.Dequeue();
+                if(src.Count == 0) { /*if (k == 63) { k = 64; };*/ return; }
 
+                n = src.Dequeue();
                 k = (ushort)(k + ((n >> 10) & 0x3F) + 1);
 
-                Console.WriteLine("Next:" + n.ToString("x") + " --- K: " + k);
+                //Console.WriteLine("Next:" + n.ToString("x") + " --- K: " + k);
 
-                val = (signed10bits(n & 0x3FF) * qt[k & 0x3F] * q_scale + 4) / 8;
+                val = (signed10bits(n & 0x3FF) * qt[k & 63] * q_scale + 4) / 8;
             }
         }
 
@@ -294,7 +348,7 @@ namespace PSXEmulator.Peripherals {
 
             int sum;
 
-            for (int pass = 0; pass < 2; pass++) { 
+            for (int pass = 0; pass <= 1; pass++) { 
                 for (int x = 0; x <= 7; x++) {
                     for (int y = 0; y <= 7; y++) {
                         sum = 0;
@@ -388,11 +442,8 @@ namespace PSXEmulator.Peripherals {
             DataInFifoFull = 0;
             CommandBusy = 1;
 
-            for (int i = 0; i < blk.Length; i++) {
-                for (int j = 0; j < 64; j++) {
-                    blk[i][j] = 0;
-                }
-            }
+            colorPtr = 0;
+            bufferOutPtr = 0;
 
             Console.WriteLine("\nDecode Macroblock -> " + value.ToString("x"));
             Console.WriteLine("Data Output Depth: " + depth);
