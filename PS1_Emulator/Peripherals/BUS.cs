@@ -1,8 +1,6 @@
 ﻿using PSXEmulator.Peripherals;
 using PSXEmulator.PS1_Emulator;
 using System;
-using System.Net.NetworkInformation;
-using System.Windows;
 
 namespace PSXEmulator {
     public class BUS {      //Main BUS, connects the CPU to everything
@@ -70,15 +68,16 @@ namespace PSXEmulator {
                 case uint when RAM.range.Contains(physicalAddress): return RAM.LoadWord(physicalAddress);
                 case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadWord(physicalAddress);
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): return IRQ_CONTROL.Read(physicalAddress);
-                case uint when DMA.range.Contains(physicalAddress): return DMA.Read(physicalAddress);
+                case uint when DMA.range.Contains(physicalAddress): return DMA.ReadWord(physicalAddress);
                 case uint when GPU.range.Contains(physicalAddress): return GPU.LoadWord(physicalAddress);
+                case uint when SPU.range.Contains(physicalAddress): return SPU.LoadWord(physicalAddress);
                 case uint when Timer0.Contains(physicalAddress): return 0x0;    //TODO
                 case uint when Timer1.range.Contains(physicalAddress): return Timer1.Read(physicalAddress);
                 case uint when Timer2.range.Contains(physicalAddress): return Timer2.Read(physicalAddress);
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadWord(physicalAddress);
                 case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadWord(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return MemoryControl.Read(physicalAddress);
-                case uint when MDEC.range.Contains(physicalAddress): return 0x0;
+                case uint when MDEC.range.Contains(physicalAddress): return MDEC.read(physicalAddress);
                 case uint when RamSize.range.Contains(physicalAddress): return RamSize.LoadWord();
                 default: throw new Exception("Unhandled LoadWord from: " + address.ToString("X"));
             }
@@ -98,9 +97,9 @@ namespace PSXEmulator {
                 case uint when Timer1.range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
                 case uint when Timer2.range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreWord(physicalAddress, value); break;
-                case uint when MDEC.range.Contains(physicalAddress): break;
+                case uint when MDEC.range.Contains(physicalAddress): MDEC.write(physicalAddress, value); break;
                 case uint when DMA.range.Contains(physicalAddress):
-                    DMA.Write(physicalAddress, value);
+                    DMA.StoreWord(physicalAddress, value);
                     DMAChannel activeCH = DMA.is_active(physicalAddress);  //Handle active DMA transfer (if any)
                     if (activeCH != null) {
                         if (activeCH.GetSync() == ((uint)DMAChannel.Sync.LinkedList)) {
@@ -122,7 +121,7 @@ namespace PSXEmulator {
                 case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadHalf(physicalAddress);
                 case uint when SPU.range.Contains(physicalAddress): return SPU.LoadHalf(physicalAddress);
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): return (ushort)IRQ_CONTROL.Read(physicalAddress);
-                case uint when DMA.range.Contains(physicalAddress): return (ushort)DMA.Read(physicalAddress); //DMA only 32-bits?
+                case uint when DMA.range.Contains(physicalAddress): return (ushort)DMA.ReadWord(physicalAddress); //DMA only 32-bits?
                 case uint when Timer0.Contains(physicalAddress): return 0x0;      //TODO
                 case uint when Timer1.range.Contains(physicalAddress): return (ushort)Timer1.Read(physicalAddress);
                 case uint when Timer2.range.Contains(physicalAddress): return (ushort)Timer2.Read(physicalAddress);
@@ -130,7 +129,6 @@ namespace PSXEmulator {
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadHalf(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return (ushort)MemoryControl.Read(physicalAddress);
                 default: throw new Exception("Unhandled LoadHalf from: " + address.ToString("X"));
-
             }    
         }
 
@@ -148,7 +146,7 @@ namespace PSXEmulator {
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreHalf(physicalAddress, value); break;
                 case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
                 case uint when DMA.range.Contains(physicalAddress):
-                    DMA.Write(physicalAddress, value);
+                    DMA.StoreWord(physicalAddress, value);
                     DMAChannel activeCH = DMA.is_active(physicalAddress);  //Handle active DMA transfer (if any)
                     if (activeCH != null) {
                         if (activeCH.GetSync() == ((uint)DMAChannel.Sync.LinkedList)) {
@@ -170,6 +168,7 @@ namespace PSXEmulator {
                 case uint when RAM.range.Contains(physicalAddress): return RAM.LoadByte(physicalAddress);
                 case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadByte(physicalAddress);
                 case uint when CDROM.range.Contains(physicalAddress): return CDROM.LoadByte(physicalAddress);
+                case uint when DMA.range.Contains(physicalAddress): return DMA.LoadByte(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return (byte)MemoryControl.Read(physicalAddress);
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadByte(physicalAddress);
                 case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadByte(physicalAddress);
@@ -186,6 +185,7 @@ namespace PSXEmulator {
                 case uint when RAM.range.Contains(physicalAddress): RAM.StoreByte(physicalAddress, value); break;
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreByte(physicalAddress, value); break;
                 case uint when CDROM.range.Contains(physicalAddress): CDROM.StoreByte(physicalAddress, value); break;
+                case uint when DMA.range.Contains(physicalAddress): DMA.StoreByte(physicalAddress, value); break;
                 case uint when IO_PORTS.range.Contains(physicalAddress): IO_PORTS.StoreHalf(physicalAddress, value); break; //Should store byte..?
                 case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
                 case uint when Expansion1.range.Contains(physicalAddress):
@@ -199,6 +199,7 @@ namespace PSXEmulator {
             UInt32 physical_address = address & RegionMask[index];
             return physical_address;
         }
+
         private void HandleDMALinkedList(ref DMAChannel activeCH) {     
             DMAChannel ch = activeCH;
          
@@ -262,7 +263,7 @@ namespace PSXEmulator {
                     switch (ch.get_portnum()) {
                         case 0:
                             //Console.WriteLine("[BUS] MDEC DMA write - value: " + data.ToString("x"));
-                            //MDEC.CommandAndParameters(data);
+                            MDEC.CommandAndParameters(data);
                             break;   //MDECin  (RAM to MDEC)
                         case 2: GPU.write_GP0(data); break;
                         case 4: SPU.DMAtoSPU(data);  break;
@@ -272,8 +273,8 @@ namespace PSXEmulator {
                     
                     switch (ch.get_portnum()) {
                         case 1:
-                            //uint w = MDEC.ReadCurrentMacroblock();                           
-                            RAM.StoreWord(current_address, 0xFFFFFFFF);
+                            uint w = MDEC.ReadCurrentMacroblock();                           
+                            RAM.StoreWord(current_address, w);
                             break;
 
                         case 2:  //GPU
@@ -306,7 +307,11 @@ namespace PSXEmulator {
             }
             //if (isSPUIRQ) { SPU.SPU_IRQ(); }    //Causes problems with MGS
 
-            ch.done();  
+            ch.done();
+
+            //Don't fire IRQ if it's MDEC, random workaround that may or may not work with games that need MDEC
+            //if (ch.get_portnum() == 1 || ch.get_portnum() == 0) { return; }   
+
 
             //DMA IRQ 
             DMA.ch_irq_flags = (byte)(DMA.ch_irq_flags | (1 << (int)ch.get_portnum()));
@@ -314,7 +319,6 @@ namespace PSXEmulator {
                 IRQ_CONTROL.IRQsignal(3);   //Instant IRQ is causing problems
             };
         }
-
     }
 }
 

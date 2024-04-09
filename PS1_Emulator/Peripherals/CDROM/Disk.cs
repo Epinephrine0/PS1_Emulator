@@ -13,12 +13,15 @@ namespace PSXEmulator.Peripherals.CDROM {
         public bool IsAudioDisk => HasAudioTracks && !HasDataTracks;
         public bool IsValid => Tracks != null;
         public Disk(string folderPath) {
+            ConsoleColor previousColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
             Tracks = BuildTracks(folderPath);
+            Console.ForegroundColor = previousColor;
         }
         private Track[] BuildTracks(string path) {
             string[] rawFiles = Directory.GetFiles(path);
             string cuePath = "";
-            Track[] tracks;
+            Track[] tracks;            
             for (int i = 0; i < rawFiles.Length; i++) {
                 if (Path.GetExtension(rawFiles[i]).ToLower().Equals(".cue")) { //Find Cue sheet
                     cuePath = rawFiles[i];
@@ -49,7 +52,7 @@ namespace PSXEmulator.Peripherals.CDROM {
                     dataTrack.Length = (int)new FileInfo(dataTrack.FilePath).Length;
                     return new Track[] { dataTrack };
                 }
-            }
+            } 
         }
         private int FindFirstValidBinary(string[] rawFiles) {
             for (int i = 0; i < rawFiles.Length; i++) {

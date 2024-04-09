@@ -32,14 +32,12 @@ namespace PSXEmulator {
                 default: throw new Exception("Memory Control load at address: " + address.ToString("x"));
             }
          }
+
         public void Write(uint address, uint value) {
             //Ignore writing
             //TODO: Implement the actual delays?
             //Console.WriteLine("[MemoryControl1] Ignored writing to: " + address.ToString("x"));
         }
 
-        internal byte Read() {
-            throw new NotImplementedException();
-        }
     }
 }

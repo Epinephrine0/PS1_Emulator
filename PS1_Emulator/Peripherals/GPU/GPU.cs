@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 namespace PSXEmulator {
     public class GPU {
         public Range range = new Range(0x1f801810, 5);
-        Renderer window;
+        public Renderer window;
 
         public enum VerticalRes {
             Y240Lines = 0,

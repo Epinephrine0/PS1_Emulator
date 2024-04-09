@@ -87,6 +87,10 @@ namespace PSXEmulator {
 
             data[final] = value;
         }
+
+        public byte[] GetMemory() {
+            return data;
+        }
        
     }
 }

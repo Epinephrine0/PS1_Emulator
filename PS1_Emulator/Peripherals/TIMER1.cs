@@ -43,7 +43,7 @@ namespace PSXEmulator {
                         }
                         break;
 
-                    case 8: Console.WriteLine("[TIMER1] Write Target: " + value.ToString("x")); target = value; break;
+                    case 8: /*Console.WriteLine("[TIMER1] Write Target: " + value.ToString("x"));*/ target = value; break;
 
                     default: throw new Exception("Unknown TIMER1 offset: " + offset);
 

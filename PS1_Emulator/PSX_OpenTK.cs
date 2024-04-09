@@ -1,17 +1,15 @@
 ﻿using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
-using OpenTK.Windowing.Common.Input;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp;
-using System;
-using System.Threading;
-using System.IO;
 using PSXEmulator.Peripherals;
 using PSXEmulator.PS1_Emulator;
+using System;
+using System.IO;
 using System.Text;
+using System.Threading;
+using System.Timers;
 
 namespace PSXEmulator {
     public class PSX_OpenTK {
@@ -30,14 +28,14 @@ namespace PSXEmulator {
             Gws.UpdateFrequency = 60;
             nativeWindowSettings.Location = new Vector2i((1980 - nativeWindowSettings.Size.X) / 2, (1080 - nativeWindowSettings.Size.Y) / 2);
 
-            try {
+            /*try {
                 var windowIcon = new WindowIcon(new OpenTK.Windowing.Common.Input.Image(300, 300, ImageToByteArray(@"PSX logo.jpg")));
                 nativeWindowSettings.Icon = windowIcon;
             }
             catch (FileNotFoundException ex) { 
                 Console.WriteLine("Warning: PSX logo not found!");
-            }
-
+            }*/
+            
 
             mainWindow = new Renderer(Gws, nativeWindowSettings);
 
@@ -76,20 +74,23 @@ namespace PSXEmulator {
                 mainWindow.Title += "PSX-BIOS";
             }
             mainWindow.Title += " | ";
+            mainWindow.TitleCopy = mainWindow.Title;
 
-            mainWindow.Run();
+            mainWindow.Run();       //Infinite loop 
 
-            mainWindow.Dispose();   //Will reach this if the render window closes   
+            mainWindow.FrameTimer.Dispose();
+            mainWindow.Dispose();   //Will reach this if the render window 
+            mainWindow = null;
             
         }
  
-        public byte[] ImageToByteArray(string Icon) {
+        /*public byte[] ImageToByteArray(string Icon) {
             var image = (Image<Rgba32>)SixLabors.ImageSharp.Image.Load(Configuration.Default, Icon);
             var pixels = new byte[4 * image.Width * image.Height];
             image.CopyPixelDataTo(pixels);
 
             return pixels;
-        }
+        }*/
     }
 
     public class Renderer : GameWindow {    //Now it gets really messy 
@@ -109,8 +110,8 @@ namespace PSXEmulator {
         private int maskBitSettingLoc;
         private int clutLoc;
         private int texPageLoc;
-        private int display_areay_X_Loc;
-        private int display_areay_Y_Loc;
+        private int display_area_X_Loc;
+        private int display_area_Y_Loc;
         private int display_area_X_Offset_Loc;
         private int display_area_Y_Offset_Loc;
         private int vramFrameBuffer;
@@ -128,7 +129,7 @@ namespace PSXEmulator {
         //This is going to contain blocks that are either clean (0) or dirty (1) for texture invalidation 
         const int IntersectionBlockLength = 64;
         private int[,] IntersectionTable = new int[VRAM_HEIGHT / IntersectionBlockLength, VRAM_WIDTH / IntersectionBlockLength];
-
+        bool FrameUpdated = false;
         Shader shader;
         string vertixShader = @"
             #version 330 
@@ -468,6 +469,7 @@ namespace PSXEmulator {
             GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             GL.Clear(ClearBufferMask.ColorBufferBit);
             SwapBuffers();
+            SetTimer();
         }
 
         protected override void OnLoad() {
@@ -492,8 +494,8 @@ namespace PSXEmulator {
             maskBitSettingLoc = GL.GetUniformLocation(shader.Program, "maskBitSetting");
             isDitheredLoc = GL.GetUniformLocation(shader.Program, "isDithered");
 
-            display_areay_X_Loc = GL.GetUniformLocation(shader.Program, "display_area_x");
-            display_areay_Y_Loc = GL.GetUniformLocation(shader.Program, "display_area_y");
+            display_area_X_Loc = GL.GetUniformLocation(shader.Program, "display_area_x");
+            display_area_Y_Loc = GL.GetUniformLocation(shader.Program, "display_area_y");
             display_area_X_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_offset");
             display_area_Y_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_y_offset");
 
@@ -638,6 +640,7 @@ namespace PSXEmulator {
 
             GL.DrawArrays(PrimitiveType.Triangles, 0, 3);
             UpdateIntersectionTable(ref vertices);
+            FrameUpdated = true;
         }
 
         public void drawRectangle(
@@ -713,6 +716,7 @@ namespace PSXEmulator {
 
             GL.DrawArrays(PrimitiveType.TriangleFan, 0, 4);
             UpdateIntersectionTable(ref vertices);
+            FrameUpdated = true;
         }
 
         public void DrawLines(ref short[] vertices, ref byte[] colors, bool isPolyLine, bool isDithered) {
@@ -740,6 +744,7 @@ namespace PSXEmulator {
 
             GL.DrawArrays(isPolyLine ? PrimitiveType.LineStrip : PrimitiveType.Lines, 0, vertices.Length / 2);
             UpdateIntersectionTable(ref vertices);
+            FrameUpdated = true;
         }
 
         public void ReadBackTexture(UInt16 x, UInt16 y, UInt16 width, UInt16 height, ref UInt16[] texData) {
@@ -786,7 +791,8 @@ namespace PSXEmulator {
             //update_SamplingTexture();
             
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
-            GL.ClearColor(0, 0, 0, 1.0f);           
+            GL.ClearColor(0, 0, 0, 1.0f);
+            FrameUpdated = true;
         }
 
         public void update_vram(int x, int y , int width, int height, ref ushort[] textureData) {
@@ -817,6 +823,7 @@ namespace PSXEmulator {
 
             GL.Enable(EnableCap.ScissorTest);
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+            FrameUpdated = true;
         }
 
         private void update_SamplingTexture() {
@@ -851,8 +858,10 @@ namespace PSXEmulator {
 
             GL.Enable(EnableCap.ScissorTest);
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+            FrameUpdated = true;
         }
         internal void setBlendingFunction(uint function) {
+
             GL.Uniform1(transparencyModeLoc, (int)function);
             //Console.WriteLine("Transparency: " +  function);
 
@@ -1002,12 +1011,32 @@ namespace PSXEmulator {
             return !(((maxX - minX) > 1023) || ((maxY - minY) > 511) || (maxX < minX) || (maxY < minY));
         }
 
+        public System.Timers.Timer FrameTimer;
+        public int Frames = 0;
+        public string TitleCopy;
+
         public void display() {
-            displayFrame();
+            DisplayFrame();
             SwapBuffers();
+            if (FrameUpdated) {
+                Frames++;
+                FrameUpdated = false;
+            }     
+        }
+        private void SetTimer() {
+            // Create a timer with a 1 second interval.
+            FrameTimer = new System.Timers.Timer(1000);
+            // Hook up the Elapsed event for the timer. 
+            FrameTimer.Elapsed += OnTimedEvent;
+            FrameTimer.AutoReset = true;
+            FrameTimer.Enabled = true;
+        }
+        private void OnTimedEvent(Object source, ElapsedEventArgs e) {
+           this.Title = TitleCopy + "FPS: " + Frames;
+           Frames = 0;
         }
 
-        void displayFrame() {
+        void DisplayFrame() {
             //Disable the ScissorTest and unbind the FBO to draw the entire vram texture to the screen
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
@@ -1050,19 +1079,18 @@ namespace PSXEmulator {
             float disp_x = CPU.BUS.GPU.HorizontalRange;
             float disp_y = CPU.BUS.GPU.VerticalRange;
 
-
             if (!showTextures) {
 
-                GL.Uniform1(display_areay_X_Loc, disp_x);
-                GL.Uniform1(display_areay_Y_Loc, disp_y);
+                GL.Uniform1(display_area_X_Loc, disp_x);
+                GL.Uniform1(display_area_Y_Loc, disp_y);
 
-                if (disp_x / disp_y < (float)this.Size.X / (float)this.Size.Y) {
+                if ((disp_x / disp_y) < ((float)this.Size.X / (float)this.Size.Y)) {
 
                     float offset = (disp_x / disp_y) * (float)this.Size.Y;  //Random formula by JyAli
                     offset = ((float)this.Size.X - offset) / this.Size.X;
+
                     GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
                     GL.Uniform1(display_area_X_Offset_Loc, offset);
-
 
                     GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                     GL.Scissor(0, 0, (int)(offset * this.Size.X), this.Size.Y);
@@ -1070,7 +1098,7 @@ namespace PSXEmulator {
                     GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
 
                 }
-                else if (disp_x / disp_y > (float)this.Size.X / this.Size.Y) {
+                else if ((disp_x / disp_y) > ((float)this.Size.X / this.Size.Y)) {
 
                     float offset = (disp_y / disp_x) * (float)this.Size.X;  //Random formula by JyAli
 
@@ -1086,24 +1114,26 @@ namespace PSXEmulator {
                 else {
                     GL.Uniform1(display_area_X_Offset_Loc, 0.0f);
                     GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
-
                 }
             }
             else {
                 GL.Uniform1(display_area_X_Offset_Loc, 0.0f);
                 GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
-                GL.Uniform1(display_areay_X_Loc, (float)VRAM_WIDTH);
-                GL.Uniform1(display_areay_Y_Loc, (float)VRAM_HEIGHT);
+                GL.Uniform1(display_area_X_Loc, (float)VRAM_WIDTH);
+                GL.Uniform1(display_area_Y_Loc, (float)VRAM_HEIGHT);
             }
 
         }
         protected override void OnResize(ResizeEventArgs e) {
             base.OnResize(e);
-            GL.Viewport(0,0,this.Size.X,this.Size.Y);
+            GL.Viewport(0, 0, this.Size.X, this.Size.Y);
+            SwapBuffers();
         }
 
         protected override void OnKeyDown(KeyboardKeyEventArgs e) {
             base.OnKeyDown(e);
+            ConsoleColor previousColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.White;
 
             if (e.Key.Equals(Keys.Escape)) {
                 Close();
@@ -1126,9 +1156,16 @@ namespace PSXEmulator {
                 this.WindowState = isFullScreen ? WindowState.Fullscreen : WindowState.Normal;
                 this.CursorState = isFullScreen ? CursorState.Hidden : CursorState.Normal;
                 Thread.Sleep(100);
+            } else if (e.Key.Equals(Keys.F1)) {
+                Console.WriteLine("Dumping memory...");
+                File.WriteAllBytes("MemoryDump.bin", CPU.BUS.RAM.GetMemory());
+                Console.WriteLine("Done!");
+                Thread.Sleep(100);
             }
+
+            Console.ForegroundColor = previousColor;
         }
-        
+
         protected override void OnUpdateFrame(FrameEventArgs args) {
             base.OnUpdateFrame(args);
             //Clock the CPU
@@ -1157,8 +1194,6 @@ namespace PSXEmulator {
             GL.DeleteTexture(vram_texture);
             GL.DeleteTexture(sample_texture);
             GL.DeleteProgram(shader.Program);
-
-            
             base.OnUnload();
         }
     }

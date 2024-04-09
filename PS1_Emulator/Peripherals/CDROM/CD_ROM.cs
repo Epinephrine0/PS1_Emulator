@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Emit;
+using System.Windows.Media.Animation;
 
 namespace PSXEmulator {
     public unsafe class CD_ROM {
@@ -144,6 +146,7 @@ namespace PSXEmulator {
             LookUpTable[0x19] = &Test;
             LookUpTable[0x1A] = &GetID;
             LookUpTable[0x1B] = &ReadNS;
+            LookUpTable[0x1E] = &ReadTOC;
         }
 
         private static void Illegal(CD_ROM cdrom) {
@@ -288,10 +291,24 @@ namespace PSXEmulator {
             }
             byte parameter = cdrom.ParameterBuffer.Dequeue();
             switch (parameter) {
+                case 0x04: ReadSCEx(cdrom); break;
+                case 0x05: GetSCExCounters(cdrom); break;
                 case 0x20: GetDateAndVersion(cdrom); break;
                 case 0xFF: Error(cdrom, Errors.InvalidParameter); break;
                 default: throw new Exception("[CDROM] Test command: unknown parameter: " + parameter.ToString("x"));
             }
+        }
+        private static void GetSCExCounters(CD_ROM cdrom) {
+            //Typically, the values are "01h,01h" for Licensed PSX Data CDs, or "00h,00h" for disk missing, unlicensed data CDs, Audio CDs.
+            Response ack = new Response(new byte[] { 0x1,0x1 }, Delays.INT3_General, Flags.INT3, cdrom.State);
+            cdrom.Responses.Enqueue(ack);
+            //Seems like Spyro Year of The Dragon uses this command as one of its (many) anti piracy tricks  
+        }
+        private static void ReadSCEx(CD_ROM cdrom) {
+            //19h,04h --> INT3(stat) ;Read SCEx string (and force motor on)
+            Response ack = new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State);
+            cdrom.Responses.Enqueue(ack);
+            cdrom.stat |= 0x2; //Motor On
         }
         private static void MotorOn(CD_ROM cdrom) {
             //Activates the drive motor, works ONLY if the motor was off (otherwise fails with INT5(stat,20h);
@@ -307,6 +324,13 @@ namespace PSXEmulator {
                 cdrom.Responses.Enqueue(ack);
                 cdrom.Responses.Enqueue(done);
             }
+        }
+        private static void ReadTOC(CD_ROM cdrom) {
+            //Caution: Supported only in BIOS version vC1 and up. Not supported in vC0.
+            Response ack = new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State);
+            Response done = new Response(new byte[] { cdrom.stat }, Delays.INT2_GetID, Flags.INT2, cdrom.State);
+            cdrom.Responses.Enqueue(ack);
+            cdrom.Responses.Enqueue(done);
         }
         private static void Forward(CD_ROM cdrom) {
             if (cdrom.State != CDROMState.PlayingCDDA) {
@@ -327,8 +351,10 @@ namespace PSXEmulator {
             cdrom.Responses.Enqueue(ack);
         }
         private static void GetLocL(CD_ROM cdrom) {
+         
             if (cdrom.SeekedL || cdrom.SeekedP) {   //Error if a seek has been done but no read
                 Error(cdrom, Errors.CannotRespondYet);
+                Console.WriteLine("[CDROM] GetLoc Error: CannotRespondYet");
                 return;
             }
 
@@ -336,8 +362,8 @@ namespace PSXEmulator {
             byte[] header = cdrom.DataController.LastSectorHeader;      //Are MSF already in BCD?
             byte[] subHeader = cdrom.DataController.LastSectorSubHeader;
 
-            Response ack = new Response(new byte[] { header[0], header[1], header[2], header[3],  subHeader[0], subHeader[1], subHeader[2], subHeader[3]}, 
-                Delays.INT3_General, Flags.INT3, cdrom.State);
+            Response ack = new Response(new byte[] { header[0], header[1], header[2], header[3], 
+                subHeader[0], subHeader[1], subHeader[2], subHeader[3]}, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
         }
         private static void GetLocP(CD_ROM cdrom) { //Subchannel Q ?
@@ -674,6 +700,8 @@ namespace PSXEmulator {
             cdrom.SeekParameters[0] = cdrom.ParameterBuffer.Dequeue();  //Minutes
             cdrom.SeekParameters[1] = cdrom.ParameterBuffer.Dequeue();  //Seconds 
             cdrom.SeekParameters[2] = cdrom.ParameterBuffer.Dequeue();  //Sectors (Frames)
+
+
             int MM = ((cdrom.SeekParameters[0] & 0xF) * 1) + (((cdrom.SeekParameters[0] >> 4) & 0xF) * 10);
             int SS = ((cdrom.SeekParameters[1] & 0xF) * 1) + (((cdrom.SeekParameters[1] >> 4) & 0xF) * 10);
             int FF = ((cdrom.SeekParameters[2] & 0xF) * 1) + (((cdrom.SeekParameters[2] >> 4) & 0xF) * 10);
@@ -687,6 +715,9 @@ namespace PSXEmulator {
                 Error(cdrom, Errors.InvalidParameter);
             }
             cdrom.SetLoc = true;
+            /*Console.WriteLine("[CDROM] Setloc -> " + MM.ToString().PadLeft(2,'0') + ":" + 
+                SS.ToString().PadLeft(2, '0') + ":" + FF.ToString().PadLeft(2, '0'));*/
+
         }
         private static void Error(CD_ROM cdrom, Errors code) {  //General Command Error
             cdrom.stat = 0x3;   
@@ -828,7 +859,8 @@ namespace PSXEmulator {
                     }
                     stat |= (1 << 5);   //Read at least one sector before setting the bit
 
-                    //Console.WriteLine("[CDROM] Data Read at " + M.ToString().PadLeft(2,'0') + ":" + S.ToString().PadLeft(2, '0') + ":" + F.ToString().PadLeft(2, '0'));
+                    /*Console.WriteLine("[CDROM] Data Read at " + M.ToString().PadLeft(2,'0') + ":" + S.ToString().PadLeft(2, '0') + ":" + F.ToString().PadLeft(2, '0')
+                        + " --- Index :" + CurrentIndex.ToString("x"));*/
                     bool sendToCPU = DataController.LoadNewSector(CurrentIndex);
                     IncrementIndex(150);
                     if (sendToCPU) {

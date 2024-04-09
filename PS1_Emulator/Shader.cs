@@ -40,7 +40,10 @@ namespace PSXEmulator {
                 string infoLog = GL.GetShaderInfoLog(shader);
                 throw new Exception($"Error occurred whilst compiling Shader({shader}).\n\n{infoLog}");
             } else {
+                ConsoleColor previousColor = Console.ForegroundColor;
+                Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine("[OpenGL] Shader compiled!");
+                Console.ForegroundColor = previousColor;
             }
         }
         public void Use() {

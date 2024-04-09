@@ -1,8 +1,5 @@
-﻿using SixLabors.ImageSharp.PixelFormats;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Windows.Input;
 
 namespace PSXEmulator.Peripherals {
     public class MDEC { //Macroblock Decoder
@@ -39,7 +36,8 @@ namespace PSXEmulator.Peripherals {
             new short[64], new short[64], new short[64]
         };
         short[] dst = new short[64];
-        byte[] buffer = new byte[0x30000];
+        byte[] buffer = new byte[0x10000];
+        int bufferInPtr = 0;
         int bufferOutPtr = 0;
         int colorPtr = 0;
 
@@ -115,9 +113,7 @@ namespace PSXEmulator.Peripherals {
             DataOutputSigned = (value >> 24) & 1;
             DataOutputBit15 = (value >> 23) & 1;
             CurrentBlock = (value >> 16) & 0x7;
-            WordsRemaining = (ushort)(value & 0xF);
-      
-        
+            WordsRemaining = (ushort)(value & 0xF);  
         }
         private void WriteControl(uint value) {
             /*  31    Reset MDEC (0=No change, 1=Abort any command, and set status=80040000h)
@@ -134,6 +130,7 @@ namespace PSXEmulator.Peripherals {
                 ColorQuantTable.Clear();
                 ScaleTable.Clear();
                 CurrentState = MDECState.Idle;
+                bufferInPtr = 0;
                 bufferOutPtr = 0;
                 colorPtr = 0;
                 for (int i = 0; i < buffer.Length; i++) {
@@ -181,7 +178,7 @@ namespace PSXEmulator.Peripherals {
                 case MDECState.LoadingData:
                     Compresssed.Enqueue((ushort)value);
                     Compresssed.Enqueue((ushort)(value >> 16));
-                    Console.WriteLine("Enq: " + value.ToString("x") + " Size: " + Compresssed.Count);
+                    //Console.WriteLine("Enq: " + value.ToString("x") + " Size: " + Compresssed.Count);
                     WordsRemaining--;
 
                     if (WordsRemaining == 0xFFFF) {
@@ -197,35 +194,38 @@ namespace PSXEmulator.Peripherals {
                             Console.WriteLine("\n15/24 bit");
                             while (Compresssed.Count > 0) {
                                 while (CurrentBlock < 6) {
-                                    Console.WriteLine(CurrentBlock);
                                     rl_decode_block(ref blk[CurrentBlock], ref Compresssed, CurrentBlock > 1? LuminanceQuantTable : ColorQuantTable);
-                                    if(k < 64) { return; }
+                                    if(k <= blk[CurrentBlock].Length) {
+                                        return; 
+                                    }
                                     idct_core(ref blk[CurrentBlock]);
                                     CurrentBlock++;
                                 }
                                 CurrentBlock = 0;
                                 k = 64;
 
-                                yuv_to_rgb(ref blk[2], DataOutputSigned == 1, 0, 0);
-                                yuv_to_rgb(ref blk[3], DataOutputSigned == 1, 8, 0);
-                                yuv_to_rgb(ref blk[4], DataOutputSigned == 1, 0, 8);
-                                yuv_to_rgb(ref blk[5], DataOutputSigned == 1, 8, 8);
-                                colorPtr += (256 * (DataOutputDepth == 2 ? 3 : 2));
-                            }
+                                yuv_to_rgb(ref blk[2], DataOutputSigned == 1, 0, 0); 
+                                yuv_to_rgb(ref blk[3], DataOutputSigned == 1, 8, 0); 
+                                yuv_to_rgb(ref blk[4], DataOutputSigned == 1, 0, 8); 
+                                yuv_to_rgb(ref blk[5], DataOutputSigned == 1, 8, 8); 
+                                bufferInPtr += (256 * (DataOutputDepth == 2 ? 3 : 2)) & 0xFFFF;
+                                //colorPtr += (256 * (DataOutputDepth == 2 ? 3 : 2));
 
+                            }
                         } else {
                             while(Compresssed.Count > 0) {
                                 Console.WriteLine("Decoding Block: " + CurrentBlock);
-
                                 rl_decode_block(ref blk[CurrentBlock], ref Compresssed, LuminanceQuantTable);
-                                if (k < 64) {
-                                    return;     //Incomplete block
-                                }
+
+                                /*if (k < 64) {
+                                     return;     //Incomplete block
+                                 }*/
+
                                 idct_core(ref blk[CurrentBlock]);
                                 y_to_mono(ref blk[CurrentBlock], DataOutputSigned == 1);
                                 Console.WriteLine("Block: " + CurrentBlock + " Ready");
-                                //CurrentBlock = (CurrentBlock + 1) % 6;
-                                cI = 0;
+                                CurrentBlock = (CurrentBlock + 1) % 6;
+                                //cI = 0;
                             }
                         }
                     }
@@ -236,15 +236,17 @@ namespace PSXEmulator.Peripherals {
             //Decode and Execute
             ExecuteCommand(value);
         }
-        int cB = 4;
-        int cI = 0;
+        //int cB = 4;
+        //int cI = 0;
         public uint ReadCurrentMacroblock() {
             
-            byte data0 = buffer[bufferOutPtr++];
-            byte data1 = buffer[bufferOutPtr++];
-            byte data2 = buffer[bufferOutPtr++];
-            byte data3 = buffer[bufferOutPtr++];
+            byte data0 = buffer[(bufferOutPtr++) & 0xFFFF];
+            byte data1 = buffer[(bufferOutPtr++) & 0xFFFF];
+            byte data2 = buffer[(bufferOutPtr++) & 0xFFFF];
+            byte data3 = buffer[(bufferOutPtr++) & 0xFFFF];
             
+            //Console.WriteLine("bufferOutPtr:" + bufferOutPtr);
+
             return (uint)(data0 | (data1 << 8) | (data2 << 16) | (data3 << 24));
         }
 
@@ -254,12 +256,16 @@ namespace PSXEmulator.Peripherals {
             for (int i = 0; i < 64; i++) {
                 y = yblk[i];
                 y &= 0x1FF;
-                signedY = signed9Bits((int)y);
+                signedY = signed9Bits(y);
                 signedY = Math.Clamp(signedY, -128, 127);
                 if (!IsSigned) {
-                    signedY = signedY ^ 0x80;   //y += 128
+                    signedY ^= 0x80;   //y += 128
                 }
                 yblk[i] = (short)signedY;
+                buffer[(bufferInPtr++) & 0xFFFF] = ((byte)signedY);
+                buffer[(bufferInPtr++) & 0xFFFF] = (byte)(((uint)signedY) >> 8);
+          
+                //Console.WriteLine("bufferInPtr:" + bufferInPtr); 
             }
         }
 
@@ -285,21 +291,21 @@ namespace PSXEmulator.Peripherals {
                     }
 
                     if (DataOutputDepth == 2) {                         //24 bpp
-                        int index = (((x + xx) + ((y + yy) * 16)) * 3) + colorPtr;
-                        buffer[index++] = (byte)(outR & 0xFF);
-                        buffer[index++] = (byte)(outG & 0xFF);
-                        buffer[index++] = (byte)(outB & 0xFF);
+                        int index = (((x + xx) + ((y + yy) * 16)) * 3) + bufferInPtr;
+                        buffer[(index++) & 0xFFFF] = (byte)(outR & 0xFF);
+                        buffer[(index++) & 0xFFFF] = (byte)(outG & 0xFF);
+                        buffer[(index++) & 0xFFFF] = (byte)(outB & 0xFF);
 
                     } else {                                          //15 bpp 
-                        int index = (((x + xx) + ((y + yy) * 16)) * 2) + colorPtr;
+                        int index = (((x + xx) + ((y + yy) * 16)) * 2) + bufferInPtr;
                         byte r5 = (byte)((outR & 0xFF) >> 3);        //Convert to BGR555
                         byte g5 = (byte)((outG & 0xFF) >> 3);
                         byte b5 = (byte)((outB & 0xFF) >> 3);
 
                         ushort color = (ushort)(r5 | (g5 << 5) | (b5 << 10));
 
-                        buffer[index++] = (byte)(color & 0xFF);
-                        buffer[index++] = (byte)((color >> 8) & 0xFF);
+                        buffer[(index++) & 0xFFFF] = (byte)(color & 0xFF);
+                        buffer[(index++) & 0xFFFF] = (byte)((color >> 8) & 0xFF);
                     }
                 }
             }
@@ -312,23 +318,23 @@ namespace PSXEmulator.Peripherals {
         
         private void rl_decode_block(ref short[] blk, ref Queue<ushort> src, List<byte> qt) {   //Passed by refrence so that changes affect the actual input
            
-            while (src.Count > 0 && src.Peek() == 0xFE00) { src.Dequeue(); }
-            if (src.Count == 0) { return; }
 
             if (k >= blk.Length) {
+                k = 0;
                 for (int i = 0; i < blk.Length; i++) { blk[i] = 0; }
 
-                k = 0;
+                while (src.Count > 0 && src.Peek() == 0xFE00) { src.Dequeue(); }
+                if (src.Count == 0) { return; }
                 n = src.Dequeue();
                 q_scale = (ushort)((n >> 10) & 0x3F);
                 val = signed10bits(signed10bits((n & 0x3FF) * qt[k]) & 0x3FF);
-                //k = (ushort)(k + ((n >> 10) & 0x3F) + 1);
+         
             }
 
          
-            //Console.WriteLine("First:" + n.ToString("x") + " --- K: " + k);
+            Console.WriteLine("First:" + n.ToString("x") + " --- K: " + k);
 
-            while (k < 64) {
+            while (k <= 63) {
                 if (q_scale == 0) { val = signed10bits(n & 0x3FF) * 2; }
                 val = Math.Clamp(val, -0x400, +0x3FF);
                 if (q_scale > 0) { blk[ZigZag[k]] = (short)val; }
@@ -338,10 +344,11 @@ namespace PSXEmulator.Peripherals {
                 n = src.Dequeue();
                 k = (ushort)(k + ((n >> 10) & 0x3F) + 1);
 
-                //Console.WriteLine("Next:" + n.ToString("x") + " --- K: " + k);
+                Console.WriteLine("Next:" + n.ToString("x") + " --- K: " + k);
 
                 val = (signed10bits(n & 0x3FF) * qt[k & 63] * q_scale + 4) / 8;
             }
+
         }
 
         private void idct_core(ref short[] src) {

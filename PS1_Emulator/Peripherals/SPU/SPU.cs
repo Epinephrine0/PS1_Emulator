@@ -2,6 +2,7 @@
 using PSXEmulator.Peripherals.SPU;
 using System;
 using System.Runtime.InteropServices;
+using static PSXEmulator.CDROMDataController;
 using static PSXEmulator.Peripherals.SPU.Voice.ADSR;
 
 namespace PSXEmulator {
@@ -132,7 +133,7 @@ namespace PSXEmulator {
                         case 0xA: voices[index].setADSR_HI(value); break;
                         case 0xC: voices[index].adsr.adsrVolume = value; break;
                         case 0xE: voices[index].ADPCM_RepeatAdress = value; break;
-                        default: throw new Exception("unknown voice register: " + (offset & 0xf).ToString("x"));
+                        default: throw new Exception("Unknown voice register: " + (offset & 0xf).ToString("x"));
                     
                     }
              
@@ -230,6 +231,7 @@ namespace PSXEmulator {
         }
         public UInt16 LoadHalf(uint address) {
             uint offset = address - range.start;
+            ushort endx = 0;
 
             switch (offset) {
                 case 0x1aa: return SPUCNT;
@@ -258,7 +260,7 @@ namespace PSXEmulator {
                         case 0xC: return voices[index].adsr.adsrVolume;
                         case 0xE: return voices[index].ADPCM_RepeatAdress;
 
-                        default: throw new Exception("unknown voice register: " + (offset & 0xf).ToString("x"));
+                        default: throw new Exception("Unknown voice register: " + (offset & 0xf).ToString("x"));
 
                     }
 
@@ -274,6 +276,17 @@ namespace PSXEmulator {
                 case 0x196: return (ushort)(NON >> 16);
                 case 0x198: return (ushort)EON;
                 case 0x19a: return (ushort)(EON >> 16);
+                case 0x19C:     //Read only?
+                    for (int i = 0; i < 16; i++) {
+                        endx |= (ushort)(voices[i].ENDX << i);
+                    }
+                    return endx;
+                case 0x19E:
+                    for (int i = 16; i < voices.Length; i++) {
+                        endx |= (ushort)(voices[i].ENDX << i);
+                    }
+                    return endx;
+
                 case 0x1b0: return (ushort)CDInputVolume;
                 case 0x1b2: return (ushort)(CDInputVolume >> 16);
                 case 0x1b8: return (ushort)mainVolumeLeft;  
@@ -286,6 +299,10 @@ namespace PSXEmulator {
                 default: throw new NotImplementedException("Offset: " + offset.ToString("x") + "\n"
                                                       + "Full address: 0x" + (offset + 0x1f801c00).ToString("x"));
             }
+        }
+
+        public uint LoadWord(uint address) {
+            return LoadHalf(address) | (((uint)LoadHalf(address + 2)) << 16);   //Why repeat the whole thing when you can do this lol
         }
 
         private ushort readStat() {

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows.Forms.VisualStyles;
 
 namespace PSXEmulator {
     public class CDROMDataController {      //Inspects and directs data/audio sectors to CPU/SPU
@@ -78,10 +79,10 @@ namespace PSXEmulator {
             LastSectorHeader[1] = SelectedTrack[currentIndex + 0x0D];
             LastSectorHeader[2] = SelectedTrack[currentIndex + 0x0E];
             LastSectorHeader[3] = SelectedTrack[currentIndex + 0x0F];
-            byte fileNumber = LastSectorHeader[0] =  SelectedTrack[currentIndex + 0x10];                
-            byte channelNumber = LastSectorHeader[1] = SelectedTrack[currentIndex + 0x11];
-            byte subMode = LastSectorHeader[2] = SelectedTrack[currentIndex + 0x12];
-            byte codingInfo = LastSectorHeader[3] = SelectedTrack[currentIndex + 0x13];
+            byte fileNumber = LastSectorSubHeader[0] =  SelectedTrack[currentIndex + 0x10];                
+            byte channelNumber = LastSectorSubHeader[1] = SelectedTrack[currentIndex + 0x11];
+            byte subMode = LastSectorSubHeader[2] = SelectedTrack[currentIndex + 0x12];
+            byte codingInfo = LastSectorSubHeader[3] = SelectedTrack[currentIndex + 0x13];
 
             ReadOnlySpan<byte> fullSector = new ReadOnlySpan<byte>(SelectedTrack, currentIndex, 0x930);
             SectorType sectorType = (SectorType)((subMode >> 1) & 0x7);
@@ -116,7 +117,7 @@ namespace PSXEmulator {
                 offset = (currentIndex - Disk.Tracks[SelectedTrackNumber - 1].RoundedStart);
                 Console.WriteLine("[CDROM] CD-DA Moving to track: " + SelectedTrackNumber);
             }
-
+            
             if (offset < 0) {  
                 int newTrack = FindTrack(currentIndex);
                 if (newTrack == SelectedTrackNumber) {
@@ -154,7 +155,7 @@ namespace PSXEmulator {
     }
    public class Sector {
         public byte[] data;
-        public Sector( byte[] data) {
+        public Sector(byte[] data) {
             this.data = data;
         }
     }

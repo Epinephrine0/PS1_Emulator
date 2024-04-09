@@ -39,10 +39,6 @@ namespace PSXEmulator {
                 Console.WriteLine("8 Bits Per Sample");
             }
 
-            if (is18900Hz) {
-                Console.WriteLine("18900Hz");
-            }
-
             ReadOnlySpan<byte> data = XA_ADPCM_Sector.Slice(12 + 4 + 8);    //skip sync, header, subheader
             int dst_Mono = 0;
             int dst_Stereo_L = 0;

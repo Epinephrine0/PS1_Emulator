@@ -23,7 +23,7 @@ namespace PSXEmulator {
             }   
         }
 
-    public UInt32 Read(UInt32 address) {
+    public UInt32 ReadWord(UInt32 address) {
             uint offset = address - range.start;
 
             UInt32 ch = (offset & 0x70) >> 4;           //Bits [7:5] for the channel number
@@ -48,7 +48,7 @@ namespace PSXEmulator {
                 case 7:         //case 7 is general fields 
                     switch (field) {
                         case 0: return control;
-                        case 4: return read_interrupt_reg();
+                        case 4: return ReadDICR();
                         default: throw new Exception("Unhandled DMA read at offset: " + offset.ToString("X"));
                     }
 
@@ -56,13 +56,11 @@ namespace PSXEmulator {
 
             }
         }
-        public void Write(UInt32 address, UInt32 value) {
+        public void StoreWord(UInt32 address, UInt32 value) {
             //uint offset = address - range.start;
 
             UInt32 ch = (address & 0x70) >> 4;       //Bits [7:5] for the channel number
             UInt32 field = (address & 0xf);              //Bits [3:0] for the field number
-
-
 
             switch (ch) {               //writing a field for a specific channel
                 case 0x0:
@@ -88,7 +86,7 @@ namespace PSXEmulator {
                 case 0x7:         //case 7 is general fields 
                     switch (field) {
                         case 0x0: control = value; break;
-                        case 0x4: set_interrupt_reg(value); break;
+                        case 0x4: Write32_DICR(value); break;  //32-bit write to DICR
                         default: throw new Exception("Unhandled DMA write at offset: " + address.ToString("X") + " val: " + value.ToString("X"));
                     }
                     break;
@@ -97,7 +95,37 @@ namespace PSXEmulator {
             }
         }
 
-        private UInt32 read_interrupt_reg() {
+        public byte LoadByte(uint address) {
+            //uint offset = address - range.start;
+            uint reg = address & 0xFF;
+            switch (reg) {
+                case 0xF4: return (byte)(ReadDICR() & 0xFF);
+                case 0xF5: return (byte)((ReadDICR() >> 8) & 0xFF);
+                case 0xF6: return (byte)((ReadDICR() >> 16) & 0xFF);
+                case 0xF7: return (byte)((ReadDICR() >> 24) & 0xFF);
+
+                default: throw new Exception("Unhandled Read Byte from: " + address.ToString("x"));
+
+            }
+        }
+        public void StoreByte(uint address, byte value) {
+            //uint offset = address - range.start;
+            uint reg = address & 0xFF;
+            switch (reg) {
+                case 0xF4: read_write = value; break;
+                case 0xF5: force_irq = (uint)((value >> 7) & 1); break;   
+                case 0xF6:
+                    ch_irq_en = (byte)(value & 0x7f);    
+                    master_enabled = (uint)((value >> 7) & 1);
+                    break;
+
+                case 0xF7: ch_irq_flags = (byte)(ch_irq_flags & (~(value & 0x7f))); break;  //0x7F?
+
+                default: throw new Exception("Unhandled Store Byte from: " + address.ToString("x"));
+            }
+        }
+
+        private UInt32 ReadDICR() {
             UInt32 v = 0;
             /*for (int i = 0; i < channels.Length; i++) {
                 if (channels[i].finished) {
@@ -117,12 +145,12 @@ namespace PSXEmulator {
             return v;
         }
         
-        private void set_interrupt_reg(UInt32 value) {
+        private void Write32_DICR(UInt32 value) {
             read_write = (byte)(value & 0x3f);
             force_irq = (value >> 15) & 1;
             ch_irq_en = (byte)((value >> 16) & 0x7f);
             master_enabled = (value >> 23) & 1;
-            ch_irq_flags = (byte)(ch_irq_flags & (~((value >> 24) & 0x7f)));      //0x7f??
+            ch_irq_flags = (byte)(ch_irq_flags & (~((value >> 24) & 0x7f)));      //0x7F??
 
             for (int i = 0; i < channels.Length; i++) {
                 channels[i].finished = ((ch_irq_flags >> i) & 1) == 1;

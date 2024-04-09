@@ -312,7 +312,7 @@ namespace PSXEmulator.Peripherals.SPU {
                                 break;
 
                             default:
-                                throw new Exception("Unkown mode value");
+                                throw new Exception("Unknown mode value");
                         }
 
                         direction = Direction.Increase; //Fixed for attack mode
@@ -340,7 +340,7 @@ namespace PSXEmulator.Peripherals.SPU {
                         switch ((adsrHI >> 15) & 1) {
                             case 0: mode = Mode.Linear; break;
                             case 1: mode = Mode.Exponential; break;
-                            default: throw new Exception("Unkown mode value");
+                            default: throw new Exception("Unknown mode value");
                         }
 
                         switch ((adsrHI >> 14) & 1) {
@@ -355,7 +355,7 @@ namespace PSXEmulator.Peripherals.SPU {
                                 break;
 
                             default:
-                                throw new Exception("Unkown mode value");
+                                throw new Exception("Unknown mode value");
                         }
 
 
@@ -376,7 +376,7 @@ namespace PSXEmulator.Peripherals.SPU {
                                 break;
 
                             default:
-                                throw new Exception("Unkown mode value");
+                                throw new Exception("Unknown mode value");
                         }
 
                         direction = Direction.Decrease; //(Fixed, always Decrease) (until Level 0000h)
@@ -397,7 +397,7 @@ namespace PSXEmulator.Peripherals.SPU {
                         break;
 
                     default:
-                        throw new Exception("Unkown phase: " + phase);
+                        throw new Exception("Unknown phase: " + phase);
                 }
 
 

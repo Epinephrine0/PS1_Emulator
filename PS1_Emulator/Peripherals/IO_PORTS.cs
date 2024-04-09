@@ -128,15 +128,13 @@ namespace PSXEmulator {
         public UInt16 LoadHalf(uint address) {
             uint offset = address - range.start;
             switch (offset) {
-                case 0x4: return getStatu();        //3
-                case 0xA: return getCTRL();
-                case 0xE: return 0xFFFF;
-                       
-                default: throw new Exception("Unkown JOY port: " + offset.ToString("X"));
+                case 0x04: return getStatu();        //3
+                case 0x0A: return getCTRL();
+                case 0x0E: return 0xFFFF;
+                case uint when address >= 0x1F801050 && address <= 0x1F80105E: return 0xFFFF;    //Serial Port registers         
+                default: throw new Exception("Unknown I/O Port: " + offset.ToString("X") + " - Full Address: " + address.ToString("x"));
             }
-
         }
-
 
         public int counter = 0;
         bool en = true;
@@ -171,7 +169,7 @@ namespace PSXEmulator {
                             ACKLevel = Controller1.ACK;
 
                         } else if(selectedDevice == SelectedDevice.MemoryCard) {
-                            JOY_RX_DATA = MemoryCard.response(JOY_TX_DATA);
+                            JOY_RX_DATA = MemoryCard.Response(JOY_TX_DATA);
                             ACKLevel = MemoryCard.ACK;
 
                         } else {
@@ -179,7 +177,11 @@ namespace PSXEmulator {
                             switch (JOY_TX_DATA) {
                                 case 0x01: selectedDevice = SelectedDevice.Controller; break; //Controller Access
                                 case 0x81: selectedDevice = SelectedDevice.MemoryCard; break; //MemoryCard Access
-                                default: throw new Exception("[IO] Unknown device selected: " + JOY_TX_DATA.ToString("X"));
+                                default:
+                                    Console.WriteLine("[IO] Unknown device selected: " + JOY_TX_DATA.ToString("X"));
+                                    ACKLevel = false;
+                                    return;
+                                    //throw new Exception("[IO] Unknown device selected: " + JOY_TX_DATA.ToString("X"));
                             }
                             ACKLevel = true;
                         }
@@ -207,7 +209,7 @@ namespace PSXEmulator {
                 case 0x18: SIO_MODE = value; break;
                 case 0x1A: SIO_CTRL = value; break;
                 case 0x1E: SIO_BAUD = value; break;
-                default: throw new Exception("Unkown JOY port: " + offset.ToString("X"));               
+                default: throw new Exception("Unknown JOY port: " + offset.ToString("X"));               
             }
 
         }
@@ -219,7 +221,7 @@ namespace PSXEmulator {
             // bit 4 only writeable
             // bit 6 only writeable
             //bit 7 allways 0
-            //unkown (3,5) are ignored
+            //Unknown (3,5) are ignored
             joy_ctrl |= RXIRQMode << 8;
             joy_ctrl |= (TX_IRQ_EN ? 1u : 0u) << 10;
             joy_ctrl |= (RX_IRQ_EN ? 1u : 0u) << 11;
@@ -245,9 +247,6 @@ namespace PSXEmulator {
             ACKLevel = false;
 
             return (ushort)joy_stat;
-
-
-
         }
         public void set_joy_ctrl(ushort value) {
             TXEN = (value & 1) != 0;

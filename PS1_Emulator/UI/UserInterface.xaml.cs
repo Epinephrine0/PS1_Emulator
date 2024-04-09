@@ -154,7 +154,9 @@ namespace PSXEmulator {
             Console.ForegroundColor = ConsoleColor.Green;
 
             PSX_OpenTK MainEmu = new PSX_OpenTK(UserSettings.BIOSPath, BootPath,IsEXE);            /* Emulation loop starts */
+            MainEmu = null;
             ResetBootConfig();
+            GC.Collect();
 
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.White;

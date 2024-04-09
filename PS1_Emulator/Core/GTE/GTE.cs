@@ -316,123 +316,123 @@ namespace PSXEmulator {
             switch (opcode) {
                 case 0x01:
                     RTPS(0, true);
-                    CPU.cycles += 15;
+                    CPU.Cycles += 15;
                     break;
 
                 case 0x10:
                     DPCS(false);
-                    CPU.cycles += 8;
+                    CPU.Cycles += 8;
                     break;
 
                 case 0x30:
                     RTPS(0, false);
                     RTPS(1, false);
                     RTPS(2, true);
-                    CPU.cycles += 23;
+                    CPU.Cycles += 23;
                     break;
 
                 case 0x6:
                     NCLIP();
-                    CPU.cycles += 8;
+                    CPU.Cycles += 8;
                     break;
 
                 case 0x11:
                     INTPL();
-                    CPU.cycles += 8;
+                    CPU.Cycles += 8;
                     break;
 
                 case 0x12:
                     MVMVA(mx, vx, tx);
-                    CPU.cycles += 8;
+                    CPU.Cycles += 8;
                     break;
 
                 case 0x13:
                     NCDS(0);
-                    CPU.cycles += 19;
+                    CPU.Cycles += 19;
                     break;
 
                 case 0x14:
                     CDP();
-                    CPU.cycles += 13;
+                    CPU.Cycles += 13;
                     break;
 
                 case 0x16:
                     NCDS(0);
                     NCDS(1);
                     NCDS(2);
-                    CPU.cycles += 44;
+                    CPU.Cycles += 44;
                     break;
 
                 case 0x2D:
                     AVSZ3();
-                    CPU.cycles += 5;
+                    CPU.Cycles += 5;
                     break;
 
                 case 0x2E:
                     AVSZ4();
-                    CPU.cycles += 6;
+                    CPU.Cycles += 6;
                     break;
 
 
                 case 0xC:
                     OP();
-                    CPU.cycles += 6;
+                    CPU.Cycles += 6;
                     break;
 
                 case 0x1B:
                     NCCS(0);
-                    CPU.cycles += 17;
+                    CPU.Cycles += 17;
                     break;
 
                 case 0x1C:
                     CC();
-                    CPU.cycles += 11;
+                    CPU.Cycles += 11;
                     break;
 
                 case 0x1E:
                     NCS(0);
-                    CPU.cycles += 14;
+                    CPU.Cycles += 14;
                     break;
 
                 case 0x20:
                     NCS(0);
                     NCS(1);
                     NCS(2);
-                    CPU.cycles += 30;
+                    CPU.Cycles += 30;
                     break;
 
                 case 0x28:
                     SQR();
-                    CPU.cycles += 5;
+                    CPU.Cycles += 5;
                     break;
 
                 case 0x29:
                     DCPL();
-                    CPU.cycles += 8;
+                    CPU.Cycles += 8;
                     break;
 
                 case 0x2A:
                     DPCS(true);
                     DPCS(true);
                     DPCS(true);
-                    CPU.cycles += 17;
+                    CPU.Cycles += 17;
                     break;
 
                 case 0x3D:
                     GPF();
-                    CPU.cycles += 5;
+                    CPU.Cycles += 5;
                     break;
 
                 case 0x3E:
                     GPL();
-                    CPU.cycles += 5;
+                    CPU.Cycles += 5;
                     break;
 
                 case 0x3F:
                     NCCS(0);
                     NCCS(1);
                     NCCS(2);
-                    CPU.cycles += 39;
+                    CPU.Cycles += 39;
                     break;
 
                 default: throw new Exception("Unimplemented GTE Opcode: " + opcode.ToString("x"));
