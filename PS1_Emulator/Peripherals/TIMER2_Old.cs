@@ -1,8 +1,7 @@
 ﻿using System;
-using static PSXEmulator.CDROMDataController;
 
 namespace PSXEmulator.Peripherals {
-    public class TIMER2 {
+    public class TIMER2_Old {   //Old - unused - implementation
         public Range range = new Range(0x1F801120, 0xF + 1);        //Assumption 
         uint mode;
         uint currentValue;

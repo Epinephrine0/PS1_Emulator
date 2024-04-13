@@ -1,4 +1,5 @@
 ﻿using OpenTK.Graphics.ES20;
+using PSXEmulator.Peripherals.Timers;
 using PSXEmulator.PS1_Emulator;
 using System;
 using System.Collections.Generic;
@@ -112,10 +113,11 @@ namespace PSXEmulator {
         }
         public GPUTransfer gpuTransfer;
         GPUState currentState = GPUState.ReadyToDecode;
+        
+        Timer0 TIMER0;
+        Timer1 TIMER1;
 
-        TIMER1 TIMER1;
-
-        public GPU(Renderer rederingWindow, ref TIMER1 timer1) {
+        public GPU(Renderer rederingWindow, ref Timer0 timer0, ref Timer1 timer1) {
             this.page_base_x = 0;
             this.page_base_y = 0;
             this.semi_transparency = 0;
@@ -133,6 +135,7 @@ namespace PSXEmulator {
             this.interrupt = false;
             this.dmaDirection = DmaDirection.Off;
             this.window = rederingWindow;
+            this.TIMER0 = timer0;
             this.TIMER1 = timer1;
         }
 
@@ -206,11 +209,18 @@ namespace PSXEmulator {
         double video_cycles = 0;
         double scanlines_per_frame = 263;           //NTSC
         double video_cycles_per_scanline = 3413;    //NTSC
-        int cyclesPerPixel = 4;                     //x=640
-
+        int cyclesPerPixel = 4;                     //x=640 (maybe wrong lol)
+        double dotClock = 0;
         public void tick(double cycles) {
             video_cycles += cycles;
-            TIMER1.GPUinVblank = false;
+            dotClock += cycles;
+            if (dotClock > cyclesPerPixel) {
+                dotClock -= cyclesPerPixel;
+                TIMER0.DotClock();
+            }
+
+            TIMER0.HblankOut();
+            TIMER1.VblankOut();
 
             if (video_cycles >= video_cycles_per_scanline) {
                 video_cycles -= video_cycles_per_scanline;
@@ -228,14 +238,12 @@ namespace PSXEmulator {
 
                     IRQ_CONTROL.IRQsignal(0);     //VBLANK
                     interrupt = true;
-                    TIMER1.GPUinVblank = true;
-                    TIMER1.GPUGotVblankOnce = true;
+                    TIMER1.VblankTick();
                 }
-
-                if (!TIMER1.isUsingSystemClock()) {
-                    TIMER1.tick(1);
-                }
-
+                
+                TIMER0.HblankTick();
+                TIMER1.HblankTick();
+    
                 if (verticalRes == VerticalRes.Y240Lines) {
                     currentLine = (currentLine + 1) & 1;
                 }

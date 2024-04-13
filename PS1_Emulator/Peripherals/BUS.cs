@@ -1,4 +1,5 @@
 ﻿using PSXEmulator.Peripherals;
+using PSXEmulator.Peripherals.Timers;
 using PSXEmulator.PS1_Emulator;
 using System;
 
@@ -15,8 +16,9 @@ namespace PSXEmulator {
         public DMA DMA;
         public GPU GPU;
         public CD_ROM CDROM;
-        public TIMER1 Timer1;
-        public TIMER2 Timer2;
+        public Timer0 Timer0;
+        public Timer1 Timer1;
+        public Timer2 Timer2;
         public IO_PORTS IO_PORTS;
         public Scratchpad Scratchpad;
         public MDEC MDEC;
@@ -30,9 +32,7 @@ namespace PSXEmulator {
                     // KSEG2: 1024MB
                        0xffffffff, 0xffffffff
         };
-
-        //No class for now
-        public Range Timer0 = new Range(0x1F801100, 0xF+1);        //Assumption 
+        const double GPU_FACTOR = ((double)715909) / 451584;
         public bool debug = false;
 
         //TODO: Imeplement ignored stuff 
@@ -41,7 +41,7 @@ namespace PSXEmulator {
             BIOS BIOS, RAM RAM, Scratchpad Scratchpad,
             CD_ROM CDROM, SPU SPU, DMA DMA, IO_PORTS IO, MemoryControl MemCtrl, 
             RAM_SIZE RamSize, CACHECONTROL CacheControl, Expansion1 Ex1, Expansion2 Ex2,
-            TIMER1 Timer1, TIMER2 Timer2, MDEC MDEC, GPU GPU
+            Timer0 Timer0, Timer1 Timer1, Timer2 Timer2, MDEC MDEC, GPU GPU
             ) {
             this.BIOS = BIOS;
             this.RAM = RAM;
@@ -55,6 +55,7 @@ namespace PSXEmulator {
             this.CacheControl = CacheControl;   //useless ?
             this.Expansion1 = Ex1;
             this.Expansion2 = Ex2;
+            this.Timer0 = Timer0;
             this.Timer1 = Timer1;
             this.Timer2 = Timer2;
             this.MDEC = MDEC;
@@ -71,13 +72,13 @@ namespace PSXEmulator {
                 case uint when DMA.range.Contains(physicalAddress): return DMA.ReadWord(physicalAddress);
                 case uint when GPU.range.Contains(physicalAddress): return GPU.LoadWord(physicalAddress);
                 case uint when SPU.range.Contains(physicalAddress): return SPU.LoadWord(physicalAddress);
-                case uint when Timer0.Contains(physicalAddress): return 0x0;    //TODO
-                case uint when Timer1.range.Contains(physicalAddress): return Timer1.Read(physicalAddress);
-                case uint when Timer2.range.Contains(physicalAddress): return Timer2.Read(physicalAddress);
+                case uint when Timer0.Range.Contains(physicalAddress): return Timer0.Read(physicalAddress);    
+                case uint when Timer1.Range.Contains(physicalAddress): return Timer1.Read(physicalAddress);
+                case uint when Timer2.Range.Contains(physicalAddress): return Timer2.Read(physicalAddress);
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadWord(physicalAddress);
                 case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadWord(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return MemoryControl.Read(physicalAddress);
-                case uint when MDEC.range.Contains(physicalAddress): return MDEC.read(physicalAddress);
+                case uint when MDEC.range.Contains(physicalAddress): return 0;// MDEC.read(physicalAddress);
                 case uint when RamSize.range.Contains(physicalAddress): return RamSize.LoadWord();
                 default: throw new Exception("Unhandled LoadWord from: " + address.ToString("X"));
             }
@@ -93,11 +94,11 @@ namespace PSXEmulator {
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): IRQ_CONTROL.Write(physicalAddress, (ushort)value); break; //Cast? could be wrong
                 case uint when GPU.range.Contains(physicalAddress): GPU.StoreWord(physicalAddress, value); break;
                 case uint when CacheControl.range.Contains(physicalAddress): break; //...?
-                case uint when Timer0.Contains(physicalAddress): break;     //TODO
-                case uint when Timer1.range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
-                case uint when Timer2.range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
+                case uint when Timer0.Range.Contains(physicalAddress): Timer0.Write(physicalAddress, value); break;    
+                case uint when Timer1.Range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
+                case uint when Timer2.Range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreWord(physicalAddress, value); break;
-                case uint when MDEC.range.Contains(physicalAddress): MDEC.write(physicalAddress, value); break;
+                case uint when MDEC.range.Contains(physicalAddress): /*MDEC.write(physicalAddress, value);*/ break;
                 case uint when DMA.range.Contains(physicalAddress):
                     DMA.StoreWord(physicalAddress, value);
                     DMAChannel activeCH = DMA.is_active(physicalAddress);  //Handle active DMA transfer (if any)
@@ -122,9 +123,9 @@ namespace PSXEmulator {
                 case uint when SPU.range.Contains(physicalAddress): return SPU.LoadHalf(physicalAddress);
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): return (ushort)IRQ_CONTROL.Read(physicalAddress);
                 case uint when DMA.range.Contains(physicalAddress): return (ushort)DMA.ReadWord(physicalAddress); //DMA only 32-bits?
-                case uint when Timer0.Contains(physicalAddress): return 0x0;      //TODO
-                case uint when Timer1.range.Contains(physicalAddress): return (ushort)Timer1.Read(physicalAddress);
-                case uint when Timer2.range.Contains(physicalAddress): return (ushort)Timer2.Read(physicalAddress);
+                case uint when Timer0.Range.Contains(physicalAddress): return (ushort)Timer0.Read(physicalAddress);
+                case uint when Timer1.Range.Contains(physicalAddress): return (ushort)Timer1.Read(physicalAddress);
+                case uint when Timer2.Range.Contains(physicalAddress): return (ushort)Timer2.Read(physicalAddress);
                 case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadHalf(physicalAddress);
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadHalf(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return (ushort)MemoryControl.Read(physicalAddress);
@@ -138,9 +139,9 @@ namespace PSXEmulator {
             switch (physicalAddress) {
                 case uint when RAM.range.Contains(physicalAddress): RAM.StoreHalf(physicalAddress, value); break;
                 case uint when SPU.range.Contains(physicalAddress): SPU.StoreHalf(physicalAddress, value); break;
-                case uint when Timer0.Contains(physicalAddress): break;     //TODO
-                case uint when Timer1.range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
-                case uint when Timer2.range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
+                case uint when Timer0.Range.Contains(physicalAddress): Timer0.Write(physicalAddress, value); break;
+                case uint when Timer1.Range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
+                case uint when Timer2.Range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): IRQ_CONTROL.Write(physicalAddress, value); break;
                 case uint when IO_PORTS.range.Contains(physicalAddress): IO_PORTS.StoreHalf(physicalAddress, value); break;
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreHalf(physicalAddress, value); break;
@@ -263,7 +264,7 @@ namespace PSXEmulator {
                     switch (ch.get_portnum()) {
                         case 0:
                             //Console.WriteLine("[BUS] MDEC DMA write - value: " + data.ToString("x"));
-                            MDEC.CommandAndParameters(data);
+                            //MDEC.CommandAndParameters(data);
                             break;   //MDECin  (RAM to MDEC)
                         case 2: GPU.write_GP0(data); break;
                         case 4: SPU.DMAtoSPU(data);  break;
@@ -273,8 +274,8 @@ namespace PSXEmulator {
                     
                     switch (ch.get_portnum()) {
                         case 1:
-                            uint w = MDEC.ReadCurrentMacroblock();                           
-                            RAM.StoreWord(current_address, w);
+                            //uint w = MDEC.ReadCurrentMacroblock();                           
+                            RAM.StoreWord(current_address, 0xFFFFFFFF);
                             break;
 
                         case 2:  //GPU
@@ -310,7 +311,7 @@ namespace PSXEmulator {
             ch.done();
 
             //Don't fire IRQ if it's MDEC, random workaround that may or may not work with games that need MDEC
-            //if (ch.get_portnum() == 1 || ch.get_portnum() == 0) { return; }   
+            if (ch.get_portnum() == 1 || ch.get_portnum() == 0) { return; }   
 
 
             //DMA IRQ 
@@ -318,6 +319,15 @@ namespace PSXEmulator {
             if (DMA.IRQRequest() == 1) {
                 IRQ_CONTROL.IRQsignal(3);   //Instant IRQ is causing problems
             };
+        }
+        public void Tick(int cycles) {
+            Timer0.SystemClockTick(cycles);
+            Timer1.SystemClockTick(cycles);
+            Timer2.SystemClockTick(cycles);
+            SPU.SPU_Tick(cycles);
+            GPU.tick(cycles * GPU_FACTOR);
+            IO_PORTS.tick(cycles);
+            CDROM.tick(cycles);
         }
     }
 }

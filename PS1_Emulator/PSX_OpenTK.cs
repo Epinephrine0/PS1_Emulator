@@ -4,6 +4,7 @@ using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using PSXEmulator.Peripherals;
+using PSXEmulator.Peripherals.Timers;
 using PSXEmulator.PS1_Emulator;
 using System;
 using System.IO;
@@ -54,15 +55,16 @@ namespace PSXEmulator {
             CACHECONTROL CacheControl = new CACHECONTROL();      //useless ?
             Expansion1 Ex1 = new Expansion1();
             Expansion2 Ex2 = new Expansion2();
-            TIMER1 Timer1 = new TIMER1();
-            TIMER2 Timer2 = new TIMER2();
+            Timer0 Timer0 = new Timer0();
+            Timer1 Timer1 = new Timer1();
+            Timer2 Timer2 = new Timer2();
             MDEC Mdec = new MDEC();
-            GPU Gpu = new GPU(mainWindow, ref Timer1);
+            GPU Gpu = new GPU(mainWindow, ref Timer0, ref Timer1);
 
             BUS Bus = new BUS(          
                 Bios,Ram,Scratchpad,cdrom,Spu,Dma,
                 IO,MemoryControl,RamSize,CacheControl,
-                Ex1,Ex2,Timer1,Timer2,Mdec,Gpu
+                Ex1,Ex2,Timer0,Timer1,Timer2,Mdec,Gpu
                 );
             CPU CPU = new CPU(isBootingEXE, bootPath, Bus);
 

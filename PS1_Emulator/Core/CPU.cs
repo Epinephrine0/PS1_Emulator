@@ -1,4 +1,5 @@
-﻿using System;
+﻿using PSXEmulator.Peripherals;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -57,7 +58,6 @@ namespace PSXEmulator {
         public bool IsPaused = false;
         public bool IsStopped = false;
         const uint CYCLES_PER_FRAME = 33868800 / 60;
-        const double GPU_FACTOR = ((double)715909) / 451584;
         List<byte> Chars = new List<byte>();    //Temporarily stores characters 
 
         private static readonly delegate*<CPU, Instruction, void>[] MainLookUpTable = new delegate*<CPU, Instruction, void>[] {
@@ -1343,18 +1343,13 @@ namespace PSXEmulator {
         internal void tick() {
             if (IsPaused || IsStopped) { return; }
             for (int i = 0; i < CYCLES_PER_FRAME;) {        //Timings are nowhere near accurate 
-                int add = IsReadingFromBIOS ? 20 : 2;
+                int add = IsReadingFromBIOS ? 22 : 2;
                 emu_cycle();
-                
+                //emu_cycle(); doing 2 instructions improves MGS1's performance, but breaks other games
+
                 Cycles += add;
+                BUS.Tick(Cycles);
 
-                if (BUS.Timer1.isUsingSystemClock()) { BUS.Timer1.tick(Cycles); }
-                BUS.Timer2.tick(Cycles);
-
-                BUS.SPU.SPU_Tick(Cycles);
-                BUS.GPU.tick(Cycles * GPU_FACTOR);
-                BUS.IO_PORTS.tick(Cycles);
-                BUS.CDROM.tick(Cycles);
                 i += Cycles;
                 Cycles = 0;
             }

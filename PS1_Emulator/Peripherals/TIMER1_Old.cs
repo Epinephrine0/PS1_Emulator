@@ -1,10 +1,9 @@
 ﻿using System;
-using static PSXEmulator.CDROMDataController;
 
 namespace PSXEmulator {
     namespace PS1_Emulator {
-        public class TIMER1 {
-            public Range range = new Range(0x1F801110, 0xF + 1);        //Assumption 
+        public class TIMER1_Old {   //Old - unused - implementation
+            public Range range = new Range(0x1F801110, 12);       
            
             uint mode;
             uint currentValue;
