@@ -26,6 +26,7 @@ namespace PSXEmulator.Peripherals.Timers {
                 default: throw new Exception("Unknown Timer Address:" + address.ToString("x"));
             }
         }
+
         public void Write(uint address, uint value) {
             /*
              Writing a Current value larger than the Target value will not trigger the condition of Mode Bit4, 
@@ -39,19 +40,21 @@ namespace PSXEmulator.Peripherals.Timers {
                 default: throw new Exception("Unknown Timer Address:" + address.ToString("x"));
             }
         }
+
         protected void ConfigureTimer(uint mode) {
             Synchronize = (mode & 1) == 1;
-            SyncMode = mode >> 1 & 3;
-            ResetWhenReachedTarget = (mode >> 3 & 1) == 1;
-            IRQWhenReachedTarget = (mode >> 4 & 1) == 1;
-            IRQWhenOverflow = (mode >> 5 & 1) == 1;
-            IRQRepeat = (mode >> 6 & 1) == 1;
-            IRQToggleBit10 = (mode >> 7 & 1) == 1;
-            ClockSource = mode >> 8 & 3;
+            SyncMode = (mode >> 1) & 3;
+            ResetWhenReachedTarget = ((mode >> 3) & 1) == 1;
+            IRQWhenReachedTarget = ((mode >> 4) & 1) == 1;
+            IRQWhenOverflow = ((mode >> 5) & 1) == 1;
+            IRQRepeat = ((mode >> 6) & 1) == 1;
+            IRQToggleBit10 = ((mode >> 7) & 1) == 1;
+            ClockSource = (mode >> 8) & 3;
             IRQRequest = false;             //W=1? I assume on any write it will be reset to false (=1)
             Reset();                        //Writing the mode will force reset the current value
             IsPaused = false;
         }
+
         protected uint ReadMode() {
             uint mode = 0;
             mode |= (uint)(Synchronize ? 1 : 0);
@@ -68,6 +71,7 @@ namespace PSXEmulator.Peripherals.Timers {
             CounterReachedTarget = CounterOverflowed = false;
             return mode;
         }
+
         protected void Reset() {
             CurrentValue = 0;
         }
