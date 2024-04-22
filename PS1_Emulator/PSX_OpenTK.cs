@@ -3,7 +3,7 @@ using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
-using PSXEmulator.Peripherals;
+using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
 using PSXEmulator.PS1_Emulator;
 using System;
@@ -21,7 +21,7 @@ namespace PSXEmulator {
                 Title = "OpenGL",
                 Flags = ContextFlags.ForwardCompatible,
                 APIVersion = Version.Parse("4.6.0"),
-                WindowBorder = WindowBorder.Resizable,               
+                WindowBorder = WindowBorder.Resizable,  
             };
 
             var Gws = GameWindowSettings.Default;
@@ -58,7 +58,7 @@ namespace PSXEmulator {
             Timer0 Timer0 = new Timer0();
             Timer1 Timer1 = new Timer1();
             Timer2 Timer2 = new Timer2();
-            MDEC Mdec = new MDEC();
+            MacroblockDecoder Mdec = new MacroblockDecoder();
             GPU Gpu = new GPU(mainWindow, ref Timer0, ref Timer1);
 
             BUS Bus = new BUS(          
@@ -538,6 +538,13 @@ namespace PSXEmulator {
             GL.PixelStore(PixelStoreParameter.PackAlignment, 2);
             GL.Uniform1(GL.GetUniformLocation(shader.Program, "u_vramTex"), 0);
 
+        }
+
+        public void SwitchDisplayDepth(int depth) {
+            /*TODO*/
+            if (depth == 1) {
+                Console.WriteLine("[OpenGL] 24 bpp");
+            }
         }
 
         public void SetOffset(Int16 x, Int16 y) {

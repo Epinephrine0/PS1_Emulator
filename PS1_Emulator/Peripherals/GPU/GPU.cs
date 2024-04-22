@@ -533,7 +533,7 @@ namespace PSXEmulator {
             horizontalRes = new HorizontalRes(hr1, hr2);
             verticalRes = (VerticalRes)(((value >> 2) & 1) & interlace);
             vmode = (VMode)((value >> 3) & 1);
-            displayDepth = (DisplayDepth)((value >> 4) & 1);
+            /*displayDepth = (DisplayDepth)((value >> 4) & 1);*/
 
             if (vmode == VMode.PAL) {
                 scanlines_per_frame = 314;
@@ -561,9 +561,11 @@ namespace PSXEmulator {
             UpdateHorizontalRange();
             UpdateVerticalRange();
 
-            //Console.WriteLine("[GPU] Res: " + horizontalRes.getHR() + "x" + verticalRes);
-            //Console.WriteLine("[GPU] Interlace: " + (interlace == 1));
-
+            int depth = ((int)((value >> 4) & 1));
+            if (depth != (int)displayDepth) {
+                displayDepth = (DisplayDepth)depth;
+                window.SwitchDisplayDepth(depth);
+            }
         }
 
         private void gp0_draw_mode(UInt32 value) {

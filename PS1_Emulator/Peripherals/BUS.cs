@@ -1,7 +1,7 @@
-﻿using PSXEmulator.Peripherals;
+﻿using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
-using PSXEmulator.PS1_Emulator;
 using System;
+using System.Collections.Generic;
 
 namespace PSXEmulator {
     public class BUS {      //Main BUS, connects the CPU to everything
@@ -21,7 +21,7 @@ namespace PSXEmulator {
         public Timer2 Timer2;
         public IO_PORTS IO_PORTS;
         public Scratchpad Scratchpad;
-        public MDEC MDEC;
+        public MacroblockDecoder MDEC;
         private uint[] RegionMask = { 
                     // KUSEG: 2048MB
                        0xffffffff, 0xffffffff, 0xffffffff , 0xffffffff,
@@ -32,6 +32,7 @@ namespace PSXEmulator {
                     // KSEG2: 1024MB
                        0xffffffff, 0xffffffff
         };
+        PriorityQueue<BUSTransfare, int> TransfareQueue = new PriorityQueue<BUSTransfare, int>();
         const double GPU_FACTOR = ((double)715909) / 451584;
         public bool debug = false;
 
@@ -41,7 +42,7 @@ namespace PSXEmulator {
             BIOS BIOS, RAM RAM, Scratchpad Scratchpad,
             CD_ROM CDROM, SPU SPU, DMA DMA, IO_PORTS IO, MemoryControl MemCtrl, 
             RAM_SIZE RamSize, CACHECONTROL CacheControl, Expansion1 Ex1, Expansion2 Ex2,
-            Timer0 Timer0, Timer1 Timer1, Timer2 Timer2, MDEC MDEC, GPU GPU
+            Timer0 Timer0, Timer1 Timer1, Timer2 Timer2, MacroblockDecoder MDEC, GPU GPU
             ) {
             this.BIOS = BIOS;
             this.RAM = RAM;
@@ -78,7 +79,7 @@ namespace PSXEmulator {
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadWord(physicalAddress);
                 case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadWord(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return MemoryControl.Read(physicalAddress);
-                case uint when MDEC.range.Contains(physicalAddress): return 0;// MDEC.read(physicalAddress);
+                case uint when MDEC.range.Contains(physicalAddress): return MDEC.Read(physicalAddress);
                 case uint when RamSize.range.Contains(physicalAddress): return RamSize.LoadWord();
                 default: throw new Exception("Unhandled LoadWord from: " + address.ToString("X"));
             }
@@ -98,7 +99,7 @@ namespace PSXEmulator {
                 case uint when Timer1.Range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
                 case uint when Timer2.Range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreWord(physicalAddress, value); break;
-                case uint when MDEC.range.Contains(physicalAddress): /*MDEC.write(physicalAddress, value);*/ break;
+                case uint when MDEC.range.Contains(physicalAddress): MDEC.Write(physicalAddress, value); break;
                 case uint when DMA.range.Contains(physicalAddress):
                     DMA.StoreWord(physicalAddress, value);
                     DMAChannel activeCH = DMA.is_active(physicalAddress);  //Handle active DMA transfer (if any)
@@ -150,11 +151,7 @@ namespace PSXEmulator {
                     DMA.StoreWord(physicalAddress, value);
                     DMAChannel activeCH = DMA.is_active(physicalAddress);  //Handle active DMA transfer (if any)
                     if (activeCH != null) {
-                        if (activeCH.GetSync() == ((uint)DMAChannel.Sync.LinkedList)) {
-                            HandleDMALinkedList(ref activeCH);
-                        } else {
-                            HandleDMA(ref activeCH);
-                        }
+                        HandleDMA(ref activeCH);
                     }
                     break;
                 case 0x1f802082: Console.WriteLine("Redux-Expansion Exit code: " + value.ToString("x")); break;
@@ -239,6 +236,12 @@ namespace PSXEmulator {
 
         private void HandleDMA(ref DMAChannel activeCH) {
             DMAChannel ch = activeCH;
+            if (activeCH.GetSync() == ((uint)DMAChannel.Sync.LinkedList)) {
+                HandleDMALinkedList(ref ch);
+                return;
+            }
+
+
             int step;
             if (ch.get_step() == ((uint)DMAChannel.Step.Increment)) {
                 step = 4;
@@ -262,10 +265,7 @@ namespace PSXEmulator {
                     UInt32 data = RAM.LoadWord(current_address);
 
                     switch (ch.get_portnum()) {
-                        case 0:
-                            //Console.WriteLine("[BUS] MDEC DMA write - value: " + data.ToString("x"));
-                            //MDEC.CommandAndParameters(data);
-                            break;   //MDECin  (RAM to MDEC)
+                        case 0: MDEC.CommandAndParameters(data); break;   //MDECin  (RAM to MDEC)
                         case 2: GPU.write_GP0(data); break;
                         case 4: SPU.DMAtoSPU(data);  break;
                         default: throw new Exception("Unhandled DMA destination port: " + ch.get_portnum());
@@ -274,8 +274,8 @@ namespace PSXEmulator {
                     
                     switch (ch.get_portnum()) {
                         case 1:
-                            //uint w = MDEC.ReadCurrentMacroblock();                           
-                            RAM.StoreWord(current_address, 0xFFFFFFFF);
+                            uint w = MDEC.ReadCurrentMacroblock();                           
+                            RAM.StoreWord(current_address, w);
                             break;
 
                         case 2:  //GPU
@@ -311,14 +311,14 @@ namespace PSXEmulator {
             ch.done();
 
             //Don't fire IRQ if it's MDEC, random workaround that may or may not work with games that need MDEC
-            if (ch.get_portnum() == 1 || ch.get_portnum() == 0) { return; }   
-
+            //if (ch.get_portnum() == 1 || ch.get_portnum() == 0) { return; }   
 
             //DMA IRQ 
             DMA.ch_irq_flags = (byte)(DMA.ch_irq_flags | (1 << (int)ch.get_portnum()));
             if (DMA.IRQRequest() == 1) {
                 IRQ_CONTROL.IRQsignal(3);   //Instant IRQ is causing problems
             };
+
         }
         public void Tick(int cycles) {
             Timer0.SystemClockTick(cycles);
@@ -330,5 +330,13 @@ namespace PSXEmulator {
             CDROM.tick(cycles);
         }
     }
+
+
+   public class BUSTransfare {
+        //Priority
+        public DMAChannel CH;
+        public int Rate;
+    }
+
 }
 
