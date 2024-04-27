@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 
 namespace PSXEmulator.Peripherals.MDEC {
     public class MacroblockDecoder {    //JPEG-style Macroblock Decoder
@@ -76,6 +77,7 @@ namespace PSXEmulator.Peripherals.MDEC {
 
         public MacroblockDecoder() {
             WriteStatus(InitialStatus);   //Reset        
+            DataInRequest = 1;
         }
 
         //TODO: Reading from DMA outputs the data in a different order than reading directly 
@@ -107,19 +109,24 @@ namespace PSXEmulator.Peripherals.MDEC {
             status |= DataOutputBit15 << 23;
             status |= (CurrentBlock + 4) % 6 << 16;
             status |= WordsRemaining;
+
+
+            //Console.WriteLine("Reading: " + status.ToString("x"));
+            //Console.WriteLine("N: " + FinalOutput.Count);
+
             return status;
         }
         private void WriteStatus(uint value) {
-            DataOutFifoEmpty = value >> 31 & 1;
-            DataInFifoFull = value >> 30 & 1;
-            CommandBusy = value >> 29 & 1;
-            DataInRequest = value >> 28 & 1;
-            DataOutRequest = value >> 27 & 1;
-            DataOutputDepth = value >> 25 & 0x3;
-            DataOutputSigned = value >> 24 & 1;
-            DataOutputBit15 = value >> 23 & 1;
+            DataOutFifoEmpty = (value >> 31) & 1;
+            DataInFifoFull = (value >> 30) & 1;
+            CommandBusy = (value >> 29) & 1;
+            DataInRequest = (value >> 28) & 1;
+            DataOutRequest = (value >> 27) & 1;
+            DataOutputDepth = (value >> 25) & 0x3;
+            DataOutputSigned = (value >> 24) & 1;
+            DataOutputBit15 = (value >> 23) & 1;
             //CurrentBlock = (((value >> 16) & 0x7) + 4) % 6;     //Make 0,1 CB/CR
-            WordsRemaining = (ushort)(value & 0xF);
+            //WordsRemaining = (ushort)(value & 0xF);
         }
         private void WriteControl(uint value) {
             /*  31    Reset MDEC (0=No change, 1=Abort any command, and set status=80040000h)
@@ -129,8 +136,11 @@ namespace PSXEmulator.Peripherals.MDEC {
             bool reset = (value >> 31 & 1) == 1;
             DataInRequestEnabled = value >> 30 & 1;
             DataOutRequestEnabled = value >> 29 & 1;
+
+            DataInRequest = DataInRequestEnabled;
+
             if (reset) {
-                Console.WriteLine("\n[MDEC] Reset!");
+                //Console.WriteLine("\n[MDEC] Reset!");
                 WriteStatus(InitialStatus);   //Reset
                 //LuminanceQuantTable.Clear();
                 //ColorQuantTable.Clear();
@@ -145,26 +155,19 @@ namespace PSXEmulator.Peripherals.MDEC {
 
             switch (CurrentState) {
                 case MDECState.LoadingScaleTable:
-                    //WordsRemaining -= 2;
                     ScaleTable.AddRange(new short[] { (short)value, (short)(value >> 16) });
                     if (ScaleTable.Count == 64) {
-                        Console.WriteLine("\n[MDEC] Finished loading Scale Table!");
                         CurrentState = MDECState.Idle;
                     }
                     return;
 
                 case MDECState.LoadingLuminanceQuantTable:
-                    //WordsRemaining -= 4;
                     LuminanceQuantTable.AddRange(new byte[] { (byte)value, (byte)(value >> 8), (byte)(value >> 16), (byte)(value >> 24) });
-
                     if (LuminanceQuantTable.Count == 64) {
-                        Console.WriteLine("\n[MDEC] Finished loading Luminance Quant Table!");
                         CurrentState = MDECState.Idle;
                     }
                     return;
                 case MDECState.LoadingLuminanceAndColorQuantTable:
-                    //WordsRemaining -= 4;
-
                     if (LuminanceQuantTable.Count < 64) {
                         LuminanceQuantTable.AddRange(new byte[] { (byte)value, (byte)(value >> 8), (byte)(value >> 16), (byte)(value >> 24) });
                         return;
@@ -172,31 +175,21 @@ namespace PSXEmulator.Peripherals.MDEC {
                         ColorQuantTable.AddRange(new byte[] { (byte)value, (byte)(value >> 8), (byte)(value >> 16), (byte)(value >> 24) });
                         return;
                     } else {
-                        //WordsRemaining = 0xFFFF;
-                        Console.WriteLine("\n[MDEC] Finished loading both Tables!, R: " + WordsRemaining.ToString("x"));
                         CurrentState = MDECState.Idle;
-                        break;  //Break out of the switch instead of returning 
+                        break; 
                     }
 
                 case MDECState.LoadingData:
                     Compresssed.Enqueue((ushort)value);
                     Compresssed.Enqueue((ushort)(value >> 16));
-                    //Console.WriteLine("Enq: " + value.ToString("x") + " Size: " + Compresssed.Count);
                     WordsRemaining--;
-
                     if (WordsRemaining == 0xFFFF) {
-                        Console.WriteLine("\nLoaded Compressed Data!");
-                        CurrentState = MDECState.Idle;
-                        DataInRequest = 0;
-                        DataInFifoFull = 1;
-                        DataOutRequest = 1;
-                        DataOutFifoEmpty = 0;
-                        CommandBusy = 0;
-
                         if (DataOutputDepth > 1) {
-                            Console.WriteLine("\n15/24 bit");
+                            //Console.WriteLine("Decoding 15/24 bit");
+                            CurrentState = MDECState.Idle;
 
                             while (Compresssed.Count > 0) {
+
                                 if (CurrentMacroblock == null) {    //I don't like using null                    
                                     CurrentMacroblock = new Macroblock(DataOutputDepth);
                                 }
@@ -205,7 +198,14 @@ namespace PSXEmulator.Peripherals.MDEC {
                                     if (rl_decode_block(ref blk[CurrentBlock], ref Compresssed, CurrentBlock < 2 ? ColorQuantTable : LuminanceQuantTable)) {
                                         idct_core(ref blk[CurrentBlock]);
                                     } else {
-                                        //Console.WriteLine("[MDEC] Incomplete block");
+                                        //Console.WriteLine("15/24 bit return!");
+                                        if (FinalOutput.Count > 0) {
+                                            //WordsRemaining += (ushort)(CurrentMacroblock.Size() / 2);
+                                            DataOutRequest = 1;
+                                            DataOutFifoEmpty = 0;
+                                            CommandBusy = 0;
+                                            CurrentMacroblock = null;
+                                        }
                                         return;         //Don't continue
                                     }
                                     CurrentBlock++;
@@ -218,10 +218,17 @@ namespace PSXEmulator.Peripherals.MDEC {
                                 yuv_to_rgb(ref blk[4], DataOutputSigned == 1, 0, 8);    //8,0 in PSX-SPX
                                 yuv_to_rgb(ref blk[5], DataOutputSigned == 1, 8, 8);
                                 FinalOutput.Enqueue(CurrentMacroblock);
+                                //WordsRemaining += (ushort)(CurrentMacroblock.Size() / 2);
+                                DataOutRequest = 1;
+                                DataOutFifoEmpty = 0;
+                                CommandBusy = 0;
                                 CurrentMacroblock = null;
                             }
+                            //Console.WriteLine("Done 15/24 bit");
+
                         } else {
-                            Console.WriteLine("Decoding 4/8 bit");
+                            //Console.WriteLine("Decoding 4/8 bit");
+                            CurrentState = MDECState.Idle;
 
                             while (Compresssed.Count > 0) {
                                 if (CurrentMacroblock == null) {    //I don't like using null                    
@@ -230,15 +237,25 @@ namespace PSXEmulator.Peripherals.MDEC {
                                 if (rl_decode_block(ref blk[0], ref Compresssed, LuminanceQuantTable)) {
                                     idct_core(ref blk[0]);
                                     y_to_mono(ref blk[0], DataOutputSigned == 1);
-                                    Console.WriteLine("Done");
                                 } else {
-                                    Console.WriteLine("Return");
+                                    //Console.WriteLine("4/8 bit return!");
+                                    WordsRemaining += (ushort)(CurrentMacroblock.Size() / 2);
+                                    DataOutRequest = 1;
+                                    DataOutFifoEmpty = 0;
+                                    CommandBusy = 0;
+                                    CurrentMacroblock = null;
                                     return;
                                 }
                                 FinalOutput.Enqueue(CurrentMacroblock);
+                                //WordsRemaining += (ushort)(CurrentMacroblock.Size() / 4);
+                                DataOutFifoEmpty = 0;
+                                DataOutRequest = 1;
+                                CommandBusy = 0;
                                 CurrentMacroblock = null;
                             }
+                            //Console.WriteLine("Done 4/8 bit");
                         }
+                        CurrentState = MDECState.Idle;
                     }
                     return;
             }
@@ -247,46 +264,32 @@ namespace PSXEmulator.Peripherals.MDEC {
             //Decode and Execute
             ExecuteCommand(value);
         }
-
+        bool Incompleteblock = false;
+       
         public uint ReadCurrentMacroblock() {
 
-            /*if (FinalOutput.Count < 4) {
-                Console.WriteLine("[MDEC] Buffer out of range");
-                return 0xFFFFFFFF;
-            }*/
-
-            /*byte data0 = FinalOutput.Dequeue();
-            byte data1 = FinalOutput.Dequeue();
-            byte data2 = FinalOutput.Dequeue();
-            byte data3 = FinalOutput.Dequeue();*/
-
-            //WordsRemaining = (ushort)((FinalOutput.Count / 2) - 1);
-
-            /*if (FinalOutput.Count < 4) {
-                DataInRequest = 1;
-                DataInFifoFull = 0;
-                DataOutRequest = 0;
-                DataOutFifoEmpty = 1;
-            }*/
-
-            if (FinalOutput.Count > 0) {
-                if (FinalOutput.Peek().HasBeenRead) {
-                    FinalOutput.Dequeue();
-                    if (FinalOutput.Count == 0) {
-                        Console.WriteLine("[MDEC] Buffer empty!");
-                        DataInRequest = 1;
-                        DataInFifoFull = 0;
-                        DataOutRequest = 0;
-                        DataOutFifoEmpty = 1;
-                        CommandBusy = 0;
-                        return 0xFFFFFFFF;
-                    }
-                }
-                return FinalOutput.Peek().ReadNext();
-
-            } else {
+            if (FinalOutput.Count == 0) {
+                //Console.WriteLine("[MDEC] out: 0xFFFFFFFF");
                 return 0xFFFFFFFF;
             }
+
+            uint word = FinalOutput.Peek().ReadNext();
+            //WordsRemaining -= 4;
+            if (FinalOutput.Peek().HasBeenRead) {
+                FinalOutput.Dequeue();
+                if (FinalOutput.Count == 0) {
+                    DataOutRequest = 0;
+                    DataOutFifoEmpty = 1;
+                    CommandBusy = 0;
+                    WordsRemaining = 0xFFFF;
+                    //Console.WriteLine("[MDEC] Buffer finished");
+                    //Console.WriteLine("[MDEC] Status: " + ReadStatus().ToString("x") + " -- Enum: " + CurrentState + " -- Hold: " + Incompleteblock);
+
+                }
+            }
+            //Console.WriteLine("[MDEC] out: " + word.ToString("x"));
+
+            return word;
         }
 
         private void y_to_mono(ref short[] yblk, bool IsSigned) {
@@ -382,7 +385,7 @@ namespace PSXEmulator.Peripherals.MDEC {
                 for (int i = 0; i < blk.Length; i++) {                        //initially zerofill all entries (for skip)
                     blk[i] = 0;
                 }
-
+                if(src.Count == 0) { return false; }
                 n = src.Dequeue();
 
                 while (n == 0xFE00) {                                        //ignore padding (FE00h as first halfword)
@@ -398,7 +401,7 @@ namespace PSXEmulator.Peripherals.MDEC {
             }
 
 
-            for (; ; ) {
+            for (;;) {
                 if (q_scale == 0) { val = SignedXBits(n & 0x3FF, 10) * 2; }          //special mode without qt[k]
                 val = Math.Clamp(val, -0x400, +0x3FF);                               //saturate to signed 11bit range
                 //  val=val*scalezag[i]           ;<-- for "fast_idct_core" only
@@ -406,7 +409,7 @@ namespace PSXEmulator.Peripherals.MDEC {
                 if (q_scale > 0) { blk[ZagZig[k]] = (short)val; }                       //store entry(normal case)
                 if (q_scale == 0) { blk[k] = (short)val; };                            //store entry(special, no zigzag)                 
 
-                if (src.Count == 0) { Console.WriteLine("[MDEC] Src reached 0"); break; }
+                if (src.Count == 0) { /*Console.WriteLine("[MDEC] Src reached 0")*/; return false; }
 
                 n = src.Dequeue();                                                   //;get next entry (or FE00h end code)
                 k = (ushort)(k + (n >> 10 & 0x3F) + 1);                            //skip zerofilled entries
@@ -462,22 +465,22 @@ namespace PSXEmulator.Peripherals.MDEC {
             /* This command has no function. Command bits 25-28 are reflected to Status bits 23-26 as usually. 
             Command bits 0-15 are reflected to Status bits 0-15 (similar as the "number of parameter words" for MDEC(1),
             but without the "minus 1" effect, and without actually expecting any parameters). */
-            Console.WriteLine("\n[MDEC] NOP");
-            DataOutputBit15 = value >> 25 & 1;
-            DataOutputSigned = value >> 26 & 1;
-            DataOutputDepth = value >> 27 & 0x3;
+            //Console.WriteLine("\n[MDEC] NOP");
+            DataOutputBit15 = (value >> 25) & 1;
+            DataOutputSigned = (value >> 26) & 1;
+            DataOutputDepth = (value >> 27) & 0x3;
             //WordsRemaining = (ushort)(value & 0xFFFF);
         }
         private void SetQuantTable(uint command) {
             LuminanceQuantTable.Clear();
             bool loadingBoth = (command & 1) == 1;
             if (loadingBoth) {
-                Console.WriteLine("\n[MDEC] Loading Both Tables");
+                //Console.WriteLine("\n[MDEC] Loading Both Tables");
                 CurrentState = MDECState.LoadingLuminanceAndColorQuantTable;
                 ColorQuantTable.Clear();
 
             } else {
-                Console.WriteLine("\n[MDEC] Loading Luminance Quant Table ");
+                //Console.WriteLine("\n[MDEC] Loading Luminance Quant Table ");
                 CurrentState = MDECState.LoadingLuminanceQuantTable;
             }
             //Bit25-28 are copied to STAT.23-26
@@ -494,6 +497,8 @@ namespace PSXEmulator.Peripherals.MDEC {
             DataOutputDepth = command >> 25 & 0x3;
             //WordsRemaining = 64 - 1;
             CurrentState = MDECState.LoadingScaleTable;
+            //Console.WriteLine("\n[MDEC] Loading Scale Table ");
+
         }
         private void DecodeMacroblock(uint value) {
             uint depth = value >> 27 & 0x3;
@@ -508,9 +513,6 @@ namespace PSXEmulator.Peripherals.MDEC {
 
             CurrentState = MDECState.LoadingData;
 
-            DataInRequest = 1;
-            DataOutFifoEmpty = 0;
-            DataInFifoFull = 0;
             CommandBusy = 1;
 
             /*Console.WriteLine("\nDecode Macroblock -> " + value.ToString("x"));

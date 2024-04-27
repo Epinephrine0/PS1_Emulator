@@ -296,6 +296,41 @@ namespace PSXEmulator {
                 case 0x1b4: return (ushort)external_Audio_Input_Volume;
                 case 0x1b6: return (ushort)(external_Audio_Input_Volume >> 16);
 
+                //Reverb area
+                case 0x1a2: return mBASE;               
+                case 0x1c0: return dAPF1; 
+                case 0x1c2: return dAPF2;
+                case 0x1c4: return (ushort)vIIR;
+                case 0x1c6: return (ushort)vCOMB1;
+                case 0x1c8: return (ushort)vCOMB2;
+                case 0x1cA: return (ushort)vCOMB3;
+                case 0x1cC: return (ushort)vCOMB4;
+                case 0x1cE: return (ushort)vWALL;
+                case 0x1D0: return (ushort)vAPF1;
+                case 0x1D2: return (ushort)vAPF2;
+                case 0x1D4: return mLSAME;
+                case 0x1D6: return mRSAME;
+                case 0x1D8: return mLCOMB1;
+                case 0x1DA: return mRCOMB1;
+                case 0x1DC: return mLCOMB2;
+                case 0x1DE: return mRCOMB2;
+                case 0x1E0: return dLSAME;
+                case 0x1E2: return dRSAME;
+                case 0x1E4: return mLDIFF;
+                case 0x1E6: return mRDIFF;
+                case 0x1E8: return mLCOMB3;
+                case 0x1EA: return mRCOMB3;
+                case 0x1EC: return mLCOMB4;
+                case 0x1EE: return mRCOMB4;
+                case 0x1F0: return dLDIFF;
+                case 0x1F2: return dRDIFF;
+                case 0x1F4: return mLAPF1;
+                case 0x1F6: return mRAPF1;
+                case 0x1F8: return mLAPF2;
+                case 0x1FA: return mRAPF2;
+                case 0x1FC: return (ushort)vLIN;
+                case 0x1FE: return (ushort)vRIN;
+
                 default: throw new NotImplementedException("Offset: " + offset.ToString("x") + "\n"
                                                       + "Full address: 0x" + (offset + 0x1f801c00).ToString("x"));
             }

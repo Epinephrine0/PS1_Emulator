@@ -28,5 +28,7 @@ namespace PSXEmulator.Peripherals.MDEC {
             byte data3 = Data[Ptr++];
             return (uint)(data0 | data1 << 8 | data2 << 16 | data3 << 24);
         }
+
+        public ushort Size() {  return (ushort)Data.Length; }
     }
 }

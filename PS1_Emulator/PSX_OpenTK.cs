@@ -7,10 +7,14 @@ using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
 using PSXEmulator.PS1_Emulator;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Timers;
+using System.Windows.Documents;
+using System.Windows.Markup;
+using System.Windows.Media.Media3D;
 
 namespace PSXEmulator {
     public class PSX_OpenTK {
@@ -318,7 +322,7 @@ namespace PSXEmulator {
 	            if(isScreenQuad == 1){		//Drawing a full screen quad case 
 	  
 	              ivec2 coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
-                  outputColor = texelFetch(u_vramTex, coords, 0);
+                  outputColor.rgba = sampleVRAM(coords);
 	              return;
 	            }
 
@@ -508,6 +512,7 @@ namespace PSXEmulator {
             texCoords = GL.GenBuffer();
             vram_texture = GL.GenTexture();
             sample_texture = GL.GenTexture();
+
             vramFrameBuffer = GL.GenFramebuffer();
 
             GL.BindVertexArray(vertexArrayObject);
@@ -519,14 +524,25 @@ namespace PSXEmulator {
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
+            //GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
+            GL.TexStorage2D(TextureTarget2d.Texture2D, 1, SizedInternalFormat.Rgb5A1, VRAM_WIDTH, VRAM_WIDTH);
 
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
+            //GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
+
+            GL.TexStorage2D(TextureTarget2d.Texture2D, 1, SizedInternalFormat.Rgb5A1, VRAM_WIDTH, VRAM_WIDTH);
+
+           /* GL.BindTexture(TextureTarget.Texture2D, VramAs24bpp);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedInt8888Reversed, (IntPtr)null);*/
+
 
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, vramFrameBuffer);
             GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, vram_texture, 0);
@@ -539,12 +555,52 @@ namespace PSXEmulator {
             GL.Uniform1(GL.GetUniformLocation(shader.Program, "u_vramTex"), 0);
 
         }
-
+        bool Is24bpp = false;
         public void SwitchDisplayDepth(int depth) {
-            /*TODO*/
             if (depth == 1) {
                 Console.WriteLine("[OpenGL] 24 bpp");
+                Is24bpp = true;
+            } else {
+                Is24bpp = false;
             }
+        }
+
+        ushort[] temp = new ushort[VRAM_WIDTH * VRAM_HEIGHT];
+
+        public int Get24bppVram() {
+            while (GL.GetError() != OpenTK.Graphics.OpenGL.ErrorCode.NoError) { GL.GetError(); }
+            GL.BindTexture(TextureTarget.Texture2D, 0);
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0);
+
+            int VramAs24bpp = GL.GenTexture();
+            GL.TextureView(VramAs24bpp, TextureTarget.Texture2D, vram_texture, PixelInternalFormat.Rgb5A1, 0, 1, 0, 1);
+            
+
+            GL.BindTexture(TextureTarget.Texture2D, VramAs24bpp);
+      
+            Console.WriteLine(GL.GetError());
+
+            /*GL.ReadPixels(0, 0, VRAM_WIDTH, VRAM_HEIGHT, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, temp);
+            uint[] pixelsAs24bpp = new uint[VRAM_WIDTH * VRAM_HEIGHT / 2];
+            Queue<byte> b = new Queue<byte>(VRAM_WIDTH * VRAM_HEIGHT * 2);
+
+            for (int i = 0; i < temp.Length; i++ ) {
+                b.Enqueue((byte)(temp[i] & 0xFF));
+                b.Enqueue((byte)((temp[i] >> 8) & 0xFF));
+            }
+
+            for (int i = 0; i < pixelsAs24bpp.Length; i++) {
+                if (b.Count > 0) {
+                    pixelsAs24bpp[i] = (uint)(b.Dequeue() | b.Dequeue() << 8 | b.Dequeue() << 16);
+                } else {
+                    pixelsAs24bpp[i] = 0;
+                }
+            }
+
+            GL.BindTexture(TextureTarget.Texture2D, VramAs24bpp);
+            GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT,
+               PixelFormat.Rgba, PixelType.UnsignedInt8888Reversed, pixelsAs24bpp);*/
+            return VramAs24bpp;
         }
 
         public void SetOffset(Int16 x, Int16 y) {
@@ -1058,7 +1114,7 @@ namespace PSXEmulator {
 
             GL.Viewport(0, 0, this.Size.X, this.Size.Y);
             GL.Enable(EnableCap.Texture2D);
-            GL.BindTexture(TextureTarget.Texture2D, vram_texture);
+            GL.BindTexture(TextureTarget.Texture2D, Is24bpp? Get24bppVram() : vram_texture);
 
             GL.Uniform1(fullVram, 1);
 

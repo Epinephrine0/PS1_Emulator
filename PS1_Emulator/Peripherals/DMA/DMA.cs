@@ -119,7 +119,12 @@ namespace PSXEmulator {
                     master_enabled = (uint)((value >> 7) & 1);
                     break;
 
-                case 0xF7: ch_irq_flags = (byte)(ch_irq_flags & (~(value & 0x7f))); break;  //0x7F?
+                case 0xF7: 
+                    ch_irq_flags = (byte)(ch_irq_flags & (~(value & 0x7f)));
+                    for (int i = 0; i < channels.Length; i++) {
+                        channels[i].finished = ((ch_irq_flags >> i) & 1) == 1;
+                    }
+                    break;  
 
                 default: throw new Exception("Unhandled Store Byte from: " + address.ToString("x"));
             }

@@ -81,6 +81,11 @@ namespace PSXEmulator {
                 case uint when MemoryControl.range.Contains(physicalAddress): return MemoryControl.Read(physicalAddress);
                 case uint when MDEC.range.Contains(physicalAddress): return MDEC.Read(physicalAddress);
                 case uint when RamSize.range.Contains(physicalAddress): return RamSize.LoadWord();
+                case uint when address >= 0x1F800400 && address <= 0x1F800400 + 0xC00: return 0xFFFFFFFF;
+                case uint when address >= 0x1F801024 && address <= 0x1F801024 + 0x01C: return 0xFFFFFFFF;
+                case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: return 0xFFFFFFFF;
+                case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFFFFFFFF;
+
                 default: throw new Exception("Unhandled LoadWord from: " + address.ToString("X"));
             }
         }
@@ -111,6 +116,11 @@ namespace PSXEmulator {
                         }
                     }
                     break;
+                case uint when address >= 0x1F800400 && address <= 0x1F800400 + 0xC00: break;
+                case uint when address >= 0x1F801024 && address <= 0x1F801024 + 0x01C: break;
+                case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
+                case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
+
                 default: throw new Exception("Unhandled StoreWord to: " + address.ToString("X"));
             }
         }
@@ -130,6 +140,12 @@ namespace PSXEmulator {
                 case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadHalf(physicalAddress);
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadHalf(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return (ushort)MemoryControl.Read(physicalAddress);
+                case uint when address >= 0x1F800400 && address <= 0x1F800400 + 0xC00: return 0xFFFF;
+                case uint when address >= 0x1F801024 && address <= 0x1F801024 + 0x01C: return 0xFFFF;
+                case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: return 0xFFFF;
+                case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFFFF;
+
+
                 default: throw new Exception("Unhandled LoadHalf from: " + address.ToString("X"));
             }    
         }
@@ -155,6 +171,11 @@ namespace PSXEmulator {
                     }
                     break;
                 case 0x1f802082: Console.WriteLine("Redux-Expansion Exit code: " + value.ToString("x")); break;
+                case uint when address >= 0x1F800400 && address <= 0x1F800400 + 0xC00: break;
+                case uint when address >= 0x1F801024 && address <= 0x1F801024 + 0x01C: break;
+                case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
+                case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
+
                 default: throw new Exception("Unhandled StoreHalf from: " + address.ToString("X"));
             }
         }
@@ -172,7 +193,13 @@ namespace PSXEmulator {
                 case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadByte(physicalAddress);
                 case uint when Expansion1.range.Contains(physicalAddress):   
                 case uint when Expansion2.range.Contains(physicalAddress): return 0xFF;   //Ignore Expansions 1 and 2 
+                case uint when address >= 0x1F800400 && address <= 0x1F800400 + 0xC00: return 0xFF;
+                case uint when address >= 0x1F801024 && address <= 0x1F801024 + 0x01C: return 0xFF;
+                case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: return 0xFF;
+                case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFF;
+
                 default: throw new Exception("Unhandled LoadByte from: " + address.ToString("X"));
+
             }
         }
 
@@ -188,6 +215,11 @@ namespace PSXEmulator {
                 case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
                 case uint when Expansion1.range.Contains(physicalAddress):
                 case uint when Expansion2.range.Contains(physicalAddress): break;   //Ignore Expansions 1 and 2
+                case uint when address >= 0x1F800400 && address <= 0x1F800400 + 0xC00: break;
+                case uint when address >= 0x1F801024 && address <= 0x1F801024 + 0x01C: break;
+                case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
+                case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
+
                 default: throw new Exception("Unhandled StoreByte to: " + address.ToString("X"));
             }           
         }
@@ -228,7 +260,9 @@ namespace PSXEmulator {
                 address = header & 0x1ffffc;
             }
             ch.done();
-            DMA.ch_irq_flags |= (1 << 2);
+            if (((DMA.ch_irq_en >> 2) & 1) == 1) {
+                DMA.ch_irq_flags |= (byte)(1 << 2);
+            }
             if (DMA.IRQRequest() == 1) {
                 IRQ_CONTROL.IRQsignal(3);
             };
@@ -306,7 +340,6 @@ namespace PSXEmulator {
                 base_address = (uint)(base_address + step);
                 transfer_size -= 1;
             }
-            //if (isSPUIRQ) { SPU.SPU_IRQ(); }    //Causes problems with MGS
 
             ch.done();
 
@@ -314,12 +347,15 @@ namespace PSXEmulator {
             //if (ch.get_portnum() == 1 || ch.get_portnum() == 0) { return; }   
 
             //DMA IRQ 
-            DMA.ch_irq_flags = (byte)(DMA.ch_irq_flags | (1 << (int)ch.get_portnum()));
+            if (((DMA.ch_irq_en >> (int)ch.get_portnum()) & 1) == 1) {
+                DMA.ch_irq_flags |= (byte)(1 << (int)ch.get_portnum());
+            }
             if (DMA.IRQRequest() == 1) {
                 IRQ_CONTROL.IRQsignal(3);   //Instant IRQ is causing problems
             };
 
         }
+
         public void Tick(int cycles) {
             Timer0.SystemClockTick(cycles);
             Timer1.SystemClockTick(cycles);

@@ -54,12 +54,12 @@ namespace PSXEmulator {
         private bool IsLoadingEXE;
         private string? EXEPath;
 
-        bool FastBoot = false;                  //Skips the boot animation 
+        bool FastBoot = true;                  //Skips the boot animation 
         public bool IsPaused = false;
         public bool IsStopped = false;
         const uint CYCLES_PER_FRAME = 33868800 / 60;
         List<byte> Chars = new List<byte>();    //Temporarily stores characters 
-
+      
         private static readonly delegate*<CPU, Instruction, void>[] MainLookUpTable = new delegate*<CPU, Instruction, void>[] {
                 &special,   &bxx,       &jump,      &jal,       &beq,        &bne,       &blez,      &bgtz,
                 &addi,      &addiu,     &slti,      &sltiu,     &andi,       &ori,       &xori,      &lui,
