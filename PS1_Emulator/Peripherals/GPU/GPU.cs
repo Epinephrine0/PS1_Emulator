@@ -377,9 +377,13 @@ namespace PSXEmulator {
             uint opcode = command >> 24;
 
             switch (opcode) {
-                case 0x00:        //NOP
-                case 0x01:       //Clear Cache
-                    break;
+                case 0x00: break;      //NOP
+                case 0x01: break;      //Clear Cache
+                case 0x03: break;      //Unknown?
+                case 0xE0: break;      //NOP?
+                case uint when opcode >= 0x04 && opcode <= 0x1E: break; //NOP?
+                case uint when opcode >= 0xE7 && opcode <= 0xEF: break; //NOP?
+
 
                 case 0x02:  //Vram Fill
                     currentState = GPUState.Transferring;
@@ -390,7 +394,6 @@ namespace PSXEmulator {
                     gpuTransfer.parameters[gpuTransfer.paramPtr++] = command;
                     break;
 
-                case uint when opcode >= 0x04 && opcode <= 0x1E: break; //NOP
 
                 default: throw new Exception("Unknown GP0 misc command: " + opcode.ToString("x"));
 
