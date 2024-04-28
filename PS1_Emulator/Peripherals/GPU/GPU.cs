@@ -373,6 +373,7 @@ namespace PSXEmulator {
                     throw new NotImplementedException();
             }
         }
+
         private void misc(uint command) {
             uint opcode = command >> 24;
 
@@ -384,7 +385,6 @@ namespace PSXEmulator {
                 case uint when opcode >= 0x04 && opcode <= 0x1E: break; //NOP?
                 case uint when opcode >= 0xE7 && opcode <= 0xEF: break; //NOP?
 
-
                 case 0x02:  //Vram Fill
                     currentState = GPUState.Transferring;
                     gpuTransfer.transferType = TransferType.VramFill;
@@ -394,12 +394,10 @@ namespace PSXEmulator {
                     gpuTransfer.parameters[gpuTransfer.paramPtr++] = command;
                     break;
 
-
                 default: throw new Exception("Unknown GP0 misc command: " + opcode.ToString("x"));
-
             }
-
         }
+
         private void environment(uint command) {
             uint opcode = command >> 24 ;
             switch (opcode) {
@@ -698,6 +696,7 @@ namespace PSXEmulator {
                 default: throw new Exception("Unhandled read to offset " + offset);
             }
         }
+
         public void StoreWord(uint address, uint value) {
             uint offset = address - range.start;
             switch (offset) {
@@ -710,6 +709,7 @@ namespace PSXEmulator {
         }
     }
 
+    //Not needed, should be handeled in the GPU
     public class HorizontalRes {
         byte HR;
         byte HR1;
@@ -739,6 +739,7 @@ namespace PSXEmulator {
             return 0f;  
 
         }
+
         public uint intoStatus() {      //Bits [18:16] of GPUSTAT
             return ((uint)this.HR) << 16;
         }
