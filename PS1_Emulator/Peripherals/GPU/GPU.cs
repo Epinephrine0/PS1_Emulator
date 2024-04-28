@@ -533,7 +533,6 @@ namespace PSXEmulator {
             horizontalRes = new HorizontalRes(hr1, hr2);
             verticalRes = (VerticalRes)(((value >> 2) & 1) & interlace);
             vmode = (VMode)((value >> 3) & 1);
-            /*displayDepth = (DisplayDepth)((value >> 4) & 1);*/
 
             if (vmode == VMode.PAL) {
                 scanlines_per_frame = 314;
@@ -561,11 +560,9 @@ namespace PSXEmulator {
             UpdateHorizontalRange();
             UpdateVerticalRange();
 
-            int depth = ((int)((value >> 4) & 1));
-            if (depth != (int)displayDepth) {
-                displayDepth = (DisplayDepth)depth;
-                window.SwitchDisplayDepth(depth);
-            }
+            uint depth = (uint)((value >> 4) & 1);
+            displayDepth = (DisplayDepth)(depth);       //Not needed
+            window.Is24bpp = depth == 1;
         }
 
         private void gp0_draw_mode(UInt32 value) {

@@ -5,16 +5,11 @@ using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
-using PSXEmulator.PS1_Emulator;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Timers;
-using System.Windows.Documents;
-using System.Windows.Markup;
-using System.Windows.Media.Media3D;
 
 namespace PSXEmulator {
     public class PSX_OpenTK {
@@ -103,12 +98,15 @@ namespace PSXEmulator {
         public CPU CPU;
         const int VRAM_WIDTH = 1024;
         const int VRAM_HEIGHT = 512;
+        const int VRAM_WIDTH_24bpp = 512;   //Wrong
+        const int VRAM_HEIGHT_24bpp = 682;
 
         private int vertexArrayObject;
         private int vertexBufferObject;
         private int colorsBuffer;
         private int fullVram;
         private int vram_texture;
+        private int vramAs24bpp;
         private int sample_texture;
         private int texCoords;
         private int texWindow;
@@ -121,9 +119,12 @@ namespace PSXEmulator {
         private int display_area_X_Offset_Loc;
         private int display_area_Y_Offset_Loc;
         private int vramFrameBuffer;
+        private int vramAs24bppFrameBuffer;
+
         private int transparencyModeLoc;
         private int isDitheredLoc;
-
+        private int is24bppLoc;
+        private int isFlippedLoc;
         //Signed 11 bits
         private short drawOffsetX = 0;
         private short drawOffsetY = 0;
@@ -153,6 +154,7 @@ namespace PSXEmulator {
             flat out int isScreenQuad;
 
             uniform int fullVram;
+            uniform int isFlipped;
 
             uniform int inClut;
             uniform int inTexpage;
@@ -173,34 +175,42 @@ namespace PSXEmulator {
 	
 
             if(fullVram == 1){		//This is for displaying a full screen quad with the entire vram texture 
-
                 vec4 positions[4] = vec4[](
                 vec4(-1.0 + display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),    // Top-left
                 vec4(1.0 - display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),     // Top-right
                 vec4(-1.0 + display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0),   // Bottom-left
                 vec4(1.0 - display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0)     // Bottom-right
             );
- 
-                vec2 texcoords[4] = vec2[](		//Inverted in Y because PS1 Y coords are inverted
-                vec2(0.0, 0.0),   			// Top-left
 
-                vec2(display_area_x/1024.0, 0.0),   // Top-right
+            vec2 texcoords[4];
 
-                vec2(0.0, display_area_y/512.0),   // Bottom-left
-
+            if(isFlipped == 1){
+                texcoords = vec2[](		//Inverted in Y because PS1 Y coords are inverted
+                vec2(0.0, 0.0),   			                         // Top-left
+                vec2(display_area_x/1024.0, 0.0),                    // Top-right
+                vec2(0.0, display_area_y/512.0),                     // Bottom-left
                 vec2(display_area_x/1024.0, display_area_y/512.0)    // Bottom-right
             );
- 
-            gl_Position = positions[gl_VertexID];
+           } else {
+            texcoords = vec2[](		//Inverted in Y because PS1 Y coords are inverted
+                vec2(0.0, display_area_y/512.0),                     // Bottom-left
+                vec2(display_area_x/1024.0, display_area_y/512.0),   // Bottom-right
+                vec2(0.0, 0.0),   			                         // Top-left
+                vec2(display_area_x/1024.0, 0.0)                    // Top-right       
+            );
+           }
+
             texCoords = texcoords[gl_VertexID];
+            gl_Position = positions[gl_VertexID];
             isScreenQuad = 1;
 
             return;
 
-            }else{
+            } else {
 
             gl_Position.xyzw = vec4(xpos,ypos,0.0, 1.0);
             isScreenQuad = 0;
+        
             }
 
             texpageBase = ivec2((inTexpage & 0xf) * 64, ((inTexpage >> 4) & 0x1) * 256);
@@ -228,6 +238,7 @@ namespace PSXEmulator {
             uniform int maskBitSetting;
 
             flat in int isScreenQuad;
+            uniform int is24bpp;
 
             uniform ivec4 u_texWindow;
 
@@ -272,7 +283,11 @@ namespace PSXEmulator {
 
                int floatToU5(float f) {				
                         return int(floor(f * 31.0 + 0.5));
-                    }
+                  }
+
+               int floatToU8(float f) {				
+                        return int(floor(f * 255.0 + 0.5));
+                  }
 
             vec4 sampleVRAM(ivec2 coords) {
                    coords &= ivec2(1023, 511); // Out-of-bounds VRAM accesses wrap
@@ -316,13 +331,39 @@ namespace PSXEmulator {
 
                     }
 
+            vec4 handle24bpp(ivec2 coords){
+                //Each 6 bytes (3 shorts) contain two 24bit pixels.
+                //Step 1.5 short for each x since 1 24bits = 3/2 shorts 
+
+                 int p0 = sample16(ivec2(coords.x * 1.5, coords.y));
+                 int p1 = sample16(ivec2((coords.x * 1.5) + 1, coords.y));
+                 
+                 vec4 color; 
+                 if ((coords.x & 1) != 0) {         
+                     color.r = (p0 >> 8) & 0xFF;
+                     color.g = p1 & 0xFF;
+                     color.b = (p1 >> 8) & 0xFF;
+                 } else {
+                     color.r = p0 & 0xFF;
+                     color.g = (p0 >> 8) & 0xFF;
+                     color.b = (p1 & 0xFF);
+                 } 
+
+                return color / vec4(255.0f, 255.0f, 255.0f, 255.0f);   
+            }
+
             void main()
             {
 
 	            if(isScreenQuad == 1){		//Drawing a full screen quad case 
-	  
-	              ivec2 coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
+	              if(is24bpp == 1){
+                  ivec2 coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
+                  outputColor.rgba = handle24bpp(coords);
+                  } else {
+                  ivec2 coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
                   outputColor.rgba = sampleVRAM(coords);
+                  }
+	              
 	              return;
 	            }
 
@@ -495,10 +536,12 @@ namespace PSXEmulator {
             texModeLoc = GL.GetUniformLocation(shader.Program, "TextureMode");
             clutLoc = GL.GetUniformLocation(shader.Program, "inClut");
             texPageLoc = GL.GetUniformLocation(shader.Program, "inTexpage");
-
+            
             transparencyModeLoc = GL.GetUniformLocation(shader.Program, "transparencyMode");
             maskBitSettingLoc = GL.GetUniformLocation(shader.Program, "maskBitSetting");
             isDitheredLoc = GL.GetUniformLocation(shader.Program, "isDithered");
+            is24bppLoc = GL.GetUniformLocation(shader.Program, "is24bpp");
+            isFlippedLoc = GL.GetUniformLocation(shader.Program, "isFlipped");
 
             display_area_X_Loc = GL.GetUniformLocation(shader.Program, "display_area_x");
             display_area_Y_Loc = GL.GetUniformLocation(shader.Program, "display_area_y");
@@ -512,8 +555,9 @@ namespace PSXEmulator {
             texCoords = GL.GenBuffer();
             vram_texture = GL.GenTexture();
             sample_texture = GL.GenTexture();
-
+            vramAs24bpp = GL.GenTexture();  
             vramFrameBuffer = GL.GenFramebuffer();
+            vramAs24bppFrameBuffer = GL.GenFramebuffer();
 
             GL.BindVertexArray(vertexArrayObject);
 
@@ -532,16 +576,22 @@ namespace PSXEmulator {
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-            //GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
 
-            GL.TexStorage2D(TextureTarget2d.Texture2D, 1, SizedInternalFormat.Rgb5A1, VRAM_WIDTH, VRAM_WIDTH);
-
-           /* GL.BindTexture(TextureTarget.Texture2D, VramAs24bpp);
+            GL.BindTexture(TextureTarget.Texture2D, vramAs24bpp);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedInt8888Reversed, (IntPtr)null);*/
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH_24bpp, VRAM_HEIGHT_24bpp , 0, PixelFormat.Bgra, 
+                PixelType.UnsignedInt8888Reversed, (IntPtr)null);
+
+
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, vramAs24bppFrameBuffer);
+            GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, vramAs24bpp, 0);
+            if (GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != FramebufferErrorCode.FramebufferComplete) {
+                Console.WriteLine("[OpenGL] Uncompleted Frame Buffer !");
+            }
 
 
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, vramFrameBuffer);
@@ -555,54 +605,18 @@ namespace PSXEmulator {
             GL.Uniform1(GL.GetUniformLocation(shader.Program, "u_vramTex"), 0);
 
         }
-        bool Is24bpp = false;
-        public void SwitchDisplayDepth(int depth) {
-            if (depth == 1) {
-                Console.WriteLine("[OpenGL] 24 bpp");
-                Is24bpp = true;
-            } else {
-                Is24bpp = false;
-            }
+
+        public bool Is24bpp = false;
+
+        public void Update24bppTexture() {
+            GL.Uniform1(is24bppLoc, 1);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramAs24bppFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
+            GL.BindTexture(TextureTarget.Texture2D, vram_texture);      //No need to force sync the sample if you can read the vram     
+            GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+            GL.Uniform1(is24bppLoc, 0);
+  
         }
-
-        ushort[] temp = new ushort[VRAM_WIDTH * VRAM_HEIGHT];
-
-        public int Get24bppVram() {
-            while (GL.GetError() != OpenTK.Graphics.OpenGL.ErrorCode.NoError) { GL.GetError(); }
-            GL.BindTexture(TextureTarget.Texture2D, 0);
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0);
-
-            int VramAs24bpp = GL.GenTexture();
-            GL.TextureView(VramAs24bpp, TextureTarget.Texture2D, vram_texture, PixelInternalFormat.Rgb5A1, 0, 1, 0, 1);
-            
-
-            GL.BindTexture(TextureTarget.Texture2D, VramAs24bpp);
-      
-            Console.WriteLine(GL.GetError());
-
-            /*GL.ReadPixels(0, 0, VRAM_WIDTH, VRAM_HEIGHT, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, temp);
-            uint[] pixelsAs24bpp = new uint[VRAM_WIDTH * VRAM_HEIGHT / 2];
-            Queue<byte> b = new Queue<byte>(VRAM_WIDTH * VRAM_HEIGHT * 2);
-
-            for (int i = 0; i < temp.Length; i++ ) {
-                b.Enqueue((byte)(temp[i] & 0xFF));
-                b.Enqueue((byte)((temp[i] >> 8) & 0xFF));
-            }
-
-            for (int i = 0; i < pixelsAs24bpp.Length; i++) {
-                if (b.Count > 0) {
-                    pixelsAs24bpp[i] = (uint)(b.Dequeue() | b.Dequeue() << 8 | b.Dequeue() << 16);
-                } else {
-                    pixelsAs24bpp[i] = 0;
-                }
-            }
-
-            GL.BindTexture(TextureTarget.Texture2D, VramAs24bpp);
-            GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT,
-               PixelFormat.Rgba, PixelType.UnsignedInt8888Reversed, pixelsAs24bpp);*/
-            return VramAs24bpp;
-        }
-
         public void SetOffset(Int16 x, Int16 y) {
             //Already sign extended
             drawOffsetX = x; 
@@ -1102,24 +1116,29 @@ namespace PSXEmulator {
         }
 
         void DisplayFrame() {
+            GL.Uniform1(fullVram, 1);
+            GL.Disable(EnableCap.ScissorTest);
+            disableBlending();
+            GL.Viewport(0, 0, this.Size.X, this.Size.Y);
+            GL.Enable(EnableCap.Texture2D);
+            GL.DisableVertexAttribArray(1);
+            GL.DisableVertexAttribArray(2);
+            int texture;
+            if (Is24bpp) {
+                GL.Uniform1(isFlippedLoc, 0);
+                Update24bppTexture();
+                texture = vramAs24bpp;
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramAs24bpp);
+            } else {
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
+                texture = vram_texture;
+            }
+            GL.Uniform1(isFlippedLoc, 1);
+
             //Disable the ScissorTest and unbind the FBO to draw the entire vram texture to the screen
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
-
-            //GL.Scissor(0,0,this.Size.X,this.Size.Y);
-            GL.Disable(EnableCap.ScissorTest);
-
-            //GL.Disable(EnableCap.Blend);
-            disableBlending();
-
-            GL.Viewport(0, 0, this.Size.X, this.Size.Y);
-            GL.Enable(EnableCap.Texture2D);
-            GL.BindTexture(TextureTarget.Texture2D, Is24bpp? Get24bppVram() : vram_texture);
-
-            GL.Uniform1(fullVram, 1);
-
-            GL.DisableVertexAttribArray(1);
-            GL.DisableVertexAttribArray(2);
+            GL.BindTexture(TextureTarget.Texture2D, texture);
 
             modifyAspectRatio();
 
