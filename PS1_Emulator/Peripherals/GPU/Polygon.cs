@@ -37,12 +37,12 @@ namespace PSXEmulator {
         bool isDithered = false;  
       
         public Polygon(uint value , uint semi_transparency, bool ditherEnabled) {
-            opcode = (value >> 24);
-            isGouraud = (value >> 28 & 1) == 1;
-            isQuad = (value >> 27 & 1) == 1;
-            isTextured = (value >> 26 & 1) == 1;
-            isSemiTransparent = (value >> 25 & 1) == 1;
-            isRawTextured = (value >> 24 & 1) == 1;
+            opcode = value >> 24;
+            isGouraud = ((value >> 28) & 1) == 1;
+            isQuad = ((value >> 27) & 1) == 1;
+            isTextured = ((value >> 26) & 1) == 1;
+            isSemiTransparent = ((value >> 25) & 1) == 1;
+            isRawTextured = ((value >> 24) & 1) == 1;
             this.semi_transparency = semi_transparency;
             numberOfVertices = isQuad ? 4 : 3;
             vertices = new uint[numberOfVertices];

@@ -14,7 +14,7 @@ namespace PSXEmulator {
         short[] vertices;
         byte[] colors;
         public Line(uint value, uint semi_transparency, bool isDithered) {
-            opcode = (value >> 24);
+            opcode = value >> 24;
             this.semi_transparency = semi_transparency;
             this.isDithered = isDithered;
             isGouraud = ((value >> 28) & 1) == 1;
