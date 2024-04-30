@@ -396,7 +396,7 @@ namespace PSXEmulator.Peripherals.MDEC {
                     }
                 }
 
-                q_scale = (ushort)(n >> 10 & 0x3F);                           //contains scale value(not "skip" value)
+                q_scale = (ushort)((n >> 10) & 0x3F);                           //contains scale value(not "skip" value)
                 val = SignedXBits(n & 0x3FF, 10) * qt[k];                       //calc first value(without q_scale / 8)(?)
             }
 
@@ -412,7 +412,7 @@ namespace PSXEmulator.Peripherals.MDEC {
                 if (src.Count == 0) { /*Console.WriteLine("[MDEC] Src reached 0")*/; return false; }
 
                 n = src.Dequeue();                                                   //;get next entry (or FE00h end code)
-                k = (ushort)(k + (n >> 10 & 0x3F) + 1);                            //skip zerofilled entries
+                k = (ushort)(k + ((n >> 10) & 0x3F) + 1);                            //skip zerofilled entries
                 if (k >= 63) {
                     return true;
                 }
