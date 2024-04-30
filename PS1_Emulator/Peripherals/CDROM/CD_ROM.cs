@@ -246,7 +246,7 @@ namespace PSXEmulator {
         private void RequestRegister(byte value) {
             if ((value & 0x80) != 0) {  //Request data
                 //Console.WriteLine("DATA REQUESTED");
-                if (DataController.DataFifo.Count > 0) { return; }
+                if (DataController.DataFifo.Count > 0 || DataController.SectorBuffer.Count == 0) { return; }
                 DataController.MoveSectorToDataFifo();
             } else {
                 //Console.WriteLine("FIFO CLEARED");
