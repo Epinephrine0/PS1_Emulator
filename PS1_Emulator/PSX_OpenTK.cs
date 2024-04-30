@@ -878,7 +878,7 @@ namespace PSXEmulator {
             if (width == 0) { width = VRAM_WIDTH; }
             if (height == 0) { height = VRAM_HEIGHT; }
 
-            if (CPU.BUS.GPU.force_set_mask_bit) { //not sure
+            if (CPU.BUS.GPU.force_set_mask_bit) {
                 for (int i = 0; i < textureData.Length; i++) { textureData[i] |= (1 << 15); }
             }
 
@@ -926,7 +926,7 @@ namespace PSXEmulator {
             //Reads the vram fbo, which is the updated one
             ushort[] srcData = new ushort[width * height];
             GL.ReadPixels(x0_src, y0_src, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, srcData);   
-            if (CPU.BUS.GPU.force_set_mask_bit) { //not sure
+            if (CPU.BUS.GPU.force_set_mask_bit) {
                 for (int i = 0; i < srcData.Length; i++) { srcData[i] |= (1 << 15); }
             }
 
