@@ -358,15 +358,15 @@ namespace PSXEmulator.Peripherals.MDEC {
 
                     } else {                                          //15 bpp 
                         int index = (x + xx + (y + yy) * 16) * 2;
-                        byte R5 = (byte)(R >> 3 & 0x1F);          //Convert to BGR555
-                        byte G5 = (byte)(G >> 3 & 0x1F);
-                        byte B5 = (byte)(B >> 3 & 0x1F);
+                        byte R5 = (byte)((R >> 3) & 0x1F);          //Convert to BGR555
+                        byte G5 = (byte)((G >> 3) & 0x1F);
+                        byte B5 = (byte)((B >> 3) & 0x1F);
                         byte bit15 = (byte)DataOutputBit15;
 
                         ushort color = (ushort)(R5 | G5 << 5 | B5 << 10 | bit15 << 15);
 
                         CurrentMacroblock.Write((byte)(color & 0xFF), index);
-                        CurrentMacroblock.Write((byte)(color >> 8 & 0xFF), index + 1);
+                        CurrentMacroblock.Write((byte)((color >> 8) & 0xFF), index + 1);
                     }
                 }
             }
