@@ -11,28 +11,27 @@ namespace PSXEmulator {
         public BUS BUS;
 
         //32-bit program counters
-        private UInt32 PC;           
-        private UInt32 Next_PC;      
-        private UInt32 Current_PC;
+        private uint PC;           
+        private uint Next_PC;      
+        private uint Current_PC;
 
         //Register set, TODO: Make a seperate COP0 class 
-        private UInt32[] GPR;
-        private UInt32 SR;           //cop0 reg12 , the status register 
-        private UInt32 Cause;        //cop0 reg13 , the cause register 
-        private UInt32 EPC;          //cop0 reg14 , EPC
-        private UInt32 HI;           //Remainder of devision
-        private UInt32 LO;           //Quotient of devision
+        private uint[] GPR;
+        private uint SR;           //cop0 reg12 , the status register 
+        private uint Cause;        //cop0 reg13 , the cause register 
+        private uint EPC;          //cop0 reg14 , EPC
+        private uint HI;           //Remainder of devision
+        private uint LO;           //Quotient of devision
 
         //Flags to emulate branch delay 
         private bool Branch;
         private bool DelaySlot;
 
-        //This is needed because writes to memory are ignored (well, not really)
-        //When cache is isolated
+        //This is needed because writes to memory are ignored (well, not really) When cache is isolated
         private bool IscIsolateCache => (SR & 0x10000) != 0;
 
         //Geometry Transformation Engine - Coprocessor 2
-        GTE GTE = new GTE();
+        private GTE GTE = new GTE();
 
         //Counting how many cycles to clock the other peripherals
         public static int Cycles = 0;
@@ -54,7 +53,7 @@ namespace PSXEmulator {
         private bool IsLoadingEXE;
         private string? EXEPath;
 
-        bool FastBoot = true;                  //Skips the boot animation 
+        bool FastBoot = false;                  //Skips the boot animation 
         public bool IsPaused = false;
         public bool IsStopped = false;
         const uint CYCLES_PER_FRAME = 33868800 / 60;
@@ -130,23 +129,23 @@ namespace PSXEmulator {
         Instruction CurrentInstruction = new Instruction();
 
         public CPU(bool isEXE, string? EXEPath, BUS bus) {
-            this.PC = 0xbfc00000;                   //BIOS initial PC       
-            this.Next_PC = PC + 4;
-            this.BUS = bus;
-            this.GPR = new UInt32[32];
-            this.GPR[0] = 0;
-            this.SR = 0;
-            this.DirectWrite.RegisterNumber = 0;    //Stupid load delay slot
-            this.DirectWrite.Value = 0;
-            this.RegisterLoad_.RegisterNumber = 0;
-            this.RegisterLoad_.Value = 0;
-            this.RegisterDelayedLoad.RegisterNumber = 0;
-            this.RegisterDelayedLoad.Value = 0; 
-            this.HI = 0xdeadbeef;
-            this.LO = 0xdeadbeef;
-            this.Branch = false;
-            this.DelaySlot = false;
-            this.IsLoadingEXE = isEXE;
+            PC = 0xbfc00000;                   //BIOS initial PC       
+            Next_PC = PC + 4;
+            BUS = bus;
+            GPR = new uint[32];
+            GPR[0] = 0;
+            SR = 0;
+            DirectWrite.RegisterNumber = 0;    //Stupid load delay slot
+            DirectWrite.Value = 0;
+            RegisterLoad_.RegisterNumber = 0;
+            RegisterLoad_.Value = 0;
+            RegisterDelayedLoad.RegisterNumber = 0;
+            RegisterDelayedLoad.Value = 0; 
+            HI = 0xdeadbeef;
+            LO = 0xdeadbeef;
+            Branch = false;
+            DelaySlot = false;
+            IsLoadingEXE = isEXE;
             this.EXEPath = EXEPath;
         }
        
@@ -205,9 +204,11 @@ namespace PSXEmulator {
         private void ExecuteInstruction(Instruction instruction) {
             MainLookUpTable[instruction.GetOpcode()](this, instruction);
         }
+
         private static void special(CPU cpu, Instruction instruction) {
             SpecialLookUpTable[instruction.Get_Subfunction()](cpu, instruction);
         }
+
         private void RegisterTransfer(CPU cpu){    //Handle register transfers and delay slot
             if (cpu.RegisterLoad_.RegisterNumber != cpu.RegisterDelayedLoad.RegisterNumber) {
                 cpu.GPR[cpu.RegisterLoad_.RegisterNumber] = cpu.RegisterLoad_.Value;
@@ -224,6 +225,7 @@ namespace PSXEmulator {
             cpu.DirectWrite.Value = 0;
             cpu.GPR[0] = 0;
         }
+
         private void Intercept(uint pc) {
 
             switch (pc) {
@@ -253,31 +255,6 @@ namespace PSXEmulator {
 
                             }
 
-                            break;
-
-                        case 0xA4:
-                        case 0xA5:
-                        case 0xA6:
-                        case 0x78:
-                        case 0x7C:
-                        case 0x7E:
-                        case 0x81:
-                        case 0x94:
-                        case 0x54:
-                        case 0x56:
-                        case 0x71:
-                        case 0x72:
-                        case 0x90:
-                        case 0x91:
-                        case 0x92:
-                        case 0x93:
-                        case 0x95:
-                        case 0x9E:
-                        case 0xA2:
-                        case 0xA3:
-                            if (BUS.debug) {
-                                CDROM_trace(GPR[9]);
-                            }
                             break;
 
                         default:
@@ -349,12 +326,11 @@ namespace PSXEmulator {
                             if (BUS.debug) {
                                 Console.WriteLine("Function B: " + GPR[9].ToString("x"));
                             }
-
                             break;
-
                     }
 
                     break;
+
                 case 0xC0:
                     if (BUS.debug) {
                         Console.WriteLine("Function C: " + GPR[9].ToString("x"));
@@ -389,91 +365,6 @@ namespace PSXEmulator {
             Next_PC = PC + 4;
         }
 
-        public void CDROM_trace(uint func) {
-            Console.Write("CDROM: ");
-
-            switch (func) {
-                case 0xA4:
-                    Console.WriteLine("CdGetLbn");
-                    break;
-
-                case 0xA5:
-                    Console.WriteLine("CdReadSector");
-                    break;
-
-                case 0xA6:
-                    Console.WriteLine("CdGetStatus");
-                    break;
-
-                case 0x78:
-                    Console.WriteLine("CdAsyncSeekL");
-                    break;
-
-                case 0x7C:
-                    Console.WriteLine("CdAsyncGetStatus");
-                    break;
-
-                case 0x7E:
-                    Console.WriteLine("CdAsyncReadSector");
-                    break;
-
-                case 0x81:
-                    Console.WriteLine("CdAsyncSetMode");
-                    break;
-
-                case 0x94:
-                    Console.WriteLine("CdromGetInt5errCode");
-                    break;
-
-                case 0x54:
-                case 0x71:
-                    Console.WriteLine("_96_init");
-                    break;
-
-                case 0x56:
-                case 0x72:
-                    Console.WriteLine(" _96_remove");
-                    break;
-
-                case 0x90:
-                    Console.WriteLine("CdromIoIrqFunc1");
-                    break;
-
-                case 0x91:
-                    Console.WriteLine("CdromDmaIrqFunc1");
-                    break;
-
-                case 0x92:
-                    Console.WriteLine("CdromIoIrqFunc2");
-                    break; 
-
-                case 0x93:
-                    Console.WriteLine("CdromDmaIrqFunc2");
-                    break;
-
-                case 0x95:
-                    Console.WriteLine("CdInitSubFunc");
-                    break;
-
-                case 0x9E:
-                    Console.WriteLine("SetCdromIrqAutoAbort");
-                    break;
-
-                case 0xA2:
-                    Console.WriteLine("EnqueueCdIntr");
-                    break;
-
-                case 0xA3:
-                    Console.WriteLine("DequeueCdIntr");
-                    break;
-
-                default:
-                    Console.WriteLine("Unknown function: A(0x" + func.ToString("x")+")");
-                    break;
-
-            }
-        }
-        
         private static void cop0(CPU cpu, Instruction instruction) {
             switch (instruction.Get_rs()) {
                 case 0b00100: mtc0(cpu, instruction); break;
@@ -481,8 +372,8 @@ namespace PSXEmulator {
                 case 0b10000: rfe(cpu, instruction);  break;
                 default: throw new Exception("Unhandled cop0 instruction: " + instruction.Getfull().ToString("X"));
             }
-
         }
+
         private static void illegal(CPU cpu, Instruction instruction) {
             Console.ForegroundColor = ConsoleColor.Red; 
             Console.WriteLine("[CPU] Illegal instruction: " + instruction.Getfull().ToString("X").PadLeft(8,'0') + " - Opcode(" + instruction.GetOpcode().ToString("X") + ") - " + " at PC: " + cpu.Current_PC.ToString("x"));
@@ -506,7 +397,6 @@ namespace PSXEmulator {
             uint rt = instruction.Get_rt();
             uint word = cpu.GTE.read(rt);
             cpu.BUS.StoreWord(address, word);
-
         }
 
         private static void swc1(CPU cpu, Instruction instruction) {
@@ -534,7 +424,6 @@ namespace PSXEmulator {
             uint word = cpu.BUS.LoadWord(address);
             uint rt = instruction.Get_rt();
             cpu.GTE.write(rt, word);
-
         }
 
         private static void lwc1(CPU cpu, Instruction instruction) {
@@ -550,15 +439,15 @@ namespace PSXEmulator {
 
             //TODO add 2 instructions delay
 
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
 
-            UInt32 value =  cpu.GPR[instruction.Get_rt()];               
-            UInt32 current_value = cpu.BUS.LoadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            uint value =  cpu.GPR[instruction.Get_rt()];               
+            uint current_value = cpu.BUS.LoadWord((uint)(final_address & (~3)));     //Last 2 bits are for alignment position only 
 
-            UInt32 finalValue;
-            UInt32 pos = final_address & 3;
+            uint finalValue;
+            uint pos = final_address & 3;
 
             switch (pos) {
                 case 0: finalValue = (current_value & 0x00000000) | (value << 0); break;
@@ -568,21 +457,21 @@ namespace PSXEmulator {
                 default: throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            cpu.BUS.StoreWord((UInt32)(final_address & (~3)), finalValue);
+            cpu.BUS.StoreWord((uint)(final_address & (~3)), finalValue);
         }
 
         private static void swl(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
 
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
 
-            UInt32 value = cpu.GPR[instruction.Get_rt()];           
-            UInt32 current_value = cpu.BUS.LoadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            uint value = cpu.GPR[instruction.Get_rt()];           
+            uint current_value = cpu.BUS.LoadWord((uint)(final_address&(~3)));     //Last 2 bits are for alignment position only 
 
-            UInt32 finalValue;
-            UInt32 pos = final_address & 3;
+            uint finalValue;
+            uint pos = final_address & 3;
 
             switch (pos) {
                 case 0: finalValue = (current_value & 0xffffff00) | (value >> 24); break;
@@ -592,26 +481,25 @@ namespace PSXEmulator {
                 default: throw new Exception("swl instruction error, pos:" + pos);
             }
 
-            cpu.BUS.StoreWord((UInt32)(final_address & (~3)), finalValue);
-
+            cpu.BUS.StoreWord((uint)(final_address & (~3)), finalValue);
         }
 
         private static void lwr(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
 
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
 
-            UInt32 current_value = cpu.GPR[instruction.Get_rt()];
+            uint current_value = cpu.GPR[instruction.Get_rt()];
 
             if (instruction.Get_rt() == cpu.RegisterLoad_.RegisterNumber) {
                 current_value = cpu.RegisterLoad_.Value;                         //Bypass load delay
             }
 
-            UInt32 word = cpu.BUS.LoadWord((UInt32)(final_address & (~3)));     //Last 2 bits are for alignment position only 
-            UInt32 finalValue;
-            UInt32 pos = final_address & 3;
+            uint word = cpu.BUS.LoadWord((uint)(final_address & (~3)));     //Last 2 bits are for alignment position only 
+            uint finalValue;
+            uint pos = final_address & 3;
 
             switch (pos) {
                 case 0: finalValue = (current_value & 0x00000000) | (word >> 0); break;
@@ -623,24 +511,23 @@ namespace PSXEmulator {
 
             cpu.RegisterDelayedLoad.RegisterNumber = instruction.Get_rt();   //Position
             cpu.RegisterDelayedLoad.Value = finalValue;                      //Value
-
         }
 
         private static void lwl(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
 
-            UInt32 current_value =  cpu.GPR[instruction.Get_rt()];
+            uint current_value =  cpu.GPR[instruction.Get_rt()];
 
             if (instruction.Get_rt() == cpu.RegisterLoad_.RegisterNumber) {
                 current_value = cpu.RegisterLoad_.Value;             //Bypass load delay
             }
 
-            UInt32 word = cpu.BUS.LoadWord((UInt32)(final_address&(~3)));     //Last 2 bits are for alignment position only 
-            UInt32 finalValue;
-            UInt32 pos = final_address & 3;
+            uint word = cpu.BUS.LoadWord((uint)(final_address&(~3)));     //Last 2 bits are for alignment position only 
+            uint finalValue;
+            uint pos = final_address & 3;
 
             switch (pos) {
                 case 0: finalValue = (current_value & 0x00ffffff) | (word << 24); break;
@@ -651,8 +538,7 @@ namespace PSXEmulator {
             }
 
             cpu.RegisterDelayedLoad.RegisterNumber = instruction.Get_rt();   //Position
-            cpu.RegisterDelayedLoad.Value = finalValue;                      //Value
-            
+            cpu.RegisterDelayedLoad.Value = finalValue;                      //Value           
         }
 
         private static void cop2(CPU cpu, Instruction instruction) {
@@ -692,7 +578,6 @@ namespace PSXEmulator {
             }
         }
 
-
         private static void cop3(CPU cpu, Instruction instruction) {
             Exception(cpu, (uint)Exceptions.CoprocessorError);
         }
@@ -702,27 +587,25 @@ namespace PSXEmulator {
         }
 
         private static void xori(CPU cpu, Instruction instruction) {
-            UInt32 imm = instruction.GetImmediate();
+            uint imm = instruction.GetImmediate();
             cpu.DirectWrite.RegisterNumber = instruction.Get_rt();         //Position
             cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rs()] ^ imm;  //Value
         }
 
         private static void lh(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
-
-       
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
+   
             if(final_address >= 0x1F800400 && final_address <= (0x1F800400 + 0xC00)) { Exception(cpu, (uint)Exceptions.BUSDataError); return; }
             
             //aligned?
-            Int16 halfWord = (Int16)cpu.BUS.LoadHalf(final_address);
+            short halfWord = (short)cpu.BUS.LoadHalf(final_address);
             if ((final_address & 0x1) == 0) {
                 cpu.RegisterDelayedLoad.RegisterNumber = instruction.Get_rt();         //Position
-                cpu.RegisterDelayedLoad.Value = (UInt32)halfWord;                     //Value
-            }
-            else {
+                cpu.RegisterDelayedLoad.Value = (uint)halfWord;                     //Value
+            } else {
                 Exception(cpu, (uint)Exceptions.LoadAddressError);
             }
         }
@@ -730,12 +613,12 @@ namespace PSXEmulator {
         private static void lhu(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
 
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
 
             if ((final_address & 0x1) == 0) {
-                UInt32 halfWord = (UInt32)cpu.BUS.LoadHalf(final_address);
+                uint halfWord = (uint)cpu.BUS.LoadHalf(final_address);
                 cpu.RegisterDelayedLoad.RegisterNumber = instruction.Get_rt();  //Position
                 cpu.RegisterDelayedLoad.Value = halfWord;                       //Value
                
@@ -743,7 +626,6 @@ namespace PSXEmulator {
             else {
                 Exception(cpu, (uint)Exceptions.LoadAddressError);
             }
-
         }
 
         private static void sltiu(CPU cpu, Instruction instruction) {
@@ -751,37 +633,34 @@ namespace PSXEmulator {
 
             if (cpu.GPR[instruction.Get_rs()] < instruction.GetSignedImmediate()) {
                 cpu.DirectWrite.Value = 1;
-            }
-            else {
+            } else {
                 cpu.DirectWrite.Value = 0;
             }
-     
         }
 
         private static void sub(CPU cpu, Instruction instruction) {
-            Int32 reg1 = (Int32)cpu.GPR[instruction.Get_rs()];
-            Int32 reg2 = (Int32)cpu.GPR[instruction.Get_rt()];
+            int reg1 = (int)cpu.GPR[instruction.Get_rs()];
+            int reg2 = (int)cpu.GPR[instruction.Get_rt()];
 
             try {
-                Int32 value = checked(reg1 - reg2);        //Check for signed integer overflow 
+                int value = checked(reg1 - reg2);        //Check for signed integer overflow 
                 cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
-                cpu.DirectWrite.Value = (UInt32)value;
+                cpu.DirectWrite.Value = (uint)value;
             }
             catch (OverflowException) {
                 Exception(cpu, (uint)Exceptions.Overflow);
-            }
-         
+            }        
         }
 
         private static void mult(CPU cpu, Instruction instruction) {
             //Sign extend
-            Int64 a = (Int64) ((Int32)cpu.GPR[instruction.Get_rs()]);
-            Int64 b = (Int64) ((Int32)cpu.GPR[instruction.Get_rt()]);
+            Int64 a = (Int64) ((int)cpu.GPR[instruction.Get_rs()]);
+            Int64 b = (Int64) ((int)cpu.GPR[instruction.Get_rt()]);
 
             UInt64 v = (UInt64)(a * b);
 
-            cpu.HI = (UInt32)(v >> 32);
-            cpu.LO = (UInt32)(v);
+            cpu.HI = (uint)(v >> 32);
+            cpu.LO = (uint)(v);
 
             /*
               __mult_execution_time_____________________________________________________
@@ -790,7 +669,7 @@ namespace PSXEmulator {
               Slow  (13 cycles)  rs = 00100000h..7FFFFFFFh, or rs = 80000000h..FFF00001h
 
             */
-            switch (a) {
+            /*switch (a) {
                 case Int64 x when (a >= 0x00000000 && a <= 0x000007FF) || (a >= 0xFFFFF800 && a <= 0xFFFFFFFF):
                     //CPU.cycles += 6;
                     break;
@@ -802,8 +681,7 @@ namespace PSXEmulator {
                 case Int64 x when (a >= 0x00100000 && a <= 0x7FFFFFFF) || (a >= 0x80000000 && a <= 0xFFF00001):
                     //CPU.cycles += 13;
                     break;
-            }
-
+            }*/
         }
 
         private static void break_(CPU cpu, Instruction instruction) {
@@ -821,8 +699,8 @@ namespace PSXEmulator {
 
             UInt64 v = a * b;
 
-            cpu.HI = (UInt32)(v >> 32);
-            cpu.LO = (UInt32)(v);
+            cpu.HI = (uint)(v >> 32);
+            cpu.LO = (uint)(v);
 
 
             /*
@@ -833,7 +711,7 @@ namespace PSXEmulator {
              
             */
 
-            switch (a) {
+            /*switch (a) {
                 case UInt64 x when a >= 0x00000000 && a <= 0x000007FF:
                     //CPU.cycles += 6;
                     break;
@@ -845,18 +723,18 @@ namespace PSXEmulator {
                 case UInt64 x when a >= 0x00100000 && a <= 0xFFFFFFFF:
                     //CPU.cycles += 13;
                     break;
-            }
-
+            }*/
         }
 
         private static void srlv(CPU cpu, Instruction instruction) {
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
-            cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rt()] >> ((Int32)(cpu.GPR[instruction.Get_rs()] & 0x1f));
+            cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rt()] >> ((int)(cpu.GPR[instruction.Get_rs()] & 0x1f));
         }
+
         private static void srav(CPU cpu, Instruction instruction) {
-            Int32 value = ((Int32)cpu.GPR[instruction.Get_rt()]) >> ((Int32)(cpu.GPR[instruction.Get_rs()] & 0x1f));
+            int value = ((int)cpu.GPR[instruction.Get_rt()]) >> ((int)(cpu.GPR[instruction.Get_rs()] & 0x1f));
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
-            cpu.DirectWrite.Value = (UInt32)value;
+            cpu.DirectWrite.Value = (uint)value;
         }
 
         private static void nor(CPU cpu, Instruction instruction) {
@@ -866,7 +744,7 @@ namespace PSXEmulator {
 
         private static void sllv(CPU cpu, Instruction instruction) {                             
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();             //Take 5 bits from register rs
-            cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rt()] << ((Int32)(cpu.GPR[instruction.Get_rs()] & 0x1f));
+            cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rt()] << ((int)(cpu.GPR[instruction.Get_rs()] & 0x1f));
         }
 
         private static void mthi(CPU cpu, Instruction instruction) {
@@ -880,25 +758,21 @@ namespace PSXEmulator {
             Exception(cpu, (uint)Exceptions.SysCall);
         }
 
-        private static void Exception(CPU cpu, UInt32 exceptionCause){
+        private static void Exception(CPU cpu, uint exceptionCause){
             //If the next instruction is a GTE instruction skip the exception
             //Otherwise the BIOS will try to handle the GTE bug by skipping the instruction  
            
-
-            UInt32 handler;                                         //Get the handler
+            uint handler;                                         //Get the handler
 
             if ((cpu.SR & (1 << 22)) != 0) {
                 handler = 0xbfc00180;
-
-            }
-            else {
+            } else {
                 handler = 0x80000080;
             }
   
+            uint mode = cpu.SR & 0x3f;                          //Disable interrupts 
 
-            UInt32 mode = cpu.SR & 0x3f;                          //Disable interrupts 
-
-            cpu.SR = (UInt32)(cpu.SR & ~0x3f);
+            cpu.SR = (uint)(cpu.SR & ~0x3f);
 
             cpu.SR = cpu.SR | ((mode << 2) & 0x3f);
 
@@ -909,7 +783,7 @@ namespace PSXEmulator {
 
             if (cpu.DelaySlot) {                   //in case an exception occurs in a delay slot
                 cpu.EPC -= 4;
-                cpu.Cause = (UInt32)(cpu.Cause | (1 << 31));
+                cpu.Cause = (uint)(cpu.Cause | (1 << 31));
             }
 
             cpu.PC = handler;                          //Jump to the handler address (no delay)
@@ -918,7 +792,7 @@ namespace PSXEmulator {
 
         private static void slt(CPU cpu, Instruction instruction) {
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
-            if (((Int32)cpu.GPR[instruction.Get_rs()]) < ((Int32)cpu.GPR[instruction.Get_rt()])) {
+            if (((int)cpu.GPR[instruction.Get_rs()]) < ((int)cpu.GPR[instruction.Get_rt()])) {
                 cpu.DirectWrite.Value = 1;
             }
             else {
@@ -928,17 +802,17 @@ namespace PSXEmulator {
 
         private static void divu(CPU cpu, Instruction instruction) {
 
-            UInt32 numerator = cpu.GPR[instruction.Get_rs()];
-            UInt32 denominator = cpu.GPR[instruction.Get_rt()];
+            uint numerator = cpu.GPR[instruction.Get_rs()];
+            uint denominator = cpu.GPR[instruction.Get_rt()];
 
             if (denominator == 0) {
                 cpu.LO = 0xffffffff;
-                cpu.HI = (UInt32)numerator;
+                cpu.HI = (uint)numerator;
                 return;
             }
 
-            cpu.LO = (UInt32)(numerator / denominator);
-            cpu.HI = (UInt32)(numerator % denominator);
+            cpu.LO = (uint)(numerator / denominator);
+            cpu.HI = (uint)(numerator % denominator);
 
             /*
               divu/div_execution_time
@@ -952,10 +826,10 @@ namespace PSXEmulator {
         private static void srl(CPU cpu, Instruction instruction) {
             //Right Shift (Logical)
 
-            UInt32 val = cpu.GPR[instruction.Get_rt()];
-            UInt32 shift = instruction.Get_sa();
+            uint val = cpu.GPR[instruction.Get_rt()];
+            uint shift = instruction.Get_sa();
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
-            cpu.DirectWrite.Value = val >> (Int32)shift;
+            cpu.DirectWrite.Value = val >> (int)shift;
         }
 
         private static void mflo(CPU cpu, Instruction instruction) { //LO -> GPR[rd]
@@ -968,17 +842,17 @@ namespace PSXEmulator {
         }
 
         private static void div(CPU cpu, Instruction instruction) { // GPR[rs] / GPR[rt] -> (HI, LO) 
-            Int32 numerator = (Int32)cpu.GPR[instruction.Get_rs()];
-            Int32 denominator = (Int32)cpu.GPR[instruction.Get_rt()];
+            int numerator = (int)cpu.GPR[instruction.Get_rs()];
+            int denominator = (int)cpu.GPR[instruction.Get_rt()];
 
             if (numerator >= 0 && denominator == 0) {
                 cpu.LO = 0xffffffff;
-                cpu.HI = (UInt32)numerator;
+                cpu.HI = (uint)numerator;
                 return;
             }
             else if (numerator < 0 && denominator == 0) {
                 cpu.LO = 1;
-                cpu.HI = (UInt32)numerator;
+                cpu.HI = (uint)numerator;
                 return;
             }
             else if ((uint)numerator == 0x80000000 && (uint)denominator == 0xffffffff) {
@@ -987,8 +861,8 @@ namespace PSXEmulator {
                 return;
             }
 
-            cpu.LO = (UInt32)unchecked(numerator / denominator);
-            cpu.HI = (UInt32)unchecked(numerator % denominator);
+            cpu.LO = (uint)unchecked(numerator / denominator);
+            cpu.HI = (uint)unchecked(numerator % denominator);
 
             /*
                divu/div_execution_time
@@ -997,32 +871,28 @@ namespace PSXEmulator {
              */
 
             //CPU.cycles += 36;
-
         }
 
         private static void sra(CPU cpu, Instruction instruction) {
             //Right Shift (Arithmetic)
 
-            Int32 val = (Int32)cpu.GPR[instruction.Get_rt()];
-            Int32 shift = (Int32)instruction.Get_sa();
+            int val = (int)cpu.GPR[instruction.Get_rt()];
+            int shift = (int)instruction.Get_sa();
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
-            cpu.DirectWrite.Value = (UInt32)(val >> shift);
-
+            cpu.DirectWrite.Value = (uint)(val >> shift);
         }
 
         private static void slti(CPU cpu, Instruction instruction) {
 
-            Int32 si = (Int32)instruction.GetSignedImmediate();
-            Int32 rg = (Int32)cpu.GPR[instruction.Get_rs()];
+            int si = (int)instruction.GetSignedImmediate();
+            int rg = (int)cpu.GPR[instruction.Get_rs()];
             cpu.DirectWrite.RegisterNumber = instruction.Get_rt();
 
             if (rg<si) {
                 cpu.DirectWrite.Value = 1;
-            }
-            else {
+            } else {
                 cpu.DirectWrite.Value = 0;
              }
-
         }
 
         private static void bxx(CPU cpu,Instruction instruction) {         //*
@@ -1031,16 +901,14 @@ namespace PSXEmulator {
             //if rs is $ra, then the value used for the comparison is $ra's value before linking.
             if (((value >> 16) & 1) == 1) {
                 //BGEZ
-                if ((Int32)cpu.GPR[instruction.Get_rs()] >= 0) {
+                if ((int)cpu.GPR[instruction.Get_rs()] >= 0) {
                     branch(cpu,instruction.GetSignedImmediate());
                 }
-            }
-            else {
+            } else {
                 //BLTZ
-                if ((Int32)cpu.GPR[instruction.Get_rs()] < 0) {
+                if ((int)cpu.GPR[instruction.Get_rs()] < 0) {
                     branch(cpu,instruction.GetSignedImmediate());
                 }
-
             }
 
             if (((value >> 17) & 0xF) == 0x8) {
@@ -1048,33 +916,32 @@ namespace PSXEmulator {
                 cpu.DirectWrite.RegisterNumber = (uint)Register.ra;
                 cpu.DirectWrite.Value = cpu.Next_PC;
             }
-
         }
 
         private static void lbu(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
 
             byte byte_ = cpu.BUS.LoadByte(cpu.GPR[base_] + addressRegPos);
             cpu.RegisterDelayedLoad.RegisterNumber = instruction.Get_rt();  //Position
-            cpu.RegisterDelayedLoad.Value = (UInt32)byte_;                     //Value
-            
+            cpu.RegisterDelayedLoad.Value = (uint)byte_;                     //Value        
         }
 
         private static void blez(CPU cpu, Instruction instruction) {
-            Int32 signedValue = (Int32)cpu.GPR[instruction.Get_rs()];
+            int signedValue = (int)cpu.GPR[instruction.Get_rs()];
             if (signedValue <= 0) {
                 branch(cpu,instruction.GetSignedImmediate());
             }
         }
 
         private static void bgtz(CPU cpu, Instruction instruction) {     //Branch if > 0
-            Int32 signedValue = (Int32)cpu.GPR[instruction.Get_rs()];      
+            int signedValue = (int)cpu.GPR[instruction.Get_rs()];      
             if (signedValue > 0) {
                 branch(cpu,instruction.GetSignedImmediate());
             }
         }
+
         private static void subu(CPU cpu, Instruction instruction) {
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
             cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rs()] - cpu.GPR[instruction.Get_rt()];
@@ -1094,6 +961,7 @@ namespace PSXEmulator {
             cpu.Branch = true;
 
         }
+
         private static void beq(CPU cpu, Instruction instruction) {
             if (cpu.GPR[instruction.Get_rs()].Equals(cpu.GPR[instruction.Get_rt()])) {
                 branch(cpu,instruction.GetSignedImmediate());
@@ -1102,26 +970,26 @@ namespace PSXEmulator {
 
         private static void lb(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
             sbyte sb = (sbyte)cpu.BUS.LoadByte(cpu.GPR[base_] + addressRegPos);
             cpu.RegisterDelayedLoad.RegisterNumber = instruction.Get_rt();  //Position
-            cpu.RegisterDelayedLoad.Value = (UInt32)sb;                     //Value
+            cpu.RegisterDelayedLoad.Value = (uint)sb;                     //Value
         }
 
         private static void sb(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
 
-            UInt32 targetReg = instruction.Get_rt();
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
+            uint targetReg = instruction.Get_rt();
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
             cpu.BUS.StoreByte(cpu.GPR[base_] + addressRegPos, (byte)cpu.GPR[targetReg]);
         }
 
         private static void andi(CPU cpu,Instruction instruction) {
-            UInt32 targetReg = instruction.Get_rt();
-            UInt32 imm = instruction.GetImmediate();
-            UInt32 rs = instruction.Get_rs();
+            uint targetReg = instruction.Get_rt();
+            uint imm = instruction.GetImmediate();
+            uint rs = instruction.Get_rs();
             cpu.DirectWrite.RegisterNumber = targetReg;
             cpu.DirectWrite.Value = cpu.GPR[rs] & imm;
         }
@@ -1131,67 +999,69 @@ namespace PSXEmulator {
             cpu.DirectWrite.Value = cpu.Next_PC;             //Jump and link, store the PC to return to it later
             jump(cpu,instruction);
         }
+
         private static void sh(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
 
-            UInt32 targetReg = instruction.Get_rt();
+            uint targetReg = instruction.Get_rt();
 
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
 
             //Address must be 16 bit aligned
             if ((final_address & 1) == 0) {
-                cpu.BUS.StoreHalf(final_address, (UInt16)cpu.GPR[targetReg]);
+                cpu.BUS.StoreHalf(final_address, (ushort)cpu.GPR[targetReg]);
             }
             else {
                 Exception(cpu, (uint)Exceptions.StoreAddressError);
             }
-
         }
 
         private static void addi(CPU cpu, Instruction instruction) {
-            Int32 imm = (Int32)(instruction.GetSignedImmediate());
-            Int32 s = (Int32)(cpu.GPR[instruction.Get_rs()]);
+            int imm = (int)(instruction.GetSignedImmediate());
+            int s = (int)(cpu.GPR[instruction.Get_rs()]);
             try {
-                Int32 value = checked(imm + s);        //Check for signed integer overflow 
+                int value = checked(imm + s);        //Check for signed integer overflow 
                 cpu.DirectWrite.RegisterNumber = instruction.Get_rt();
-                cpu.DirectWrite.Value = (UInt32)value;
+                cpu.DirectWrite.Value = (uint)value;
             }
             catch (OverflowException) {
                 Exception(cpu, (uint)Exceptions.Overflow);
-            }
-           
+            }          
         }
 
         public static void lui(CPU cpu, Instruction instruction) {            
-            UInt32 value = instruction.GetImmediate();
+            uint value = instruction.GetImmediate();
             cpu.DirectWrite.RegisterNumber = instruction.Get_rt();
             cpu.DirectWrite.Value = value << 16;
         }
 
         public static void ori(CPU cpu, Instruction instruction) {
-            UInt32 value = instruction.GetImmediate();
-            UInt32 rs = instruction.Get_rs();
+            uint value = instruction.GetImmediate();
+            uint rs = instruction.Get_rs();
             cpu.DirectWrite.RegisterNumber = instruction.Get_rt();
             cpu.DirectWrite.Value = cpu.GPR[rs] | value;
         }
+
         public static void or(CPU cpu, Instruction instruction) {
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
             cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rs()] | cpu.GPR[instruction.Get_rt()];
         }
+
         private static void and(CPU cpu, Instruction instruction) {
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
             cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rs()] & cpu.GPR[instruction.Get_rt()];
         }
+
         public static void sw(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
 
-            UInt32 targetReg = instruction.Get_rt();
+            uint targetReg = instruction.Get_rt();
 
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
 
             //Address must be 32 bit aligned
             if ((final_address & 0x3) == 0) {
@@ -1200,15 +1070,14 @@ namespace PSXEmulator {
             else {
                 Exception(cpu, (uint)Exceptions.StoreAddressError);
             }
-
         }
 
         public static void lw(CPU cpu, Instruction instruction) {
             if (cpu.IscIsolateCache) { return; }
 
-            UInt32 addressRegPos = instruction.GetSignedImmediate();
-            UInt32 base_ = instruction.Get_rs();
-            UInt32 final_address = cpu.GPR[base_] + addressRegPos;
+            uint addressRegPos = instruction.GetSignedImmediate();
+            uint base_ = instruction.Get_rs();
+            uint final_address = cpu.GPR[base_] + addressRegPos;
        
             //Address must be 32 bit aligned
             if ((final_address & 0x3) == 0) {
@@ -1217,17 +1086,16 @@ namespace PSXEmulator {
             }
             else {
                 Exception(cpu, (uint)Exceptions.LoadAddressError);
-            }
-           
+            }         
         }
         
         private static void add(CPU cpu, Instruction instruction) {
-            Int32 reg1 = (Int32)cpu.GPR[instruction.Get_rs()];       
-            Int32 reg2 = (Int32)cpu.GPR[instruction.Get_rt()];
+            int reg1 = (int)cpu.GPR[instruction.Get_rs()];       
+            int reg2 = (int)cpu.GPR[instruction.Get_rt()];
             try {
-                Int32 value = checked(reg1 + reg2);        //Check for signed integer overflow, can be ignored as no games rely on this 
+                int value = checked(reg1 + reg2);        //Check for signed integer overflow, can be ignored as no games rely on this 
                 cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
-                cpu.DirectWrite.Value = (UInt32)value;
+                cpu.DirectWrite.Value = (uint)value;
             }
             catch (OverflowException) {
                 Exception(cpu, (uint)Exceptions.Overflow);    
@@ -1254,14 +1122,15 @@ namespace PSXEmulator {
             }
             else {
                 cpu.DirectWrite.Value = 0;
-            }
-           
+            }          
         }
+
         public static void sll(CPU cpu,Instruction instruction) {
             cpu.DirectWrite.RegisterNumber = instruction.Get_rd();
-            cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rt()] << (Int32)instruction.Get_sa();
+            cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rt()] << (int)instruction.Get_sa();
 
         }
+
         private static void addiu(CPU cpu, Instruction instruction) {
             cpu.DirectWrite.RegisterNumber = instruction.Get_rt();
             cpu.DirectWrite.Value = cpu.GPR[instruction.Get_rs()] + instruction.GetSignedImmediate();
@@ -1272,13 +1141,12 @@ namespace PSXEmulator {
             cpu.Branch = true;
         }
 
-
         private static void rfe(CPU cpu, Instruction instruction) {
             if (instruction.Get_Subfunction() != 0b010000) {    //Check bits [5:0]
                 throw new Exception("Invalid cop0 instruction: " + instruction.Getfull().ToString("X"));
             }
                          /*
-                        UInt32 mode = cpu.SR & 0x3f;                   
+                        uint mode = cpu.SR & 0x3f;                   
                         cpu.SR = (uint)(cpu.SR & ~0x3f);
                         cpu.SR = cpu.SR | (mode >> 2);*/
 
@@ -1333,7 +1201,7 @@ namespace PSXEmulator {
             }
         }
 
-        private static void branch(CPU cpu, UInt32 offset) {
+        private static void branch(CPU cpu, uint offset) {
             offset = offset << 2;
             cpu.Next_PC = cpu.Next_PC + offset;
             cpu.Next_PC = cpu.Next_PC - 4;        //Cancel the +4 from the emu cycle 
