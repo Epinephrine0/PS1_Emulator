@@ -36,8 +36,6 @@ namespace PSXEmulator {
         const double GPU_FACTOR = ((double)715909) / 451584;
         public bool debug = false;
 
-        //TODO: Imeplement ignored stuff 
-
         public BUS(
             BIOS BIOS, RAM RAM, Scratchpad Scratchpad,
             CD_ROM CDROM, SPU SPU, DMA DMA, IO_PORTS IO, MemoryControl MemCtrl, 
