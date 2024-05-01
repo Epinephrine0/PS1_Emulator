@@ -239,8 +239,8 @@ namespace PSXEmulator {
             }
 
             uint address = ch.read_base_addr() & 0x1ffffc;
-          
-            while (true) {
+            int LinkedListMax = 0xFFFF;     //A hacky way to get out of infinite list transfares
+            while (LinkedListMax-- > 0) {
                 uint header = RAM.LoadWord(address);
                 uint num_of_words = header >> 24;
 
