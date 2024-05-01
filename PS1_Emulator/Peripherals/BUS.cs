@@ -63,7 +63,7 @@ namespace PSXEmulator {
             this.GPU = GPU;
         }
 
-        public UInt32 LoadWord(UInt32 address) {           
+        public uint LoadWord(uint address) {           
             uint physicalAddress = Mask(address);
             //CPU.cycles++;
             switch (physicalAddress) {
@@ -90,7 +90,7 @@ namespace PSXEmulator {
             }
         }
 
-        public void StoreWord(UInt32 address,UInt32 value) {
+        public void StoreWord(uint address,uint value) {
             uint physicalAddress = Mask(address);
             //CPU.cycles++;
             switch (physicalAddress) {
@@ -125,7 +125,7 @@ namespace PSXEmulator {
             }
         }
 
-        public UInt16 LoadHalf(UInt32 address) {
+        public ushort LoadHalf(uint address) {
             uint physicalAddress = Mask(address);
             //CPU.cycles++;
             switch (physicalAddress) {
@@ -150,7 +150,7 @@ namespace PSXEmulator {
             }    
         }
 
-        public void StoreHalf(UInt32 address, UInt16 value) {
+        public void StoreHalf(uint address, ushort value) {
             uint physicalAddress = Mask(address);
             //CPU.cycles++;
             switch (physicalAddress) {
@@ -180,7 +180,7 @@ namespace PSXEmulator {
             }
         }
 
-        public byte LoadByte(UInt32 address) {
+        public byte LoadByte(uint address) {
             uint physicalAddress = Mask(address);
             //CPU.cycles++;
             switch (physicalAddress) {
@@ -224,9 +224,9 @@ namespace PSXEmulator {
             }           
         }
 
-        public UInt32 Mask(UInt32 address) { 
-            UInt32 index = address >> 29;
-            UInt32 physical_address = address & RegionMask[index];
+        public uint Mask(uint address) { 
+            uint index = address >> 29;
+            uint physical_address = address & RegionMask[index];
             return physical_address;
         }
 
@@ -240,16 +240,16 @@ namespace PSXEmulator {
                 throw new Exception("Attempt to use LinkedList mode in DMA port: " + ch.get_portnum());
             }
 
-            UInt32 address = ch.read_base_addr() & 0x1ffffc;
+            uint address = ch.read_base_addr() & 0x1ffffc;
           
             while (true) {
-                UInt32 header = RAM.LoadWord(address);
-                UInt32 num_of_words = header >> 24;
+                uint header = RAM.LoadWord(address);
+                uint num_of_words = header >> 24;
 
                 while (num_of_words > 0) {
                     address = (address + 4) & 0x1ffffc;
 
-                    UInt32 command = RAM.LoadWord(address);
+                    uint command = RAM.LoadWord(address);
                     GPU.write_GP0(command);
                     num_of_words -= 1;
 
@@ -284,19 +284,19 @@ namespace PSXEmulator {
                 step = -4;
             }
 
-            UInt32 base_address = ch.read_base_addr();
-            UInt32? transfer_size = ch.get_transfer_size();
+            uint base_address = ch.read_base_addr();
+            uint? transfer_size = ch.get_transfer_size();
 
             if (transfer_size == null) {
                 throw new Exception("transfer size is null, LinkedList mode?");
             }
 
             while (transfer_size > 0) {
-                UInt32 current_address = base_address & 0x1ffffc;
+                uint current_address = base_address & 0x1ffffc;
 
                 if (ch.get_direction() == ((uint)DMAChannel.Direction.FromRam)) {
 
-                    UInt32 data = RAM.LoadWord(current_address);
+                    uint data = RAM.LoadWord(current_address);
 
                     switch (ch.get_portnum()) {
                         case 0: MDEC.CommandAndParameters(data); break;   //MDECin  (RAM to MDEC)
@@ -313,9 +313,9 @@ namespace PSXEmulator {
                             break;
 
                         case 2:  //GPU
-                            UInt16 pixel0 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
-                            UInt16 pixel1 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
-                            UInt32 merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
+                            ushort pixel0 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
+                            ushort pixel1 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
+                            uint merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
                             if (GPU.gpuTransfer.dataEnd) {
                                 GPU.gpuTransfer.transferType = GPU.TransferType.Off;
                             }
