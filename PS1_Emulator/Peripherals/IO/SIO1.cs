@@ -400,7 +400,9 @@ namespace PSXEmulator.Peripherals.IO {
         }
 
         public void Dispose() {
-            Socket.Terminate();
+            if (Socket != null) {
+                Socket.Terminate();
+            }
         }
     }
 }
