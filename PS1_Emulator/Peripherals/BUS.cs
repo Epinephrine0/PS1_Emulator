@@ -88,7 +88,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: return 0xFFFFFFFF;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFFFFFFFF;
 
-                default: throw new Exception("Unhandled LoadWord from: " + address.ToString("X"));
+                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return 0;
             }
         }
 
@@ -123,7 +123,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
 
-                default: throw new Exception("Unhandled StoreWord to: " + address.ToString("X"));
+                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return;
             }
         }
 
@@ -149,7 +149,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFFFF;
 
 
-                default: throw new Exception("Unhandled LoadHalf from: " + address.ToString("X"));
+                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return 0;
             }    
         }
 
@@ -180,7 +180,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
 
-                default: throw new Exception("Unhandled StoreHalf from: " + address.ToString("X"));
+                default: throw new Exception("Unhandled StoreHalf from: " + address.ToString("X")); return;
             }
         }
 
@@ -203,7 +203,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: return 0xFF;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFF;
 
-                default: throw new Exception("Unhandled LoadByte from: " + address.ToString("X"));
+                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return 0; 
 
             }
         }
@@ -226,7 +226,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
 
-                default: throw new Exception("Unhandled StoreByte to: " + address.ToString("X"));
+                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return;
             }           
         }
 
@@ -368,8 +368,9 @@ namespace PSXEmulator {
             Timer2.SystemClockTick(cycles);
             SPU.SPU_Tick(cycles);
             GPU.tick(cycles * GPU_FACTOR);
-            JOY_IO.Tick(cycles);
             CDROM.tick(cycles);
+            JOY_IO.Tick(cycles);
+            SerialIO1.Tick(cycles); 
         }
     }
 

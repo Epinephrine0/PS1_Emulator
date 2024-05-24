@@ -80,13 +80,13 @@ namespace PSXEmulator {
             mainWindow.TitleCopy = mainWindow.Title;
 
             mainWindow.Run();       //Infinite loop 
-
             mainWindow.FrameTimer.Dispose();
             mainWindow.Dispose();   //Will reach this if the render window 
             mainWindow = null;
-            
+            SerialIO1.Dispose();
+
         }
- 
+
         /*public byte[] ImageToByteArray(string Icon) {
             var image = (Image<Rgba32>)SixLabors.ImageSharp.Image.Load(Configuration.Default, Icon);
             var pixels = new byte[4 * image.Width * image.Height];
@@ -1242,10 +1242,20 @@ namespace PSXEmulator {
                 this.WindowState = isFullScreen ? WindowState.Fullscreen : WindowState.Normal;
                 this.CursorState = isFullScreen ? CursorState.Hidden : CursorState.Normal;
                 Thread.Sleep(100);
-            } else if (e.Key.Equals(Keys.F1)) {
+
+            }else if (e.Key.Equals(Keys.F1)) {
                 Console.WriteLine("Dumping memory...");
                 File.WriteAllBytes("MemoryDump.bin", CPU.BUS.RAM.GetMemory());
                 Console.WriteLine("Done!");
+                Thread.Sleep(100);
+
+            }else if (e.Key.Equals(Keys.C)) {
+                CPU.BUS.JOY_IO.Controller1.IgnoreInput = !CPU.BUS.JOY_IO.Controller1.IgnoreInput;
+                if (CPU.BUS.JOY_IO.Controller1.IgnoreInput) {
+                    Console.WriteLine("Controller inputs ignored");
+                } else {
+                    Console.WriteLine("Controller inputs not ignored");
+                }
                 Thread.Sleep(100);
             }
 
@@ -1256,6 +1266,7 @@ namespace PSXEmulator {
             base.OnUpdateFrame(args);
             //Clock the CPU
             CPU.tick();
+            //CPU.BUS.SerialIO1.CheckRemoteEnd();
 
             //Read controller input 
             CPU.BUS.JOY_IO.Controller1.ReadInput(JoystickStates[0]);

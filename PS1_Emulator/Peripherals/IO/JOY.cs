@@ -2,7 +2,7 @@
 using System.IO;
 
 namespace PSXEmulator.Peripherals.IO {
-    public class JOY {  //JOY is SIO0                
+    public class JOY {  //SIO0                
 
         public Range Range = new Range(0x1F801040, 16);
 

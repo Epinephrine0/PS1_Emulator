@@ -1,10 +1,19 @@
-﻿namespace PSXEmulator.Peripherals.IO {
+﻿using System;
+
+namespace PSXEmulator.Peripherals.IO {
     public interface Socket {
         public void Send(byte[] buffer);
         public byte[] Receive();
 
         public void ConnectToServer();
         public void AcceptClientConnection();
+
+        public void BeginReceiving();
+        public void Stop(IAsyncResult result);
+
+        public bool IsConnected();
+
+        public void Terminate();
 
     }
 }

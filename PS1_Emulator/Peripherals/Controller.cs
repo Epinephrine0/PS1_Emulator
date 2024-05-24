@@ -6,6 +6,7 @@ namespace PSXEmulator {
     public class Controller {
         public bool ACK;
         public bool IsConnected;
+        public bool IgnoreInput;
         public ushort Buttons = 0xFFFF; 
         public byte RightJoyX = 0x80;  
         public byte RightJoyY = 0x80;
@@ -232,6 +233,12 @@ namespace PSXEmulator {
             else {
                 IsConnected = true;
             }
+
+            if (IgnoreInput) {
+                Buttons = 0xFFFF;
+                return;
+            }
+
 
             for (int j = 0; j < externalController.ButtonCount; j++) {
                 if (DualSenseDictionary.ContainsKey(j)) {

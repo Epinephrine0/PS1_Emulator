@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
-using static PSXEmulator.CDROMDataController;
 
 namespace PSXEmulator.Peripherals.IO {
-    public class SIO1 {               //Generic Serial interface
+    public class SIO1 : IDisposable {               //Generic Serial interface
 
         public Range Range = new Range(0x1F801050, 16);
-
+        const uint CPU_CLOCK = 33868800;
+        
         //Data (R/W) -> 1/4 word    (This is actually a FIFO)
         public byte TX_Data;
-        public byte RX_Data;
+        public ushort BoudReload = 0;
 
         //Status (R) -> 4           This register comes after 4 bytes of Data address, although the Data length is only 1 byte
          struct StatusRegister {
@@ -53,7 +52,7 @@ namespace PSXEmulator.Peripherals.IO {
             public byte Acknowledge;          //4     
             public byte RTS_OutputLevel;      //5     SIO1
             public byte Reset;                //6     
-           //SIO1 Unknown                     //7
+            //SIO1 Unknown                    //7
             public byte RX_InterruptMode;     //8 - 9
             public byte TX_InterruptEnable;   //10
             public byte RX_InterruptEnable;   //11
@@ -64,88 +63,115 @@ namespace PSXEmulator.Peripherals.IO {
 
         //A command is always of 2 bytes
        public struct Command {
-            public byte address;
-            public byte value;
+            public byte address;    //0x0 For data - 0xA for flow control 
+            public byte value;      
         }
 
 
         CtrlRegister Ctrl;
         Socket Socket;
-        public SIO1() {
-            //Setup TCP Connection
-            Socket = new Server();
-            Socket.AcceptClientConnection();      //Wait for client to connect
-            Console.WriteLine("TCP Client connected");
 
-            //In theory, I only need to change the above 2 lines in the client version
+        bool IsConnected = false;
+        bool IsServer = false;
+
+        public SIO1() {
+            if (IsConnected) {
+                //Setup TCP Connection
+                AsyncCallback callback = new AsyncCallback(DataReceived);
+                if (IsServer) {
+                    Socket = new Server(callback);
+                    Socket.AcceptClientConnection();
+                } else {
+                    Socket = new Client(callback);
+                    Socket.ConnectToServer();
+                }
+                Status.TX_Idle = 1;
+            } else {
+                Console.WriteLine("[SIO1] Not connected");
+            }
         }
 
         public uint LoadWord(uint address) {
+            //Console.WriteLine("Read32: " + (address & 0xF).ToString("x"));
             switch (address & 0xF) {
-                case 0x0: return (uint)(RX_Data & 0xFF);
+                case 0x0: return GetData();
                 case 0x4: return GetStatus();
                 default: throw new Exception("Attempting to load word from: " + address.ToString("x"));
             }
         }
         public ushort LoadHalf(uint address) {
             //case 0x4?
+            //Console.WriteLine("Read16: " + (address & 0xF).ToString("x"));
+
             switch (address & 0xF) {
-                case 0x0: return (ushort)(RX_Data & 0xFF);
+                case 0x0: return GetData();
                 case 0x4: return (ushort)(GetStatus() & 0xFFFF);
                 case 0x8: return GetMode();
                 case 0xA: return GetCtrl();
-                case 0xE: return (ushort)(Status.Baud & 0xFFFF);
-                default: throw new Exception("Attempting to load word from: " + address.ToString("x"));
+                case 0xE: return (ushort)(BoudReload & 0xFFFF);
+                default: throw new Exception("Attempting to load half from: " + address.ToString("x"));
             }
         }
         public void StoreHalf(uint address, ushort data) {
+            //Console.WriteLine("Write16: " + (address & 0xF).ToString("x"));
+
             switch (address & 0xF) {
                 case 0x0: Transfare((byte)data); break;
                 case 0x8: WriteMode(data); break;
                 case 0xA: WriteCtrl(data); break;
-                case 0xE: Status.Baud = data; break;
-                default: throw new Exception("Attempting to load word from: " + address.ToString("x"));
+                case 0xE: BoudReload = data; Reload();  break;
+                case 0x4: Console.WriteLine("[SIO1] Attempting to write to STAT"); break;   
+                default: throw new Exception("Attempting to store half to: " + address.ToString("x"));
             }
         }
         public byte LoadByte(uint address) {
+            //Console.WriteLine("Read8: " + (address & 0xF).ToString("x"));
+            
             switch (address & 0xF) {
-                case 0x00: Console.WriteLine("Reading RX"); return 0xFF;
+                case 0x00: return  GetData();
                 case 0x04: return (byte)GetStatus();
                 default: throw new Exception("[SIO1] Unhandled reading from: " + address.ToString("x"));
             }
         }
         public void StoreByte(uint address, byte data) {
+            //Console.WriteLine("Write8: " + (address & 0xF).ToString("x"));
             StoreHalf(address, data); //Could be very wrong
         }
         private void Transfare(byte data) {
-            //Handle data sending
-            Console.WriteLine("Sending TX" + data.ToString("x"));
-
-            RX_Data = 0xFF;
+            if (!IsConnected || !Socket.IsConnected()) {
+                return;
+            }
+                
             TX_Data = data;
-            //Status.RX_FIFO_Not_Empty = 1;
-            if (Status.CTS_InputLevel == 1) {           //CST is set by the other side 
+           
+            if (Status.CTS_InputLevel == 1 && Ctrl.TX_Enable == 1) {           //CTS is set by the other side 
                 byte address = 0x00;
-                Socket.Send(new byte[] { address, data });     //Send it to the other side
-                Console.WriteLine("sent addr: " + address.ToString("x") + " val: " + data.ToString("x"));
+                Socket.Send(new byte[] { address, data });
+            }
 
+            if (Ctrl.TX_InterruptEnable == 1) {
+                if (Status.TX_FIFO_Not_Full == 1 || Status.TX_Idle == 1) {
+                    Status.InterruptRequest = 1;
+                    IRQ.Enqueue(CyclesPerInterrupt);
+                }
             }
 
         }
 
         private uint GetStatus() {
             uint stat = 0;
-            stat |= (byte)(Status.TX_FIFO_Not_Full & 1);
-            stat |= (byte)((Status.RX_FIFO_Not_Empty & 1) << 1);
-            stat |= (byte)((Status.TX_Idle & 1) << 2);
-            stat |= (byte)((Status.RX_Parity_Error & 1) << 3);
-            stat |= (byte)((Status.RX_FIFO_Overrun & 1) << 4);
-            stat |= (byte)((Status.RX_BadStopBit & 1) << 5);
-            stat |= (byte)((Status.RX_InputLevel & 1) << 6);
-            stat |= (byte)((Status.DSR_InputLevel & 1) << 7);
-            stat |= (byte)((Status.CTS_InputLevel & 1) << 8);
-            stat |= (byte)((Status.InterruptRequest & 1) << 9);
-            stat |= (ushort)((Status.Baud & 0xFFFF) << 11);
+            stat |= (uint)(Status.TX_FIFO_Not_Full & 1);
+            stat |= ((uint)(Status.RX_FIFO_Not_Empty & 1)) << 1;
+            stat |= ((uint)(Status.TX_Idle & 1)) << 2;
+            stat |= ((uint)(Status.RX_Parity_Error & 1)) << 3;
+            stat |= ((uint)(Status.RX_FIFO_Overrun & 1)) << 4;
+            stat |= ((uint)(Status.RX_BadStopBit & 1)) << 5;
+            stat |= ((uint)(Status.RX_InputLevel & 1)) << 6;
+            stat |= ((uint)(Status.DSR_InputLevel & 1)) << 7;
+            stat |= ((uint)(Status.CTS_InputLevel & 1)) << 8;
+            stat |= ((uint)(Status.InterruptRequest & 1)) << 9;
+            stat |= ((uint)(Status.Baud & 0xFFFF)) << 11;
+            //Console.WriteLine("stat = " + stat.ToString("x"));
             return stat;
         }
 
@@ -201,7 +227,7 @@ namespace PSXEmulator.Peripherals.IO {
             Ctrl.DSR_InterruptEnable = (byte)((control >> 12) & 1);
             Ctrl.PortSelect = (byte)((control >> 13) & 1);
 
-            Console.WriteLine("----------------------------------------");
+            /*Console.WriteLine("----------------------------------------");
             Console.WriteLine("Write Control:");
             Console.WriteLine("TX_Enable:" + Ctrl.TX_Enable);
             Console.WriteLine("DTR_OutputLevel:" + Ctrl.DTR_OutputLevel);
@@ -214,65 +240,167 @@ namespace PSXEmulator.Peripherals.IO {
             Console.WriteLine("TX_InterruptEnable:" + Ctrl.TX_InterruptEnable);
             Console.WriteLine("RX_InterruptEnable:" + Ctrl.RX_InterruptEnable);
             Console.WriteLine("DSR_InterruptEnable:" + Ctrl.DSR_InterruptEnable);
-            Console.WriteLine("PortSelect:" + Ctrl.PortSelect);
-
+            Console.WriteLine("PortSelect:" + Ctrl.PortSelect);*/
 
             if (Ctrl.Acknowledge == 1) {
                 Ctrl.Acknowledge = 0;
                 Status.InterruptRequest = 0;
                 Status.RX_Parity_Error = 0;
+                Status.RX_FIFO_Overrun = 0;
+                Status.RX_BadStopBit = 0;
             }
 
             if (Ctrl.Reset == 1) {
                 Ctrl.Reset = 0;
-                RX_Data = 0xFF;
+                Ctrl.Acknowledge = 0;
+                Status.InterruptRequest = 0;
+                Status.RX_Parity_Error = 0;
+                Status.RX_FIFO_Overrun = 0;
+                Status.RX_BadStopBit = 0;
                 TX_Data = 0xFF;
+                RXBuffer.Clear();
             }
 
-            byte address = 0x0A;
-            byte value = (byte)(GetCtrl() & 0xF);            //DTR and RTS are in the first byte
-            Socket.Send(new byte[] { address, value });     //Send it to the other side
-            Console.WriteLine("sent addr: " + address.ToString("x") + " val: " + value.ToString("x"));
+            if (Ctrl.RX_Enable == 0) {
+                RXBuffer.Clear();
+            }
+
+            if (IsConnected && Socket.IsConnected()) {
+                byte address = 0x0A;
+                byte value = (byte)(GetCtrl() & 0xFF);            //DTR and RTS are in the first byte
+                Socket.Send(new byte[] { address, value });     //Send it to the other side
+            }
         }
 
-        int delay = 500;
-        Queue<Command> buffer = new Queue<Command>();
-
+        int delay = -1;
+        int CyclesPerInterrupt = 500;
         public void Tick(int cycles) {
+            /*if (delay > 0) {
+                delay -= cycles;
+                if (delay <= 0) {
+                    Command cmd = Cmdbuffer.Dequeue();
+                    HandleCommand(cmd);
+                    if (Cmdbuffer.Count > 0) {
+                        delay = CyclesPerInterrupt;
+                    }
+                }
+            }*/
+
             if (delay > 0) {
                 delay -= cycles;
                 if (delay <= 0) {
-                    Command cmd = buffer.Dequeue();
-                    HandleCommand(cmd);
-                    IRQ_CONTROL.IRQsignal(8); //8??
-                    if (buffer.Count > 0) {
-                        delay = 500;
+                    IRQ_CONTROL.IRQsignal(8);
+                    //Console.WriteLine("IRQ8");
+                    if (IRQ.Count > 0) {
+                        delay = IRQ.Dequeue();
                     }
                 }
             }
 
-            byte[] receivedData = Socket.Receive();
-            if (receivedData != null) {
-                Command receivedCommand = new Command();
-                receivedCommand.address = receivedData[0];
-                receivedCommand.value = receivedData[1];
-                buffer.Enqueue(receivedCommand);
-                Status.RX_FIFO_Not_Empty = 1;
-                Console.WriteLine("received addr: " + receivedCommand.address.ToString("x") + " val: " + receivedCommand.value.ToString("x"));
+            Status.Baud -= cycles;
+            if (Status.Baud <= 0) {
+                Reload();
             }
         }
 
+        Queue<int> IRQ = new Queue<int>();
+        Queue<byte> RXBuffer = new Queue<byte>();
+        Queue<Command> Cmdbuffer = new Queue<Command>();
+
         public void HandleCommand(Command cmd) {
             switch (cmd.address) {
-                case 0x00: RX_Data = cmd.address; break;
+                case 0x00:
+                    RXBuffer.Enqueue(cmd.value);
+                    Status.RX_FIFO_Not_Empty = Ctrl.RX_Enable;
+                    //Console.WriteLine("RX_FIFO_Not_Empty/RX_InputLevel set to " + Status.RX_FIFO_Not_Empty);
+
+                    /*if (Ctrl.DTR_OutputLevel == 1) {
+                        InternalBuffer.Enqueue(cmd.value);
+                        Status.RX_FIFO_Not_Empty = 1;
+                        Ctrl.RX_Enable = 0;
+                    } else {
+                        if (Ctrl.RX_Enable == 1) {
+                            InternalBuffer.Enqueue(cmd.value);
+                            Status.RX_FIFO_Not_Empty = 1;
+                        } else {
+                            Status.RX_InputLevel = 0;
+                            Status.RX_FIFO_Not_Empty = 0;
+                            InternalBuffer.Clear();
+                            return;
+                        }
+                    }*/
+
+                    int n = 0;
+
+                    switch (Ctrl.RX_InterruptMode) {
+                        case 0: n = 1; break;
+                        case 1: n = 2; break;
+                        case 2: n = 4; break;
+                        case 3: n = 8; break;
+                    }
+                    if (RXBuffer.Count >= n) {
+                        if (Ctrl.RX_InterruptEnable == 1) {
+                            Status.InterruptRequest = 1;
+                            IRQ.Enqueue(CyclesPerInterrupt);
+                        }
+                    }
+                    break;
+
                 case 0x0A:
                     Status.DSR_InputLevel = (byte)(((cmd.value) >> 1) & 1); //Remote DTR
                     Status.CTS_InputLevel = (byte)(((cmd.value) >> 5) & 1); //Remote RTS
                     Status.TX_FIFO_Not_Full = Status.CTS_InputLevel;
+                    Status.TX_Idle = (byte)(Status.CTS_InputLevel & Ctrl.TX_Enable);
+                    if (Ctrl.DSR_InterruptEnable == 1 && Status.DSR_InputLevel == 1) {
+                        Status.InterruptRequest = 1;
+                        IRQ.Enqueue(CyclesPerInterrupt);
+                    }
                     break;
                 default: throw new Exception("Unknown addr: " +  cmd.address.ToString("x"));
             }
         }
 
+        public byte GetData() {
+            if (!IsConnected || !Socket.IsConnected()) {
+                return 0xFF;
+            }
+
+            byte data = 0xFF;
+            if (RXBuffer.Count > 0) {
+                data = RXBuffer.Dequeue();
+            }
+
+            Status.RX_FIFO_Not_Empty = (byte)(RXBuffer.Count > 0 && Ctrl.RX_Enable == 1 ? 1 : 0);
+
+            //Console.WriteLine("[SIO1] Data read: " + data.ToString("x"));
+            return data;
+        }
+
+        public void Reload() {   
+            Status.Baud = BoudReload * Mode.BaudrateReloadFactor / 2;
+            if (Status.Baud > 0) {
+                CyclesPerInterrupt = (int)(CPU_CLOCK / (Status.Baud * 8));
+            }
+        }
+
+        public void DataReceived(IAsyncResult result) {
+            //Process Received data
+            Socket.Stop(result);
+
+            byte[] data = Socket.Receive();
+            //Console.WriteLine("Received [" + data[0].ToString("x") + "]" + " = " + data[1].ToString("x"));
+            Command command = new Command();
+            command.address = data[0];
+            command.value = data[1];
+            HandleCommand(command);
+
+
+            //Start reading again
+            Socket.BeginReceiving();
+        }
+
+        public void Dispose() {
+            Socket.Terminate();
+        }
     }
 }
