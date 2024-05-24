@@ -1,4 +1,5 @@
-﻿using PSXEmulator.Peripherals.MDEC;
+﻿using PSXEmulator.Peripherals.IO;
+using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
 using System;
 using System.Collections.Generic;
@@ -19,7 +20,9 @@ namespace PSXEmulator {
         public Timer0 Timer0;
         public Timer1 Timer1;
         public Timer2 Timer2;
-        public IO_PORTS IO_PORTS;
+        public JOY JOY_IO;
+        public SIO1 SerialIO1;
+
         public Scratchpad Scratchpad;
         public MacroblockDecoder MDEC;
         private uint[] RegionMask = { 
@@ -38,17 +41,17 @@ namespace PSXEmulator {
 
         public BUS(
             BIOS BIOS, RAM RAM, Scratchpad Scratchpad,
-            CD_ROM CDROM, SPU SPU, DMA DMA, IO_PORTS IO, MemoryControl MemCtrl, 
+            CD_ROM CDROM, SPU SPU, DMA DMA, JOY JOY_IO,SIO1 SIO1, MemoryControl MemCtrl, 
             RAM_SIZE RamSize, CACHECONTROL CacheControl, Expansion1 Ex1, Expansion2 Ex2,
-            Timer0 Timer0, Timer1 Timer1, Timer2 Timer2, MacroblockDecoder MDEC, GPU GPU
-            ) {
+            Timer0 Timer0, Timer1 Timer1, Timer2 Timer2, MacroblockDecoder MDEC, GPU GPU) {
             this.BIOS = BIOS;
             this.RAM = RAM;
             this.Scratchpad = Scratchpad;
             this.CDROM = CDROM;
             this.SPU = SPU;
             this.DMA = DMA;
-            this.IO_PORTS = IO;
+            this.JOY_IO = JOY_IO;
+            this.SerialIO1 = SIO1;
             this.MemoryControl = MemCtrl;       //useless ?
             this.RamSize = RamSize;             //useless ?
             this.CacheControl = CacheControl;   //useless ?
@@ -75,7 +78,8 @@ namespace PSXEmulator {
                 case uint when Timer1.Range.Contains(physicalAddress): return Timer1.Read(physicalAddress);
                 case uint when Timer2.Range.Contains(physicalAddress): return Timer2.Read(physicalAddress);
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadWord(physicalAddress);
-                case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadWord(physicalAddress);
+                case uint when JOY_IO.Range.Contains(physicalAddress): return JOY_IO.LoadWord(physicalAddress);
+                case uint when SerialIO1.Range.Contains(physicalAddress): return SerialIO1.LoadWord(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return MemoryControl.Read(physicalAddress);
                 case uint when MDEC.range.Contains(physicalAddress): return MDEC.Read(physicalAddress);
                 case uint when RamSize.range.Contains(physicalAddress): return RamSize.LoadWord();
@@ -135,7 +139,8 @@ namespace PSXEmulator {
                 case uint when Timer0.Range.Contains(physicalAddress): return (ushort)Timer0.Read(physicalAddress);
                 case uint when Timer1.Range.Contains(physicalAddress): return (ushort)Timer1.Read(physicalAddress);
                 case uint when Timer2.Range.Contains(physicalAddress): return (ushort)Timer2.Read(physicalAddress);
-                case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadHalf(physicalAddress);
+                case uint when JOY_IO.Range.Contains(physicalAddress): return JOY_IO.LoadHalf(physicalAddress);
+                case uint when SerialIO1.Range.Contains(physicalAddress): return SerialIO1.LoadHalf(physicalAddress);
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadHalf(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return (ushort)MemoryControl.Read(physicalAddress);
                 case uint when address >= 0x1F800400 && address <= 0x1F800400 + 0xC00: return 0xFFFF;
@@ -158,7 +163,8 @@ namespace PSXEmulator {
                 case uint when Timer1.Range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
                 case uint when Timer2.Range.Contains(physicalAddress): Timer2.Write(physicalAddress, value); break;
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): IRQ_CONTROL.Write(physicalAddress, value); break;
-                case uint when IO_PORTS.range.Contains(physicalAddress): IO_PORTS.StoreHalf(physicalAddress, value); break;
+                case uint when JOY_IO.Range.Contains(physicalAddress): JOY_IO.StoreHalf(physicalAddress, value); break;
+                case uint when SerialIO1.Range.Contains(physicalAddress): SerialIO1.StoreHalf(physicalAddress, value); break;
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreHalf(physicalAddress, value); break;
                 case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
                 case uint when DMA.range.Contains(physicalAddress):
@@ -188,7 +194,8 @@ namespace PSXEmulator {
                 case uint when DMA.range.Contains(physicalAddress): return DMA.LoadByte(physicalAddress);
                 case uint when MemoryControl.range.Contains(physicalAddress): return (byte)MemoryControl.Read(physicalAddress);
                 case uint when Scratchpad.range.Contains(physicalAddress): return Scratchpad.LoadByte(physicalAddress);
-                case uint when IO_PORTS.range.Contains(physicalAddress): return IO_PORTS.LoadByte(physicalAddress);
+                case uint when JOY_IO.Range.Contains(physicalAddress): return JOY_IO.LoadByte(physicalAddress);
+                case uint when SerialIO1.Range.Contains(physicalAddress): return SerialIO1.LoadByte(physicalAddress);
                 case uint when Expansion1.range.Contains(physicalAddress):   
                 case uint when Expansion2.range.Contains(physicalAddress): return 0xFF;   //Ignore Expansions 1 and 2 
                 case uint when address >= 0x1F800400 && address <= 0x1F800400 + 0xC00: return 0xFF;
@@ -209,7 +216,8 @@ namespace PSXEmulator {
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreByte(physicalAddress, value); break;
                 case uint when CDROM.range.Contains(physicalAddress): CDROM.StoreByte(physicalAddress, value); break;
                 case uint when DMA.range.Contains(physicalAddress): DMA.StoreByte(physicalAddress, value); break;
-                case uint when IO_PORTS.range.Contains(physicalAddress): IO_PORTS.StoreHalf(physicalAddress, value); break; //Should store byte..?
+                case uint when JOY_IO.Range.Contains(physicalAddress): JOY_IO.StoreByte(physicalAddress, value); break;
+                case uint when SerialIO1.Range.Contains(physicalAddress): SerialIO1.StoreByte(physicalAddress, value); break;
                 case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
                 case uint when Expansion1.range.Contains(physicalAddress):
                 case uint when Expansion2.range.Contains(physicalAddress): break;   //Ignore Expansions 1 and 2
@@ -360,7 +368,7 @@ namespace PSXEmulator {
             Timer2.SystemClockTick(cycles);
             SPU.SPU_Tick(cycles);
             GPU.tick(cycles * GPU_FACTOR);
-            IO_PORTS.tick(cycles);
+            JOY_IO.Tick(cycles);
             CDROM.tick(cycles);
         }
     }

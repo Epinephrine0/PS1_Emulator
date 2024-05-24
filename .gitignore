@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/PS1_Emulator/Peripherals/IO/Client.cs
+/PS1_Emulator/Peripherals/IO/Server.cs

@@ -3,6 +3,7 @@ using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
+using PSXEmulator.Peripherals.IO;
 using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
 using System;
@@ -48,7 +49,8 @@ namespace PSXEmulator {
             CD_ROM cdrom = isBootingEXE? new CD_ROM() : new CD_ROM(bootPath, false);
             SPU Spu = new SPU(ref cdrom.DataController);         //Needs to read CD-Audio
             DMA Dma = new DMA();
-            IO_PORTS IO = new IO_PORTS();
+            JOY JOY_IO = new JOY();
+            SIO1 SerialIO1 = new SIO1();
             MemoryControl MemoryControl = new MemoryControl();   //useless ?
             RAM_SIZE RamSize = new RAM_SIZE();                   //useless ?
             CACHECONTROL CacheControl = new CACHECONTROL();      //useless ?
@@ -62,7 +64,7 @@ namespace PSXEmulator {
 
             BUS Bus = new BUS(          
                 Bios,Ram,Scratchpad,cdrom,Spu,Dma,
-                IO,MemoryControl,RamSize,CacheControl,
+                JOY_IO, SerialIO1, MemoryControl,RamSize,CacheControl,
                 Ex1,Ex2,Timer0,Timer1,Timer2,Mdec,Gpu
                 );
             CPU CPU = new CPU(isBootingEXE, bootPath, Bus);
@@ -307,7 +309,7 @@ namespace PSXEmulator {
                         vec4 ret = (colour1 * colour2) / (128.0 / 255.0);
                         ret.a = 1.0;
                         return ret;
-                    }
+                }
 
               vec4 handleAlphaValues() {
                         vec4 alpha;
@@ -1256,7 +1258,7 @@ namespace PSXEmulator {
             CPU.tick();
 
             //Read controller input 
-            CPU.BUS.IO_PORTS.Controller1.ReadInput(JoystickStates[0]);
+            CPU.BUS.JOY_IO.Controller1.ReadInput(JoystickStates[0]);
             //cpu.bus.IO_PORTS.controller2.readInput(JoystickStates[1]);
         }
       
