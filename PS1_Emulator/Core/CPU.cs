@@ -1,5 +1,4 @@
-﻿using PSXEmulator.Peripherals;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -15,11 +14,18 @@ namespace PSXEmulator {
         private uint Next_PC;      
         private uint Current_PC;
 
-        //Register set, TODO: Make a seperate COP0 class 
+        //General Purpose Registers
         private uint[] GPR;
-        private uint SR;           //cop0 reg12 , the status register 
-        private uint Cause;        //cop0 reg13 , the cause register 
-        private uint EPC;          //cop0 reg14 , EPC
+
+        //COP0
+        struct COP0 {
+            public uint SR;         //R12 , the status register 
+            public uint Cause;      //R13 , the cause register 
+            public uint EPC;        //R14 , Return Address from Trap
+        }
+
+        COP0 Cop0;
+
         private uint HI;           //Remainder of devision
         private uint LO;           //Quotient of devision
 
@@ -28,7 +34,7 @@ namespace PSXEmulator {
         private bool DelaySlot;
 
         //This is needed because writes to memory are ignored (well, not really) When cache is isolated
-        private bool IscIsolateCache => (SR & 0x10000) != 0;
+        private bool IscIsolateCache => (Cop0.SR & 0x10000) != 0;
 
         //Geometry Transformation Engine - Coprocessor 2
         private GTE GTE = new GTE();
@@ -134,7 +140,7 @@ namespace PSXEmulator {
             BUS = bus;
             GPR = new uint[32];
             GPR[0] = 0;
-            SR = 0;
+            Cop0.SR = 0;
             DirectWrite.RegisterNumber = 0;    //Stupid load delay slot
             DirectWrite.Value = 0;
             RegisterLoad_.RegisterNumber = 0;
@@ -181,10 +187,10 @@ namespace PSXEmulator {
             Next_PC = Next_PC + 4;
 
             if (IRQ_CONTROL.isRequestingIRQ()) {  //Interrupt check 
-                Cause |= 1 << 10;
+                Cop0.Cause |= 1 << 10;
 
                 //Skip IRQs if the current instruction is a GTE instruction to avoid the BIOS skipping it
-                if (((SR & 1) != 0) && (((SR >> 10) & 1) != 0) && !InstructionIsGTE(this)) {
+                if (((Cop0.SR & 1) != 0) && (((Cop0.SR >> 10) & 1) != 0) && !InstructionIsGTE(this)) {
                     Exception(this, (uint)Exceptions.IRQ);
                     return;
                 }
@@ -764,26 +770,26 @@ namespace PSXEmulator {
            
             uint handler;                                         //Get the handler
 
-            if ((cpu.SR & (1 << 22)) != 0) {
+            if ((cpu.Cop0.SR & (1 << 22)) != 0) {
                 handler = 0xbfc00180;
             } else {
                 handler = 0x80000080;
             }
   
-            uint mode = cpu.SR & 0x3f;                          //Disable interrupts 
+            uint mode = cpu.Cop0.SR & 0x3f;                          //Disable interrupts 
 
-            cpu.SR = (uint)(cpu.SR & ~0x3f);
+            cpu.Cop0.SR = (uint)(cpu.Cop0.SR & ~0x3f);
 
-            cpu.SR = cpu.SR | ((mode << 2) & 0x3f);
+            cpu.Cop0.SR = cpu.Cop0.SR | ((mode << 2) & 0x3f);
 
 
-            cpu.Cause = exceptionCause << 2;                    //Update cause register
+            cpu.Cop0.Cause = exceptionCause << 2;                    //Update cause register
 
-            cpu.EPC = cpu.Current_PC;                 //Save the current PC in register EPC
+            cpu.Cop0.EPC = cpu.Current_PC;                 //Save the current PC in register EPC
 
             if (cpu.DelaySlot) {                   //in case an exception occurs in a delay slot
-                cpu.EPC -= 4;
-                cpu.Cause = (uint)(cpu.Cause | (1 << 31));
+                cpu.Cop0.EPC -= 4;
+                cpu.Cop0.Cause = (uint)(cpu.Cop0.Cause | (1 << 31));
             }
 
             cpu.PC = handler;                          //Jump to the handler address (no delay)
@@ -1150,9 +1156,9 @@ namespace PSXEmulator {
                         cpu.SR = (uint)(cpu.SR & ~0x3f);
                         cpu.SR = cpu.SR | (mode >> 2);*/
 
-            uint temp = cpu.SR;
-            cpu.SR = (uint)(cpu.SR & (~0xF));
-            cpu.SR |= ((temp >> 2) & 0xF);
+            uint temp = cpu.Cop0.SR;
+            cpu.Cop0.SR = (uint)(cpu.Cop0.SR & (~0xF));
+            cpu.Cop0.SR |= ((temp >> 2) & 0xF);
         }
 
         private static void mfc0(CPU cpu, Instruction instruction) {
@@ -1160,9 +1166,9 @@ namespace PSXEmulator {
             cpu.RegisterDelayedLoad.RegisterNumber = instruction.Get_rt();
 
             switch (instruction.Get_rd()) {
-                case 12: cpu.RegisterDelayedLoad.Value = cpu.SR; break;
-                case 13: cpu.RegisterDelayedLoad.Value = cpu.Cause; break;
-                case 14: cpu.RegisterDelayedLoad.Value = cpu.EPC; break;
+                case 12: cpu.RegisterDelayedLoad.Value = cpu.Cop0.SR; break;
+                case 13: cpu.RegisterDelayedLoad.Value = cpu.Cop0.Cause; break;
+                case 14: cpu.RegisterDelayedLoad.Value = cpu.Cop0.EPC; break;
                 case 15: cpu.RegisterDelayedLoad.Value = 0x00000002; break;     //COP0 R15 (PRID)
                 default:  Console.WriteLine("Unhandled cop0 Register Read: " + instruction.Get_rd()); break;
             }
@@ -1182,7 +1188,7 @@ namespace PSXEmulator {
                     }
                     break;
 
-                case 12: cpu.SR = cpu.GPR[instruction.Get_rt()]; break;         //Setting the status register's 16th bit
+                case 12: cpu.Cop0.SR = cpu.GPR[instruction.Get_rt()]; break;         //Setting the status register's 16th bit
 
                 case 13:
                     //cause register, mostly read-only data describing the
