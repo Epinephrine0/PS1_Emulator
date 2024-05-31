@@ -332,10 +332,12 @@ namespace PSXEmulator {
                  //Each 6 bytes (3 shorts) contain two 24bit pixels.
                  //Step 1.5 short for each x since 1 24bits = 3/2 shorts 
 
-                 if(coords.x * 1.5 > 1022 || coords.y > 511){ return vec4(0.0f, 0.0f, 0.0f, 0.0f); }  //Ignore reading out of vram
+                 int xx = ((coords.x << 1) + coords.x) >> 1; //xx = int(coords.x * 1.5)
+
+                 if(xx > 1022 || coords.y > 511){ return vec4(0.0f, 0.0f, 0.0f, 0.0f); }  //Ignore reading out of vram
                     
-                 int p0 = sample16(ivec2(coords.x * 1.5, coords.y));
-                 int p1 = sample16(ivec2((coords.x * 1.5) + 1, coords.y));
+                 int p0 = sample16(ivec2(xx, coords.y));
+                 int p1 = sample16(ivec2(xx + 1, coords.y));
                  
                  vec4 color; 
                  if ((coords.x & 1) != 0) {         
