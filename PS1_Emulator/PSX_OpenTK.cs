@@ -100,15 +100,12 @@ namespace PSXEmulator {
         public CPU CPU;
         const int VRAM_WIDTH = 1024;
         const int VRAM_HEIGHT = 512;
-        const int VRAM_WIDTH_24bpp = 512;   //Wrong
-        const int VRAM_HEIGHT_24bpp = 682;
 
         private int vertexArrayObject;
         private int vertexBufferObject;
         private int colorsBuffer;
-        private int fullVram;
+        //private int fullVram;
         private int vram_texture;
-        private int vramAs24bpp;
         private int sample_texture;
         private int texCoords;
         private int texWindow;
@@ -121,16 +118,18 @@ namespace PSXEmulator {
         private int display_area_X_Offset_Loc;
         private int display_area_Y_Offset_Loc;
         private int vramFrameBuffer;
-        private int vramAs24bppFrameBuffer;
 
         private int transparencyModeLoc;
         private int isDitheredLoc;
-        private int is24bppLoc;
-        private int isFlippedLoc;
+        private int renderModeLoc;
+        //private int is24bppLoc;
+        //private int isFlippedLoc;
         //Signed 11 bits
         private short drawOffsetX = 0;
         private short drawOffsetY = 0;
-       
+
+        public bool Is24bpp = false;
+
         public bool isUsingMouse = false;
         public bool showTextures = true;
         public bool isFullScreen = false;
@@ -152,11 +151,9 @@ namespace PSXEmulator {
             out vec2 texCoords;
             flat out ivec2 clutBase;
             flat out ivec2 texpageBase;
-
-            flat out int isScreenQuad;
-
-            uniform int fullVram;
-            uniform int isFlipped;
+         
+            uniform int renderMode = 0;
+            flat out int renderModeFrag;
 
             uniform int inClut;
             uniform int inTexpage;
@@ -174,56 +171,50 @@ namespace PSXEmulator {
 
             float xpos = ((float(vertixInput.x) + 0.5) / 512.0) - 1.0;
             float ypos = ((float(vertixInput.y) - 0.5) / 256.0) - 1.0;
-	
-
-            if(fullVram == 1){		//This is for displaying a full screen quad with the entire vram texture 
-                vec4 positions[4] = vec4[](
-                vec4(-1.0 + display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),    // Top-left
-                vec4(1.0 - display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),     // Top-right
-                vec4(-1.0 + display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0),   // Bottom-left
-                vec4(1.0 - display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0)     // Bottom-right
-            );
-
+	        vec4 positions[4];
             vec2 texcoords[4];
+            renderModeFrag = renderMode;
+            
+            //TODO: Clean up 
 
-            if(isFlipped == 1){
-                texcoords = vec2[](		//Inverted in Y because PS1 Y coords are inverted
-                vec2(0.0, 0.0),   			                         // Top-left
-                vec2(display_area_x/1024.0, 0.0),                    // Top-right
-                vec2(0.0, display_area_y/512.0),                     // Bottom-left
-                vec2(display_area_x/1024.0, display_area_y/512.0)    // Bottom-right
-            );
-           } else {
-            texcoords = vec2[](		//Inverted in Y because PS1 Y coords are inverted
-                vec2(0.0, display_area_y/512.0),                     // Bottom-left
-                vec2(display_area_x/1024.0, display_area_y/512.0),   // Bottom-right
-                vec2(0.0, 0.0),   			                         // Top-left
-                vec2(display_area_x/1024.0, 0.0)                    // Top-right       
-            );
-           }
+            switch(renderMode){
+                 case 0:            
+                        gl_Position.xyzw = vec4(xpos,ypos,0.0, 1.0); 
+                        texpageBase = ivec2((inTexpage & 0xf) * 64, ((inTexpage >> 4) & 0x1) * 256);
+                        clutBase = ivec2((inClut & 0x3f) * 16, inClut >> 6);
+                        texCoords = inUV;
 
+                        color_in = vec3(
+                        float(vColors.r)/255.0,
+                        float(vColors.g)/255.0,
+                        float(vColors.b)/255.0);
+
+                        return;
+
+                 case 1:         //16/24bpp vram -> Screen
+                 case 2:         
+                        positions = vec4[](
+                        vec4(-1.0 + display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),    // Top-left
+                        vec4(1.0 - display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),     // Top-right
+                        vec4(-1.0 + display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0),   // Bottom-left
+                        vec4(1.0 - display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0));   // Bottom-right
+
+                        texcoords = vec2[](		//Inverted in Y because PS1 Y coords are inverted
+                        vec2(0.0, 0.0),   			                         // Top-left
+                        vec2(display_area_x/1024.0, 0.0),                    // Top-right
+                        vec2(0.0, display_area_y/512.0),                     // Bottom-left
+                        vec2(display_area_x/1024.0, display_area_y/512.0));  // Bottom-right
+
+                        break;
+            }
+
+          
             texCoords = texcoords[gl_VertexID];
             gl_Position = positions[gl_VertexID];
-            isScreenQuad = 1;
 
             return;
 
-            } else {
-
-            gl_Position.xyzw = vec4(xpos,ypos,0.0, 1.0);
-            isScreenQuad = 0;
-        
-            }
-
-            texpageBase = ivec2((inTexpage & 0xf) * 64, ((inTexpage >> 4) & 0x1) * 256);
-            clutBase = ivec2((inClut & 0x3f) * 16, inClut >> 6);
-            texCoords = inUV;
-
-            color_in = vec3(
-            float(vColors.r)/255.0,
-            float(vColors.g)/255.0,
-            float(vColors.b)/255.0);
-
+              
             }";
 
         string fragmentShader = @"
@@ -233,14 +224,17 @@ namespace PSXEmulator {
             in vec2 texCoords;
             flat in ivec2 clutBase;
             flat in ivec2 texpageBase;
+
             uniform int TextureMode;
 
             uniform int isDithered;
             uniform int transparencyMode;       //4 = disabled
             uniform int maskBitSetting;
 
-            flat in int isScreenQuad;
-            uniform int is24bpp;
+            /*flat in int isScreenQuad;
+            uniform int is24bpp;*/
+
+            flat in int renderModeFrag;
 
             uniform ivec4 u_texWindow;
 
@@ -334,9 +328,12 @@ namespace PSXEmulator {
                     }
 
             vec4 handle24bpp(ivec2 coords){
-                //Each 6 bytes (3 shorts) contain two 24bit pixels.
-                //Step 1.5 short for each x since 1 24bits = 3/2 shorts 
 
+                 //Each 6 bytes (3 shorts) contain two 24bit pixels.
+                 //Step 1.5 short for each x since 1 24bits = 3/2 shorts 
+
+                 if(coords.x * 1.5 > 1022 || coords.y > 511){ return vec4(0.0f, 0.0f, 0.0f, 0.0f); }  //Ignore reading out of vram
+                    
                  int p0 = sample16(ivec2(coords.x * 1.5, coords.y));
                  int p1 = sample16(ivec2((coords.x * 1.5) + 1, coords.y));
                  
@@ -357,17 +354,22 @@ namespace PSXEmulator {
             void main()
             {
 
-	            if(isScreenQuad == 1){		//Drawing a full screen quad case 
-	              if(is24bpp == 1){
-                  ivec2 coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
-                  outputColor.rgba = handle24bpp(coords);
-                  } else {
-                  ivec2 coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
-                  outputColor.rgba = sampleVRAM(coords);
-                  }
-	              
-	              return;
-	            }
+                ivec2 coords;
+
+                switch(renderModeFrag){
+                    case 0: break;
+
+                    case 1: //As 16bpp
+                            coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
+                            outputColor.rgba = sampleVRAM(coords);
+                            return;
+
+                    case 2: //As 24bpp
+                            coords = ivec2(texCoords * vec2(1024.0, 512.0)); 
+                            outputColor.rgba = handle24bpp(coords);
+                            return;
+                }
+
 
                 //Fix up UVs and apply texture window
                   ivec2 UV = ivec2(floor(texCoords + vec2(0.0001, 0.0001))) & ivec2(0xff);
@@ -511,6 +513,12 @@ namespace PSXEmulator {
         
             }";
 
+        public enum RenderMode {
+            RenderingPrimitives = 0,                 //Normal mode that games will use to draw primitives
+            Rendering16bppFullVram = 1,         //When drawing the vram on screen
+            Rendering16bppAs24bppFullVram = 2,          //When drawing the 16bpp vram as 24bpp
+        }
+
         public Renderer(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
              : base(gameWindowSettings, nativeWindowSettings) {
 
@@ -533,7 +541,6 @@ namespace PSXEmulator {
             SwapBuffers();
             
             //Get Locations
-            fullVram = GL.GetUniformLocation(shader.Program, "fullVram");
             texWindow = GL.GetUniformLocation(shader.Program, "u_texWindow");
             texModeLoc = GL.GetUniformLocation(shader.Program, "TextureMode");
             clutLoc = GL.GetUniformLocation(shader.Program, "inClut");
@@ -542,9 +549,7 @@ namespace PSXEmulator {
             transparencyModeLoc = GL.GetUniformLocation(shader.Program, "transparencyMode");
             maskBitSettingLoc = GL.GetUniformLocation(shader.Program, "maskBitSetting");
             isDitheredLoc = GL.GetUniformLocation(shader.Program, "isDithered");
-            is24bppLoc = GL.GetUniformLocation(shader.Program, "is24bpp");
-            isFlippedLoc = GL.GetUniformLocation(shader.Program, "isFlipped");
-
+            renderModeLoc = GL.GetUniformLocation(shader.Program, "renderMode");
             display_area_X_Loc = GL.GetUniformLocation(shader.Program, "display_area_x");
             display_area_Y_Loc = GL.GetUniformLocation(shader.Program, "display_area_y");
             display_area_X_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_offset");
@@ -557,9 +562,7 @@ namespace PSXEmulator {
             texCoords = GL.GenBuffer();
             vram_texture = GL.GenTexture();
             sample_texture = GL.GenTexture();
-            vramAs24bpp = GL.GenTexture();  
             vramFrameBuffer = GL.GenFramebuffer();
-            vramAs24bppFrameBuffer = GL.GenFramebuffer();
 
             GL.BindVertexArray(vertexArrayObject);
 
@@ -570,8 +573,7 @@ namespace PSXEmulator {
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-            //GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
-            GL.TexStorage2D(TextureTarget2d.Texture2D, 1, SizedInternalFormat.Rgb5A1, VRAM_WIDTH, VRAM_WIDTH);
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
 
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
@@ -580,22 +582,7 @@ namespace PSXEmulator {
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
 
-            GL.BindTexture(TextureTarget.Texture2D, vramAs24bpp);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
-            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH_24bpp, VRAM_HEIGHT_24bpp , 0, PixelFormat.Bgra, 
-                PixelType.UnsignedInt8888Reversed, (IntPtr)null);
-
-
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, vramAs24bppFrameBuffer);
-            GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, vramAs24bpp, 0);
-            if (GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != FramebufferErrorCode.FramebufferComplete) {
-                Console.WriteLine("[OpenGL] Uncompleted Frame Buffer !");
-            }
-
-
+         
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, vramFrameBuffer);
             GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, vram_texture, 0);
             if (GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != FramebufferErrorCode.FramebufferComplete) {
@@ -605,20 +592,10 @@ namespace PSXEmulator {
             GL.PixelStore(PixelStoreParameter.UnpackAlignment, 2);
             GL.PixelStore(PixelStoreParameter.PackAlignment, 2);
             GL.Uniform1(GL.GetUniformLocation(shader.Program, "u_vramTex"), 0);
+            GL.Uniform1(renderModeLoc, (int)RenderMode.RenderingPrimitives);
 
         }
 
-        public bool Is24bpp = false;
-
-        public void Update24bppTexture() {
-            GL.Uniform1(is24bppLoc, 1);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramAs24bppFrameBuffer);
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
-            GL.BindTexture(TextureTarget.Texture2D, vram_texture);      //No need to force sync the sample if you can read the vram     
-            GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
-            GL.Uniform1(is24bppLoc, 0);
-  
-        }
         public void SetOffset(Int16 x, Int16 y) {
             //Already sign extended
             drawOffsetX = x; 
@@ -1118,31 +1095,29 @@ namespace PSXEmulator {
         }
 
         void DisplayFrame() {
-            GL.Uniform1(fullVram, 1);
             GL.Disable(EnableCap.ScissorTest);
             disableBlending();
-            GL.Viewport(0, 0, this.Size.X, this.Size.Y);
+
             GL.Enable(EnableCap.Texture2D);
             GL.DisableVertexAttribArray(1);
             GL.DisableVertexAttribArray(2);
-            int texture;
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
+
             if (Is24bpp) {
-                GL.Uniform1(isFlippedLoc, 0);
-                Update24bppTexture();
-                texture = vramAs24bpp;
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramAs24bpp);
+                GL.Uniform1(renderModeLoc, (int)RenderMode.Rendering16bppAs24bppFullVram);            
             } else {
-                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
-                texture = vram_texture;
+                GL.Uniform1(renderModeLoc, (int)RenderMode.Rendering16bppFullVram);
             }
-            GL.Uniform1(isFlippedLoc, 1);
+
+            GL.Viewport(0, 0, this.Size.X, this.Size.Y);
 
             //Disable the ScissorTest and unbind the FBO to draw the entire vram texture to the screen
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
-            GL.BindTexture(TextureTarget.Texture2D, texture);
+            GL.BindTexture(TextureTarget.Texture2D, vram_texture);
 
-            modifyAspectRatio();
+            HandleAspectRatio();
 
             GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
@@ -1152,7 +1127,8 @@ namespace PSXEmulator {
 
             GL.BindTexture(TextureTarget.Texture2D, sample_texture);
             GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
-            GL.Uniform1(fullVram, 0);
+            GL.Uniform1(renderModeLoc, (int)RenderMode.RenderingPrimitives);
+
         }
         public void disableBlending() {
             ///GL.Disable(EnableCap.Blend);
@@ -1161,7 +1137,7 @@ namespace PSXEmulator {
             GL.Uniform1(transparencyModeLoc, 4);    //0-3 for the functions, 4 = disabled
         }
 
-        public void modifyAspectRatio() {
+        public void HandleAspectRatio() {
             float disp_x = CPU.BUS.GPU.HorizontalRange;
             float disp_y = CPU.BUS.GPU.VerticalRange;
 
