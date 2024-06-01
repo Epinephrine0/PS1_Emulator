@@ -104,7 +104,6 @@ namespace PSXEmulator {
         private int vertexArrayObject;
         private int vertexBufferObject;
         private int colorsBuffer;
-        //private int fullVram;
         private int vram_texture;
         private int sample_texture;
         private int texCoords;
@@ -113,17 +112,20 @@ namespace PSXEmulator {
         private int maskBitSettingLoc;
         private int clutLoc;
         private int texPageLoc;
-        private int display_area_X_Loc;
-        private int display_area_Y_Loc;
-        private int display_area_X_Offset_Loc;
-        private int display_area_Y_Offset_Loc;
+
+        private int display_area_x_start_Loc;
+        private int display_area_y_start_Loc;
+        private int display_area_x_end_Loc;
+        private int display_area_y_end_Loc;
+
+        private int aspect_ratio_x_offset_Loc;
+        private int aspect_ratio_y_offset_Loc;
         private int vramFrameBuffer;
 
         private int transparencyModeLoc;
         private int isDitheredLoc;
         private int renderModeLoc;
-        //private int is24bppLoc;
-        //private int isFlippedLoc;
+
         //Signed 11 bits
         private short drawOffsetX = 0;
         private short drawOffsetY = 0;
@@ -158,11 +160,14 @@ namespace PSXEmulator {
             uniform int inClut;
             uniform int inTexpage;
 
-            uniform float display_area_x = 1024.0;
-            uniform float display_area_y = 512.0;
+            uniform float display_area_x_start = 0.0f;
+            uniform float display_area_y_start = 0.0f;
 
-            uniform float display_area_x_offset = 0.0;
-            uniform float display_area_y_offset = 0.0;
+            uniform float display_area_x_end = 1.0f;
+            uniform float display_area_y_end = 1.0f;
+
+            uniform float aspect_ratio_x_offset = 0.0;
+            uniform float aspect_ratio_y_offset = 0.0;
 
             void main()
             {
@@ -194,16 +199,16 @@ namespace PSXEmulator {
                  case 1:         //16/24bpp vram -> Screen
                  case 2:         
                         positions = vec4[](
-                        vec4(-1.0 + display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),    // Top-left
-                        vec4(1.0 - display_area_x_offset, 1.0 - display_area_y_offset, 1.0, 1.0),     // Top-right
-                        vec4(-1.0 + display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0),   // Bottom-left
-                        vec4(1.0 - display_area_x_offset, -1.0 + display_area_y_offset, 1.0, 1.0));   // Bottom-right
+                        vec4(-1.0 + aspect_ratio_x_offset, 1.0 - aspect_ratio_y_offset, 1.0, 1.0),    // Top-left
+                        vec4(1.0 - aspect_ratio_x_offset, 1.0 - aspect_ratio_y_offset, 1.0, 1.0),     // Top-right
+                        vec4(-1.0 + aspect_ratio_x_offset, -1.0 + aspect_ratio_y_offset, 1.0, 1.0),   // Bottom-left
+                        vec4(1.0 - aspect_ratio_x_offset, -1.0 + aspect_ratio_y_offset, 1.0, 1.0));   // Bottom-right
 
                         texcoords = vec2[](		//Inverted in Y because PS1 Y coords are inverted
-                        vec2(0.0, 0.0),   			                         // Top-left
-                        vec2(display_area_x/1024.0, 0.0),                    // Top-right
-                        vec2(0.0, display_area_y/512.0),                     // Bottom-left
-                        vec2(display_area_x/1024.0, display_area_y/512.0));  // Bottom-right
+                        vec2(display_area_x_start, display_area_y_start),   			    // Top-left
+                        vec2(display_area_x_end, display_area_y_start),                     // Top-right
+                        vec2(display_area_x_start, display_area_y_end),                     // Bottom-left
+                        vec2(display_area_x_end, display_area_y_end));                      // Bottom-right
 
                         break;
             }
@@ -230,9 +235,6 @@ namespace PSXEmulator {
             uniform int isDithered;
             uniform int transparencyMode;       //4 = disabled
             uniform int maskBitSetting;
-
-            /*flat in int isScreenQuad;
-            uniform int is24bpp;*/
 
             flat in int renderModeFrag;
 
@@ -548,10 +550,14 @@ namespace PSXEmulator {
             maskBitSettingLoc = GL.GetUniformLocation(shader.Program, "maskBitSetting");
             isDitheredLoc = GL.GetUniformLocation(shader.Program, "isDithered");
             renderModeLoc = GL.GetUniformLocation(shader.Program, "renderMode");
-            display_area_X_Loc = GL.GetUniformLocation(shader.Program, "display_area_x");
-            display_area_Y_Loc = GL.GetUniformLocation(shader.Program, "display_area_y");
-            display_area_X_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_offset");
-            display_area_Y_Offset_Loc = GL.GetUniformLocation(shader.Program, "display_area_y_offset");
+
+            display_area_x_start_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_start");
+            display_area_y_start_Loc = GL.GetUniformLocation(shader.Program, "display_area_y_start");
+            display_area_x_end_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_end");
+            display_area_y_end_Loc = GL.GetUniformLocation(shader.Program, "display_area_y_end");
+
+            aspect_ratio_x_offset_Loc = GL.GetUniformLocation(shader.Program, "aspect_ratio_x_offset");
+            aspect_ratio_y_offset_Loc = GL.GetUniformLocation(shader.Program, "aspect_ratio_y_offset");
 
             //Create VAO/VBO/Buffers and Textures
             vertexArrayObject = GL.GenVertexArray();
@@ -1136,21 +1142,29 @@ namespace PSXEmulator {
         }
 
         public void HandleAspectRatio() {
-            float disp_x = CPU.BUS.GPU.HorizontalRange;
-            float disp_y = CPU.BUS.GPU.VerticalRange;
+            float display_x_start = CPU.BUS.GPU.display_vram_x_start;
+            float display_y_start = CPU.BUS.GPU.display_vram_y_start;
+
+            float display_x_end = CPU.BUS.GPU.HorizontalRange + display_x_start;   
+            float display_y_end = CPU.BUS.GPU.VerticalRange + display_y_start;
+
+            float width = (display_x_end - display_x_start);
+            float height = (display_y_end - display_y_start);
 
             if (!showTextures) {
 
-                GL.Uniform1(display_area_X_Loc, disp_x);
-                GL.Uniform1(display_area_Y_Loc, disp_y);
+                GL.Uniform1(display_area_x_start_Loc, display_x_start / VRAM_WIDTH);
+                GL.Uniform1(display_area_y_start_Loc, display_y_start / VRAM_HEIGHT);
+                GL.Uniform1(display_area_x_end_Loc, display_x_end / VRAM_WIDTH);
+                GL.Uniform1(display_area_y_end_Loc, display_y_end / VRAM_HEIGHT);
 
-                if ((disp_x / disp_y) < ((float)this.Size.X / (float)this.Size.Y)) {
+                if ((width / height) < ((float)this.Size.X / (float)this.Size.Y)) {
 
-                    float offset = (disp_x / disp_y) * (float)this.Size.Y;  //Random formula by JyAli
+                    float offset = (width / height) * (float)this.Size.Y;  //Random formula by JyAli
                     offset = ((float)this.Size.X - offset) / this.Size.X;
 
-                    GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
-                    GL.Uniform1(display_area_X_Offset_Loc, offset);
+                    GL.Uniform1(aspect_ratio_y_offset_Loc, 0.0f);
+                    GL.Uniform1(aspect_ratio_x_offset_Loc, offset);
 
                     GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                     GL.Scissor(0, 0, (int)(offset * this.Size.X), this.Size.Y);
@@ -1158,12 +1172,12 @@ namespace PSXEmulator {
                     GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
 
                 }
-                else if ((disp_x / disp_y) > ((float)this.Size.X / this.Size.Y)) {
+                else if ((width / height) > ((float)this.Size.X / this.Size.Y)) {
 
-                    float offset = (disp_y / disp_x) * (float)this.Size.X;  //Random formula by JyAli
+                    float offset = (height / width) * (float)this.Size.X;  //Random formula by JyAli
 
-                    GL.Uniform1(display_area_Y_Offset_Loc, ((float)this.Size.Y - offset) / this.Size.Y);
-                    GL.Uniform1(display_area_X_Offset_Loc, 0.0f);
+                    GL.Uniform1(aspect_ratio_y_offset_Loc, ((float)this.Size.Y - offset) / this.Size.Y);
+                    GL.Uniform1(aspect_ratio_x_offset_Loc, 0.0f);
 
                     GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                     GL.Scissor(0, 0, this.Size.X, (int)(offset * this.Size.Y));
@@ -1172,15 +1186,17 @@ namespace PSXEmulator {
 
                 }
                 else {
-                    GL.Uniform1(display_area_X_Offset_Loc, 0.0f);
-                    GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
+                    GL.Uniform1(aspect_ratio_x_offset_Loc, 0.0f);
+                    GL.Uniform1(aspect_ratio_y_offset_Loc, 0.0f);
                 }
             }
             else {
-                GL.Uniform1(display_area_X_Offset_Loc, 0.0f);
-                GL.Uniform1(display_area_Y_Offset_Loc, 0.0f);
-                GL.Uniform1(display_area_X_Loc, (float)VRAM_WIDTH);
-                GL.Uniform1(display_area_Y_Loc, (float)VRAM_HEIGHT);
+                GL.Uniform1(aspect_ratio_x_offset_Loc, 0.0f);
+                GL.Uniform1(aspect_ratio_y_offset_Loc, 0.0f);
+                GL.Uniform1(display_area_x_start_Loc, 0.0f);
+                GL.Uniform1(display_area_y_start_Loc, 0.0f);
+                GL.Uniform1(display_area_x_end_Loc, 1.0f);
+                GL.Uniform1(display_area_y_end_Loc, 1.0f);
             }
 
         }
