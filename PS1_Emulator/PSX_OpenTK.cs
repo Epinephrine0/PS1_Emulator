@@ -261,15 +261,11 @@ namespace PSXEmulator {
                colors = colors * vec3(255.0, 255.0, 255.0);
                colors = colors + vec3(ditherOffset, ditherOffset ,ditherOffset);
 
-               //Clamp to [0,255] (could have probably used a built in funcion)
-               if(colors.r < 0.0){ colors.r = 0.0; }
-               if(colors.g < 0.0){ colors.g = 0.0; }
-               if(colors.b < 0.0){ colors.b = 0.0; }
-               if(colors.r > 255.0){ colors.r = 255.0; }
-               if(colors.g > 255.0){ colors.g = 255.0; }
-               if(colors.b > 255.0){ colors.b = 255.0; }
+               //Clamping to [0,255] (or [0,1]) is automatically done because 
+               //the frame buffer format is of a normalized fixed-point (RGB5A1)
 
-               return colors / vec3(255.0, 255.0, 255.0);
+              return colors / vec3(255.0, 255.0, 255.0);
+
               }
 
             vec4 grayScale(vec4 color) {
