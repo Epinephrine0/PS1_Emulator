@@ -101,47 +101,58 @@ namespace PSXEmulator {
         const int VRAM_WIDTH = 1024;
         const int VRAM_HEIGHT = 512;
 
-        private int vertexArrayObject;
-        private int vertexBufferObject;
-        private int colorsBuffer;
-        private int vram_texture;
-        private int sample_texture;
-        private int texCoords;
-        private int texWindow;
-        private int texModeLoc;
-        private int maskBitSettingLoc;
-        private int clutLoc;
-        private int texPageLoc;
+        private int VertexArrayObject;
+        private int VertexBufferObject;
+        private int ColorsBuffer;
+        private int VramTexture;
+        private int VramFrameBuffer;
+        private int SampleTexture;
+        private int TexCoords;
+        private int TexWindow;
 
-        private int display_area_x_start_Loc;
-        private int display_area_y_start_Loc;
-        private int display_area_x_end_Loc;
-        private int display_area_y_end_Loc;
+        private int TexModeLoc;
+        private int MaskBitSettingLoc;
+        private int ClutLoc;
+        private int TexPageLoc;
 
-        private int aspect_ratio_x_offset_Loc;
-        private int aspect_ratio_y_offset_Loc;
-        private int vramFrameBuffer;
+        private int Display_Area_X_Start_Loc;
+        private int Display_Area_Y_Start_Loc;
+        private int Display_Area_X_End_Loc;
+        private int Display_Area_Y_End_Loc;
 
-        private int transparencyModeLoc;
-        private int isDitheredLoc;
-        private int renderModeLoc;
+        private int Aspect_Ratio_X_Offset_Loc;
+        private int Aspect_Ratio_Y_Offset_Loc;
+
+        private int TransparencyModeLoc;
+        private int IsDitheredLoc;
+        private int RenderModeLoc;
 
         //Signed 11 bits
-        private short drawOffsetX = 0;
-        private short drawOffsetY = 0;
+        private short DrawOffsetX = 0;
+        private short DrawOffsetY = 0;
 
         public bool Is24bpp = false;
 
-        public bool isUsingMouse = false;
-        public bool showTextures = true;
-        public bool isFullScreen = false;
+        public bool IsUsingMouse = false;
+        public bool ShowTextures = true;
+        public bool IsFullScreen = false;
+
+        int ScissorBox_X = 0;
+        int ScissorBox_Y = 0;
+        int ScissorBoxWidth = VRAM_WIDTH;
+        int ScissorBoxHeight = VRAM_HEIGHT;
+
+        short[] Vertices;
+        byte[] Colors;
+        ushort[] UV;
 
         //This is going to contain blocks that are either clean (0) or dirty (1) for texture invalidation 
         const int IntersectionBlockLength = 64;
         private int[,] IntersectionTable = new int[VRAM_HEIGHT / IntersectionBlockLength, VRAM_WIDTH / IntersectionBlockLength];
         bool FrameUpdated = false;
-        Shader shader;
-        string vertixShader = @"
+        Shader Shader;
+
+        string VertixShader = @"
             #version 330 
 
             layout(location = 0) in ivec2 vertixInput;
@@ -222,7 +233,7 @@ namespace PSXEmulator {
               
             }";
 
-        string fragmentShader = @"
+        string FragmentShader = @"
             #version 330 
 
             in vec3 color_in;
@@ -532,8 +543,8 @@ namespace PSXEmulator {
         protected override void OnLoad() {
             
             //Load shaders 
-            shader = new Shader(vertixShader, fragmentShader);
-            shader.Use();
+            Shader = new Shader(VertixShader, FragmentShader);
+            Shader.Use();
 
             GL.Viewport(0, 0, this.Size.X, this.Size.Y);
             GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);      //This can be ignored as the PS1 BIOS will initially draw a black quad clearing the buffer anyway
@@ -541,45 +552,45 @@ namespace PSXEmulator {
             SwapBuffers();
             
             //Get Locations
-            texWindow = GL.GetUniformLocation(shader.Program, "u_texWindow");
-            texModeLoc = GL.GetUniformLocation(shader.Program, "TextureMode");
-            clutLoc = GL.GetUniformLocation(shader.Program, "inClut");
-            texPageLoc = GL.GetUniformLocation(shader.Program, "inTexpage");
+            TexWindow = GL.GetUniformLocation(Shader.Program, "u_texWindow");
+            TexModeLoc = GL.GetUniformLocation(Shader.Program, "TextureMode");
+            ClutLoc = GL.GetUniformLocation(Shader.Program, "inClut");
+            TexPageLoc = GL.GetUniformLocation(Shader.Program, "inTexpage");
             
-            transparencyModeLoc = GL.GetUniformLocation(shader.Program, "transparencyMode");
-            maskBitSettingLoc = GL.GetUniformLocation(shader.Program, "maskBitSetting");
-            isDitheredLoc = GL.GetUniformLocation(shader.Program, "isDithered");
-            renderModeLoc = GL.GetUniformLocation(shader.Program, "renderMode");
+            TransparencyModeLoc = GL.GetUniformLocation(Shader.Program, "transparencyMode");
+            MaskBitSettingLoc = GL.GetUniformLocation(Shader.Program, "maskBitSetting");
+            IsDitheredLoc = GL.GetUniformLocation(Shader.Program, "isDithered");
+            RenderModeLoc = GL.GetUniformLocation(Shader.Program, "renderMode");
 
-            display_area_x_start_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_start");
-            display_area_y_start_Loc = GL.GetUniformLocation(shader.Program, "display_area_y_start");
-            display_area_x_end_Loc = GL.GetUniformLocation(shader.Program, "display_area_x_end");
-            display_area_y_end_Loc = GL.GetUniformLocation(shader.Program, "display_area_y_end");
+            Display_Area_X_Start_Loc = GL.GetUniformLocation(Shader.Program, "display_area_x_start");
+            Display_Area_Y_Start_Loc = GL.GetUniformLocation(Shader.Program, "display_area_y_start");
+            Display_Area_X_End_Loc = GL.GetUniformLocation(Shader.Program, "display_area_x_end");
+            Display_Area_Y_End_Loc = GL.GetUniformLocation(Shader.Program, "display_area_y_end");
 
-            aspect_ratio_x_offset_Loc = GL.GetUniformLocation(shader.Program, "aspect_ratio_x_offset");
-            aspect_ratio_y_offset_Loc = GL.GetUniformLocation(shader.Program, "aspect_ratio_y_offset");
+            Aspect_Ratio_X_Offset_Loc = GL.GetUniformLocation(Shader.Program, "aspect_ratio_x_offset");
+            Aspect_Ratio_Y_Offset_Loc = GL.GetUniformLocation(Shader.Program, "aspect_ratio_y_offset");
 
             //Create VAO/VBO/Buffers and Textures
-            vertexArrayObject = GL.GenVertexArray();
-            vertexBufferObject = GL.GenBuffer();                 
-            colorsBuffer = GL.GenBuffer();
-            texCoords = GL.GenBuffer();
-            vram_texture = GL.GenTexture();
-            sample_texture = GL.GenTexture();
-            vramFrameBuffer = GL.GenFramebuffer();
+            VertexArrayObject = GL.GenVertexArray();
+            VertexBufferObject = GL.GenBuffer();                 
+            ColorsBuffer = GL.GenBuffer();
+            TexCoords = GL.GenBuffer();
+            VramTexture = GL.GenTexture();
+            SampleTexture = GL.GenTexture();
+            VramFrameBuffer = GL.GenFramebuffer();
 
-            GL.BindVertexArray(vertexArrayObject);
+            GL.BindVertexArray(VertexArrayObject);
 
             GL.Enable(EnableCap.Texture2D);
 
-            GL.BindTexture(TextureTarget.Texture2D, vram_texture);
+            GL.BindTexture(TextureTarget.Texture2D, VramTexture);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
 
-            GL.BindTexture(TextureTarget.Texture2D, sample_texture);
+            GL.BindTexture(TextureTarget.Texture2D, SampleTexture);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
@@ -587,51 +598,42 @@ namespace PSXEmulator {
             GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, VRAM_WIDTH, VRAM_HEIGHT, 0, PixelFormat.Bgra, PixelType.UnsignedShort1555Reversed, (IntPtr)null);
 
          
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, vramFrameBuffer);
-            GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, vram_texture, 0);
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, VramFrameBuffer);
+            GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, VramTexture, 0);
             if (GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer) != FramebufferErrorCode.FramebufferComplete) {
                 Console.WriteLine("[OpenGL] Uncompleted Frame Buffer !");
             }
 
             GL.PixelStore(PixelStoreParameter.UnpackAlignment, 2);
             GL.PixelStore(PixelStoreParameter.PackAlignment, 2);
-            GL.Uniform1(GL.GetUniformLocation(shader.Program, "u_vramTex"), 0);
-            GL.Uniform1(renderModeLoc, (int)RenderMode.RenderingPrimitives);
+            GL.Uniform1(GL.GetUniformLocation(Shader.Program, "u_vramTex"), 0);
+            GL.Uniform1(RenderModeLoc, (int)RenderMode.RenderingPrimitives);
 
         }
 
         public void SetOffset(Int16 x, Int16 y) {
             //Already sign extended
-            drawOffsetX = x; 
-            drawOffsetY = y;   
+            DrawOffsetX = x; 
+            DrawOffsetY = y;   
         }
 
         public void setTextureWindow(ushort x, ushort y, ushort z, ushort w) {
-            GL.Uniform4(texWindow, x, y, z, w);
+            GL.Uniform4(TexWindow, x, y, z, w);
         }
-
-        int scissorBox_x = 0;
-        int scissorBox_y = 0;
-        int scissorBox_w = VRAM_WIDTH;
-        int scissorBox_h = VRAM_HEIGHT;
 
         public void setScissorBox(int x, int y, int width, int height) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
 
-            scissorBox_x = x;
-            scissorBox_y = y;
-            scissorBox_w = Math.Max(width + 1, 0);
-            scissorBox_h = Math.Max(height + 1, 0);
+            ScissorBox_X = x;
+            ScissorBox_Y = y;
+            ScissorBoxWidth = Math.Max(width + 1, 0);
+            ScissorBoxHeight = Math.Max(height + 1, 0);
 
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
 
             GL.Enable(EnableCap.ScissorTest);
-            GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+            GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
         }
-
-        short[] vertices;
-        byte[] colors;
-        ushort[] uv;
 
         public void drawTrinangle(
             short x1, short y1, 
@@ -647,61 +649,61 @@ namespace PSXEmulator {
             ) {
             
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
 
-            vertices = new short[]{
+            Vertices = new short[]{
              x1,  y1,
              x2,  y2,
              x3,  y3
             };
-            colors = new byte[]{
+            Colors = new byte[]{
              r1,  g1,  b1,
              r2,  g2,  b2,
              r3,  g3,  b3,
             };
-            uv = new ushort[] {
+            UV = new ushort[] {
              tx1, ty1,
              tx2, ty2,
              tx3, ty3
             };
 
-            if(!ApplyDrawingOffset(ref vertices)) { return; }
+            if(!ApplyDrawingOffset(ref Vertices)) { return; }
 
-            GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
-            GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(short), vertices, BufferUsageHint.StreamDraw);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, VertexBufferObject);
+            GL.BufferData(BufferTarget.ArrayBuffer, Vertices.Length * sizeof(short), Vertices, BufferUsageHint.StreamDraw);
             GL.VertexAttribIPointer(0, 2, VertexAttribIntegerType.Short, 0, (IntPtr)null);  //size: 2 for x,y only!
             GL.EnableVertexAttribArray(0);
 
-            GL.BindBuffer(BufferTarget.ArrayBuffer, colorsBuffer);
-            GL.BufferData(BufferTarget.ArrayBuffer, colors.Length * sizeof(byte), colors, BufferUsageHint.StreamDraw);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, ColorsBuffer);
+            GL.BufferData(BufferTarget.ArrayBuffer, Colors.Length * sizeof(byte), Colors, BufferUsageHint.StreamDraw);
             GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(1);
 
             if (isTextured) {
-                GL.Uniform1(clutLoc, clut);
-                GL.Uniform1(texPageLoc, page);
-                GL.Uniform1(texModeLoc, (page >> 7) & 3);
-                GL.BindBuffer(BufferTarget.ArrayBuffer, texCoords);
-                GL.BufferData(BufferTarget.ArrayBuffer, uv.Length * sizeof(ushort), uv, BufferUsageHint.StreamDraw);
+                GL.Uniform1(ClutLoc, clut);
+                GL.Uniform1(TexPageLoc, page);
+                GL.Uniform1(TexModeLoc, (page >> 7) & 3);
+                GL.BindBuffer(BufferTarget.ArrayBuffer, TexCoords);
+                GL.BufferData(BufferTarget.ArrayBuffer, UV.Length * sizeof(ushort), UV, BufferUsageHint.StreamDraw);
                 GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
                 GL.EnableVertexAttribArray(2);
                
-                if (TextureInvalidate(ref uv, page, clut)) {
+                if (TextureInvalidate(ref UV, page, clut)) {
                     update_SamplingTexture();
                 }
 
             }
             else {
-                GL.Uniform1(texModeLoc, -1);
-                GL.Uniform1(clutLoc, 0);
-                GL.Uniform1(texPageLoc, 0);
+                GL.Uniform1(TexModeLoc, -1);
+                GL.Uniform1(ClutLoc, 0);
+                GL.Uniform1(TexPageLoc, 0);
                 GL.DisableVertexAttribArray(2);
             }
 
-            GL.Uniform1(isDitheredLoc, isDithered ? 1 : 0);
+            GL.Uniform1(IsDitheredLoc, isDithered ? 1 : 0);
 
             GL.DrawArrays(PrimitiveType.Triangles, 0, 3);
-            UpdateIntersectionTable(ref vertices);
+            UpdateIntersectionTable(ref Vertices);
             FrameUpdated = true;
         }
 
@@ -723,61 +725,61 @@ namespace PSXEmulator {
           
 
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
             
-            vertices = new short[]{
+            Vertices = new short[]{
              x1,  y1,
              x2,  y2,
              x3,  y3,
              x4,  y4,
             };
-            colors = new byte[]{
+            Colors = new byte[]{
              r1,  g1,  b1,
              r2,  g2,  b2,
              r3,  g3,  b3,
              r4,  g4,  b4,
             };
-            uv = new ushort[] {
+            UV = new ushort[] {
              tx1, ty1,
              tx2, ty2,
              tx3, ty3,
              tx4, ty4
             };
 
-            if (!ApplyDrawingOffset(ref vertices)) { return; }
-            GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
-            GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(short), vertices, BufferUsageHint.StreamDraw);
+            if (!ApplyDrawingOffset(ref Vertices)) { return; }
+            GL.BindBuffer(BufferTarget.ArrayBuffer, VertexBufferObject);
+            GL.BufferData(BufferTarget.ArrayBuffer, Vertices.Length * sizeof(short), Vertices, BufferUsageHint.StreamDraw);
             GL.VertexAttribIPointer(0, 2, VertexAttribIntegerType.Short, 0, (IntPtr)null);  //size: 2 for x,y only!
             GL.EnableVertexAttribArray(0);
 
-            GL.BindBuffer(BufferTarget.ArrayBuffer, colorsBuffer);
-            GL.BufferData(BufferTarget.ArrayBuffer, colors.Length * sizeof(byte), colors, BufferUsageHint.StreamDraw);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, ColorsBuffer);
+            GL.BufferData(BufferTarget.ArrayBuffer, Colors.Length * sizeof(byte), Colors, BufferUsageHint.StreamDraw);
             GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(1);
 
             if (isTextured) {
-                GL.Uniform1(clutLoc, clut);
-                GL.Uniform1(texPageLoc, page);
-                GL.Uniform1(texModeLoc, (page >> 7) & 3);
-                GL.BindBuffer(BufferTarget.ArrayBuffer, texCoords);
-                GL.BufferData(BufferTarget.ArrayBuffer, uv.Length * sizeof(ushort), uv, BufferUsageHint.StreamDraw);
+                GL.Uniform1(ClutLoc, clut);
+                GL.Uniform1(TexPageLoc, page);
+                GL.Uniform1(TexModeLoc, (page >> 7) & 3);
+                GL.BindBuffer(BufferTarget.ArrayBuffer, TexCoords);
+                GL.BufferData(BufferTarget.ArrayBuffer, UV.Length * sizeof(ushort), UV, BufferUsageHint.StreamDraw);
                 GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
                 GL.EnableVertexAttribArray(2);
-                if (TextureInvalidate(ref uv, page, clut)) {
+                if (TextureInvalidate(ref UV, page, clut)) {
                     update_SamplingTexture();
                 }
             }
             else {
-                GL.Uniform1(texModeLoc, -1);
-                GL.Uniform1(clutLoc, 0);
-                GL.Uniform1(texPageLoc, 0);
+                GL.Uniform1(TexModeLoc, -1);
+                GL.Uniform1(ClutLoc, 0);
+                GL.Uniform1(TexPageLoc, 0);
                 GL.DisableVertexAttribArray(2);
             }
 
-            GL.Uniform1(isDitheredLoc, 0);  //RECTs are NOT dithered
+            GL.Uniform1(IsDitheredLoc, 0);  //RECTs are NOT dithered
 
             GL.DrawArrays(PrimitiveType.TriangleFan, 0, 4);
-            UpdateIntersectionTable(ref vertices);
+            UpdateIntersectionTable(ref Vertices);
             FrameUpdated = true;
         }
 
@@ -789,20 +791,20 @@ namespace PSXEmulator {
             bool isWireFrame = (firstX == lastX) && (firstY == lastY);*/
 
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-            GL.Uniform1(texModeLoc, -1);
+            GL.Uniform1(TexModeLoc, -1);
             if (!ApplyDrawingOffset(ref vertices)) { return; }
 
-            GL.BindBuffer(BufferTarget.ArrayBuffer, vertexBufferObject);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, VertexBufferObject);
             GL.BufferData(BufferTarget.ArrayBuffer, vertices.Length * sizeof(short), vertices, BufferUsageHint.StreamDraw);
             GL.VertexAttribIPointer(0, 2, VertexAttribIntegerType.Short, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(0);
 
-            GL.BindBuffer(BufferTarget.ArrayBuffer, colorsBuffer);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, ColorsBuffer);
             GL.BufferData(BufferTarget.ArrayBuffer, colors.Length * sizeof(byte), colors, BufferUsageHint.StreamDraw);
             GL.VertexAttribIPointer(1, 3, VertexAttribIntegerType.UnsignedByte, 0, (IntPtr)null);
             GL.EnableVertexAttribArray(1);
 
-            GL.Uniform1(isDitheredLoc, isDithered ? 1 : 0);
+            GL.Uniform1(IsDitheredLoc, isDithered ? 1 : 0);
 
             GL.DrawArrays(isPolyLine ? PrimitiveType.LineStrip : PrimitiveType.Lines, 0, vertices.Length / 2);
             UpdateIntersectionTable(ref vertices);
@@ -810,7 +812,7 @@ namespace PSXEmulator {
         }
 
         public void ReadBackTexture(UInt16 x, UInt16 y, UInt16 width, UInt16 height, ref UInt16[] texData) {
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, VramFrameBuffer);
             GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, texData);
         }
 
@@ -836,7 +838,7 @@ namespace PSXEmulator {
             //GL.Uniform1(isDitheredLoc, 1);     
 
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
             GL.ClearColor(r, g, b, 0.0f);       //alpha = 0 (bit 15)
             GL.Scissor(x,y, width, height);
             GL.Clear(ClearBufferMask.ColorBufferBit);
@@ -852,7 +854,7 @@ namespace PSXEmulator {
             
             //update_SamplingTexture();
             
-            GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+            GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
             GL.ClearColor(0, 0, 0, 1.0f);
             FrameUpdated = true;
         }
@@ -868,7 +870,7 @@ namespace PSXEmulator {
             GL.Disable(EnableCap.ScissorTest);
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
-            GL.BindTexture(TextureTarget.Texture2D, vram_texture);
+            GL.BindTexture(TextureTarget.Texture2D, VramTexture);
             GL.TexSubImage2D(TextureTarget.Texture2D,0,x,y,width,height, 
                 PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
 
@@ -884,15 +886,15 @@ namespace PSXEmulator {
             //update_SamplingTexture();
 
             GL.Enable(EnableCap.ScissorTest);
-            GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+            GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
             FrameUpdated = true;
         }
 
         private void update_SamplingTexture() {
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
-            GL.BindTexture(TextureTarget.Texture2D, sample_texture);
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, VramFrameBuffer);
+            GL.BindTexture(TextureTarget.Texture2D, SampleTexture);
             GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT);
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
 
             //Reset all blocks to clean
             for (int i = 0; i < VRAM_WIDTH / IntersectionBlockLength; i++) {
@@ -919,12 +921,12 @@ namespace PSXEmulator {
             //UpdateIntersectionTable(); handeled in update_vram
 
             GL.Enable(EnableCap.ScissorTest);
-            GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+            GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
             FrameUpdated = true;
         }
         internal void setBlendingFunction(uint function) {
 
-            GL.Uniform1(transparencyModeLoc, (int)function);
+            GL.Uniform1(TransparencyModeLoc, (int)function);
             //Console.WriteLine("Transparency: " +  function);
 
             GL.Enable(EnableCap.Blend);
@@ -935,7 +937,7 @@ namespace PSXEmulator {
         }
 
         internal void maskBitSetting(int setting) {
-            GL.Uniform1(maskBitSettingLoc, setting);
+            GL.Uniform1(MaskBitSettingLoc, setting);
         }
 
         public bool TextureInvalidate(ref ushort[] uv, uint texPage, uint clut) {
@@ -1059,13 +1061,13 @@ namespace PSXEmulator {
             short minY = 512;
 
             for (int i = 0; i < vertices.Length; i += 2) {
-                vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + drawOffsetX));
+                vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetX));
                 if (vertices[i] > maxX) { maxX = vertices[i]; }
                 if (vertices[i] < minX) { minX = vertices[i]; }
             }
 
             for (int i = 1; i < vertices.Length; i += 2) {
-                vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + drawOffsetY));
+                vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetY));
                 if (vertices[i] > maxY) { maxY = vertices[i]; }
                 if (vertices[i] < minY) { minY = vertices[i]; }
             }
@@ -1106,12 +1108,12 @@ namespace PSXEmulator {
             GL.DisableVertexAttribArray(1);
             GL.DisableVertexAttribArray(2);
 
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, vramFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, VramFrameBuffer);
 
             if (Is24bpp) {
-                GL.Uniform1(renderModeLoc, (int)RenderMode.Rendering16bppAs24bppFullVram);            
+                GL.Uniform1(RenderModeLoc, (int)RenderMode.Rendering16bppAs24bppFullVram);            
             } else {
-                GL.Uniform1(renderModeLoc, (int)RenderMode.Rendering16bppFullVram);
+                GL.Uniform1(RenderModeLoc, (int)RenderMode.Rendering16bppFullVram);
             }
 
             GL.Viewport(0, 0, this.Size.X, this.Size.Y);
@@ -1119,26 +1121,26 @@ namespace PSXEmulator {
             //Disable the ScissorTest and unbind the FBO to draw the entire vram texture to the screen
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
-            GL.BindTexture(TextureTarget.Texture2D, vram_texture);
+            GL.BindTexture(TextureTarget.Texture2D, VramTexture);
 
             HandleAspectRatio();
 
             GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
             //Enable ScissorTest and bind FBO for next draws 
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, vramFrameBuffer);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
             GL.Enable(EnableCap.ScissorTest);
 
-            GL.BindTexture(TextureTarget.Texture2D, sample_texture);
-            GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
-            GL.Uniform1(renderModeLoc, (int)RenderMode.RenderingPrimitives);
+            GL.BindTexture(TextureTarget.Texture2D, SampleTexture);
+            GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
+            GL.Uniform1(RenderModeLoc, (int)RenderMode.RenderingPrimitives);
 
         }
         public void disableBlending() {
             ///GL.Disable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.One, BlendingFactor.Zero);
             GL.BlendEquation(BlendEquationMode.FuncAdd);
-            GL.Uniform1(transparencyModeLoc, 4);    //0-3 for the functions, 4 = disabled
+            GL.Uniform1(TransparencyModeLoc, 4);    //0-3 for the functions, 4 = disabled
         }
 
         public void HandleAspectRatio() {
@@ -1151,52 +1153,52 @@ namespace PSXEmulator {
             float width = (display_x_end - display_x_start);
             float height = (display_y_end - display_y_start);
 
-            if (!showTextures) {
+            if (!ShowTextures) {
 
-                GL.Uniform1(display_area_x_start_Loc, display_x_start / VRAM_WIDTH);
-                GL.Uniform1(display_area_y_start_Loc, display_y_start / VRAM_HEIGHT);
-                GL.Uniform1(display_area_x_end_Loc, display_x_end / VRAM_WIDTH);
-                GL.Uniform1(display_area_y_end_Loc, display_y_end / VRAM_HEIGHT);
+                GL.Uniform1(Display_Area_X_Start_Loc, display_x_start / VRAM_WIDTH);
+                GL.Uniform1(Display_Area_Y_Start_Loc, display_y_start / VRAM_HEIGHT);
+                GL.Uniform1(Display_Area_X_End_Loc, display_x_end / VRAM_WIDTH);
+                GL.Uniform1(Display_Area_Y_End_Loc, display_y_end / VRAM_HEIGHT);
 
                 if ((width / height) < ((float)this.Size.X / (float)this.Size.Y)) {
 
                     float offset = (width / height) * (float)this.Size.Y;  //Random formula by JyAli
                     offset = ((float)this.Size.X - offset) / this.Size.X;
 
-                    GL.Uniform1(aspect_ratio_y_offset_Loc, 0.0f);
-                    GL.Uniform1(aspect_ratio_x_offset_Loc, offset);
+                    GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, 0.0f);
+                    GL.Uniform1(Aspect_Ratio_X_Offset_Loc, offset);
 
                     GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                     GL.Scissor(0, 0, (int)(offset * this.Size.X), this.Size.Y);
                     GL.Clear(ClearBufferMask.ColorBufferBit);
-                    GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+                    GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
 
                 }
                 else if ((width / height) > ((float)this.Size.X / this.Size.Y)) {
 
                     float offset = (height / width) * (float)this.Size.X;  //Random formula by JyAli
 
-                    GL.Uniform1(aspect_ratio_y_offset_Loc, ((float)this.Size.Y - offset) / this.Size.Y);
-                    GL.Uniform1(aspect_ratio_x_offset_Loc, 0.0f);
+                    GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, ((float)this.Size.Y - offset) / this.Size.Y);
+                    GL.Uniform1(Aspect_Ratio_X_Offset_Loc, 0.0f);
 
                     GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                     GL.Scissor(0, 0, this.Size.X, (int)(offset * this.Size.Y));
                     GL.Clear(ClearBufferMask.ColorBufferBit);
-                    GL.Scissor(scissorBox_x, scissorBox_y, scissorBox_w, scissorBox_h);
+                    GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
 
                 }
                 else {
-                    GL.Uniform1(aspect_ratio_x_offset_Loc, 0.0f);
-                    GL.Uniform1(aspect_ratio_y_offset_Loc, 0.0f);
+                    GL.Uniform1(Aspect_Ratio_X_Offset_Loc, 0.0f);
+                    GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, 0.0f);
                 }
             }
             else {
-                GL.Uniform1(aspect_ratio_x_offset_Loc, 0.0f);
-                GL.Uniform1(aspect_ratio_y_offset_Loc, 0.0f);
-                GL.Uniform1(display_area_x_start_Loc, 0.0f);
-                GL.Uniform1(display_area_y_start_Loc, 0.0f);
-                GL.Uniform1(display_area_x_end_Loc, 1.0f);
-                GL.Uniform1(display_area_y_end_Loc, 1.0f);
+                GL.Uniform1(Aspect_Ratio_X_Offset_Loc, 0.0f);
+                GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, 0.0f);
+                GL.Uniform1(Display_Area_X_Start_Loc, 0.0f);
+                GL.Uniform1(Display_Area_Y_Start_Loc, 0.0f);
+                GL.Uniform1(Display_Area_X_End_Loc, 1.0f);
+                GL.Uniform1(Display_Area_Y_End_Loc, 1.0f);
             }
 
         }
@@ -1224,13 +1226,13 @@ namespace PSXEmulator {
                 Thread.Sleep(100);
 
             }else if (e.Key.Equals(Keys.Tab)) {
-                showTextures = !showTextures;
+                ShowTextures = !ShowTextures;
                 Thread.Sleep(100);
 
             }else if (e.Key.Equals(Keys.F)) {
-                isFullScreen = !isFullScreen;
-                this.WindowState = isFullScreen ? WindowState.Fullscreen : WindowState.Normal;
-                this.CursorState = isFullScreen ? CursorState.Hidden : CursorState.Normal;
+                IsFullScreen = !IsFullScreen;
+                this.WindowState = IsFullScreen ? WindowState.Fullscreen : WindowState.Normal;
+                this.CursorState = IsFullScreen ? CursorState.Hidden : CursorState.Normal;
                 Thread.Sleep(100);
 
             }else if (e.Key.Equals(Keys.F1)) {
@@ -1273,14 +1275,14 @@ namespace PSXEmulator {
             GL.UseProgram(0);
 
             // Delete all the resources.
-            GL.DeleteBuffer(vertexBufferObject);
-            GL.DeleteBuffer(colorsBuffer);
-            GL.DeleteBuffer(texCoords);
-            GL.DeleteVertexArray(vertexArrayObject);
-            GL.DeleteFramebuffer(vramFrameBuffer);
-            GL.DeleteTexture(vram_texture);
-            GL.DeleteTexture(sample_texture);
-            GL.DeleteProgram(shader.Program);
+            GL.DeleteBuffer(VertexBufferObject);
+            GL.DeleteBuffer(ColorsBuffer);
+            GL.DeleteBuffer(TexCoords);
+            GL.DeleteVertexArray(VertexArrayObject);
+            GL.DeleteFramebuffer(VramFrameBuffer);
+            GL.DeleteTexture(VramTexture);
+            GL.DeleteTexture(SampleTexture);
+            GL.DeleteProgram(Shader.Program);
             base.OnUnload();
         }
     }
