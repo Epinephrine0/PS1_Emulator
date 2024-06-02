@@ -1055,24 +1055,24 @@ namespace PSXEmulator {
 
         //Applies Drawing offset and checks if final dimensions are valid (within range)
         private bool ApplyDrawingOffset(ref short[] vertices) {
-            short maxX = -1025;
-            short maxY = -513;
-            short minX = 1024;
-            short minY = 512;
+            short maxX = 0;
+            short maxY = 0;
+            short minX = 0;
+            short minY = 0;
 
             for (int i = 0; i < vertices.Length; i += 2) {
                 vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetX));
-                if (vertices[i] > maxX) { maxX = vertices[i]; }
-                if (vertices[i] < minX) { minX = vertices[i]; }
+                maxX = Math.Max(maxX, vertices[i]);
+                minX = Math.Min(minX, vertices[i]); 
             }
 
             for (int i = 1; i < vertices.Length; i += 2) {
                 vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetY));
-                if (vertices[i] > maxY) { maxY = vertices[i]; }
-                if (vertices[i] < minY) { minY = vertices[i]; }
+                maxY = Math.Max(maxY, vertices[i]);
+                minY = Math.Min(minY, vertices[i]);
             }
 
-            return !(((maxX - minX) > 1023) || ((maxY - minY) > 511) || (maxX < minX) || (maxY < minY));
+            return !(((maxX - minX) > 1023) || ((maxY - minY) > 511));
         }
 
         public System.Timers.Timer FrameTimer;
