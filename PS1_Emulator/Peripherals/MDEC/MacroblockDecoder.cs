@@ -107,7 +107,7 @@ namespace PSXEmulator.Peripherals.MDEC {
             status |= DataOutputDepth << 25;
             status |= DataOutputSigned << 24;
             status |= DataOutputBit15 << 23;
-            status |= (CurrentBlock + 4) % 6 << 16;
+            status |= ((CurrentBlock + 4) % 6) << 16;
             status |= WordsRemaining;
 
 
