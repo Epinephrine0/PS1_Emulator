@@ -947,8 +947,8 @@ namespace PSXEmulator {
             int mode = (int)((texPage >> 7) & 3);
             uint divider = (uint)(4 >> mode);
            
-            uint smallestX = 0;
-            uint smallestY = 0;
+            uint smallestX = 1023;
+            uint smallestY = 511;
             uint largestX = 0;
             uint largestY = 0;
 
@@ -1000,10 +1000,10 @@ namespace PSXEmulator {
         }
         public void UpdateIntersectionTable(ref short[] vertices) {
             //Mark any affected blocks as dirty
-            int smallestX = 0;
-            int smallestY = 0;
-            int largestX = 0;
-            int largestY = 0;
+            int smallestX = 1023;
+            int smallestY = 511;
+            int largestX = -1024;
+            int largestY = -512;
 
             for (int i = 0; i < vertices.Length; i += 2) {
                 largestX = Math.Max(largestX, vertices[i]);
@@ -1039,10 +1039,10 @@ namespace PSXEmulator {
 
         //Applies Drawing offset and checks if final dimensions are valid (within range)
         private bool ApplyDrawingOffset(ref short[] vertices) {
-            short maxX = 0;
-            short maxY = 0;
-            short minX = 0;
-            short minY = 0;
+            short maxX = -1024;
+            short maxY = -512;
+            short minX = 1023;
+            short minY = 511;
 
             for (int i = 0; i < vertices.Length; i += 2) {
                 vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetX));
@@ -1056,7 +1056,7 @@ namespace PSXEmulator {
                 minY = Math.Min(minY, vertices[i]);
             }
 
-            return !(((maxX - minX) > 1023) || ((maxY - minY) > 511));
+            return !((Math.Abs(maxX - minX) > 1023) || (Math.Abs(maxY - minY) > 511));
         }
 
         public System.Timers.Timer FrameTimer;
