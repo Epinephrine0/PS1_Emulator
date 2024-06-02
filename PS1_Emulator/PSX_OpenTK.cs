@@ -947,27 +947,19 @@ namespace PSXEmulator {
             int mode = (int)((texPage >> 7) & 3);
             uint divider = (uint)(4 >> mode);
            
-            uint smallestX = 1023;
-            uint smallestY = 511;
+            uint smallestX = 0;
+            uint smallestY = 0;
             uint largestX = 0;
             uint largestY = 0;
 
             for (int i = 0; i < uv.Length; i += 2) {
-                if (uv[i] > largestX) {
-                    largestX = uv[i];
-                }
-                if (uv[i] < smallestX) {
-                    smallestX = uv[i];
-                }
+                largestX = Math.Max(largestX, uv[i]);   
+                smallestX = Math.Min(smallestX, uv[i]);
             }
 
             for (int i = 1; i < uv.Length; i += 2) {
-                if (uv[i] > largestY) {
-                    largestY = uv[i];
-                }
-                if (uv[i] < smallestY) {
-                    smallestY = uv[i];
-                }
+                largestY = Math.Max(largestY, uv[i]);
+                smallestY = Math.Min(smallestY, uv[i]);
             }
 
             smallestX = Math.Min(smallestX, 1023);
@@ -1008,27 +1000,19 @@ namespace PSXEmulator {
         }
         public void UpdateIntersectionTable(ref short[] vertices) {
             //Mark any affected blocks as dirty
-            int smallestX = 1023;
-            int smallestY = 511;
+            int smallestX = 0;
+            int smallestY = 0;
             int largestX = 0;
             int largestY = 0;
 
             for (int i = 0; i < vertices.Length; i += 2) {
-                if (vertices[i] > largestX) {
-                    largestX = vertices[i];
-                }
-                if (vertices[i] < smallestX) {
-                    smallestX = vertices[i];
-                }
+                largestX = Math.Max(largestX, vertices[i]);
+                smallestX = Math.Min(smallestX, vertices[i]);
             }
 
             for (int i = 1; i < vertices.Length; i += 2) {
-                if (vertices[i] > largestY) {
-                    largestY = vertices[i];
-                }
-                if (vertices[i] < smallestY) {
-                    smallestY = vertices[i];
-                }
+                largestY = Math.Max(largestY, vertices[i]);
+                smallestY = Math.Min(smallestY, vertices[i]);
             }
 
             smallestX = Math.Clamp(smallestX, 0, 1023);
