@@ -104,9 +104,9 @@ namespace PSXEmulator {
             public bool dataEnd => size == dataPtr;
             public ushort destination_X => (ushort)(parameters[1] & (transferType == TransferType.VramFill ? 0x3F0 : 0x3FF));
             public ushort destination_Y => (ushort)((parameters[1] >> 16) & 0x1FF);
-            public float fillColor_R => (float)((parameters[0] & 0xFF) / 255.0f);
-            public float fillColor_G => (float)(((parameters[0] >> 8) & 0xFF) / 255.0f);
-            public float fillColor_B => (float)(((parameters[0] >> 16) & 0xFF) / 255.0f);
+            public float fillColor_R => (float)(((parameters[0] >> 3) & 0x1F) / 31.0f);
+            public float fillColor_G => (float)(((parameters[0] >> 11) & 0x1F) / 31.0f);
+            public float fillColor_B => (float)(((parameters[0] >> 19) & 0x1F) / 31.0f);
 
             public TransferType transferType;        //CPU seems to set the main direction to off in the middle
                                                     //of the transfer, this should keep the direction saved
@@ -423,10 +423,6 @@ namespace PSXEmulator {
             this.force_set_mask_bit = ((value & 1) != 0);
             this.preserve_masked_pixels = (((value >> 1) & 1) != 0);
             window.maskBitSetting((int)value);
-
-            if (preserve_masked_pixels) {
-                Console.WriteLine("[GPU] Unimplemented Mask bit preserve!");
-            }
         }
 
         private void gp0_texture_window(UInt32 value) {
