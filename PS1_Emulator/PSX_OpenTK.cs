@@ -528,8 +528,8 @@ namespace PSXEmulator {
             }";
 
         public enum RenderMode {
-            RenderingPrimitives = 0,                 //Normal mode that games will use to draw primitives
-            Rendering16bppFullVram = 1,         //When drawing the vram on screen
+            RenderingPrimitives = 0,                    //Normal mode that games will use to draw primitives
+            Rendering16bppFullVram = 1,                 //When drawing the vram on screen
             Rendering16bppAs24bppFullVram = 2,          //When drawing the 16bpp vram as 24bpp
         }
 
@@ -691,7 +691,7 @@ namespace PSXEmulator {
                 GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
                 GL.EnableVertexAttribArray(2);
                
-                if (TextureInvalidate(ref UV, page, clut)) {
+                if (TextureInvalidatePrimitive(ref UV, page, clut)) {
                     update_SamplingTexture();
                 }
 
@@ -768,7 +768,7 @@ namespace PSXEmulator {
                 GL.BufferData(BufferTarget.ArrayBuffer, UV.Length * sizeof(ushort), UV, BufferUsageHint.StreamDraw);
                 GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
                 GL.EnableVertexAttribArray(2);
-                if (TextureInvalidate(ref UV, page, clut)) {
+                if (TextureInvalidatePrimitive(ref UV, page, clut)) {
                     update_SamplingTexture();
                 }
             }
@@ -864,30 +864,28 @@ namespace PSXEmulator {
 
         public void update_vram(int x, int y , int width, int height, ref ushort[] textureData) {
             if (width == 0) { width = VRAM_WIDTH; }
-            if (height == 0) { height = VRAM_HEIGHT; }
-
-            ushort[] old = new ushort[width * height];
-            
+            if (height == 0) { height = VRAM_HEIGHT; }            
 
             if (CPU.BUS.GPU.force_set_mask_bit) {
                 for (int i = 0; i < textureData.Length; i++) { textureData[i] |= (1 << 15); }
             }
 
-            if (CPU.BUS.GPU.preserve_masked_pixels) {
-                //Slow
-                GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, old);
-                for (int i = 0; i < width *  height; i++) {
-                    if ((old[i] >> 15) == 1) {
-                        textureData[i] = old[i];
-                    }
-                }
-            }
+            //Slow
+            /* ushort[] old = new ushort[width * height];
+               if (CPU.BUS.GPU.preserve_masked_pixels) {
+                 GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, old);
+                 for (int i = 0; i < width * height; i++) {
+                     if ((old[i] >> 15) == 1) {
+                         textureData[i] = old[i];
+                     }
+                 }
+             } */
 
             GL.Disable(EnableCap.ScissorTest);
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
             GL.BindTexture(TextureTarget.Texture2D, VramTexture);
-            GL.TexSubImage2D(TextureTarget.Texture2D,0,x,y,width,height, 
+            GL.TexSubImage2D(TextureTarget.Texture2D, 0, x, y, width, height, 
                 PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
 
             short[] rectangle = new short[] {
@@ -898,9 +896,7 @@ namespace PSXEmulator {
             };
 
             UpdateIntersectionTable(ref rectangle);
-
-            //update_SamplingTexture();
-
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
             GL.Enable(EnableCap.ScissorTest);
             GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
             FrameUpdated = true;
@@ -920,21 +916,45 @@ namespace PSXEmulator {
             }
         }
 
-        internal void VramToVramCopy(int x0_src, int y0_src, int x0_dest, int y0_dest, int width, int height) {
-            //Very stupid and slow
-            //But seems correct (Tested on Crash Team Racing, Sony intro)
-
-            //Reads the vram fbo, which is the updated one
-            ushort[] srcData = new ushort[width * height];
-            GL.ReadPixels(x0_src, y0_src, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, srcData);   
+        public void VramToVramCopy(int x0_src, int y0_src, int x0_dest, int y0_dest, int width, int height) {
+            //Problem: this transfare should be subject to mask bit settings
 
             GL.Disable(EnableCap.ScissorTest);
 
-            update_vram(x0_dest, y0_dest, width, height, ref srcData);
-            //UpdateIntersectionTable(); handeled in update_vram
+            Console.WriteLine($"From: {x0_src}, {y0_src} to {x0_dest}, {y0_dest} --- Width: {width} Height: {height}");
+
+            ushort[] src_coords = new ushort[] {
+                (ushort)x0_src, (ushort)y0_src,
+                (ushort)(x0_src + width), (ushort)y0_src,
+                (ushort)(x0_src + width), (ushort)(y0_src + height),
+                (ushort)x0_src, (ushort)(y0_src + height)
+            };
+
+            short[] dst_coords = new short[] {
+                (short)x0_dest, (short)y0_dest,
+                (short)(x0_dest + width), (short)y0_dest,
+                (short)(x0_dest + width), (short)(y0_dest + height),
+                (short)x0_dest, (short)(y0_dest + height)
+            };
+
+            if (TextureInvalidate(ref src_coords)) {
+                update_SamplingTexture();
+            }
+
+            GL.BindTexture(TextureTarget.Texture2D, SampleTexture);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
+
+            //This is a lot faster than doing GL.ReadPixels then GL.TexSubImage2D
+            GL.CopyImageSubData(
+                SampleTexture, ImageTarget.Texture2D, 0, x0_src, y0_src, 0, 
+                VramTexture, ImageTarget.Texture2D, 0, x0_dest, y0_dest, 0,
+                width, height, 1);
+
+            UpdateIntersectionTable(ref dst_coords);
 
             GL.Enable(EnableCap.ScissorTest);
             GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
+
             FrameUpdated = true;
         }
         internal void setBlendingFunction(uint function) {
@@ -953,7 +973,7 @@ namespace PSXEmulator {
             GL.Uniform1(MaskBitSettingLoc, setting);
         }
 
-        public bool TextureInvalidate(ref ushort[] uv, uint texPage, uint clut) {
+        public bool TextureInvalidatePrimitive(ref ushort[] uv, uint texPage, uint clut) {
             //Experimental 
             //Checks whether the textured primitive is reading from a dirty block
 
@@ -1017,6 +1037,52 @@ namespace PSXEmulator {
 
             return false;
         }
+
+        public bool TextureInvalidate(ref ushort[] coords) {       
+            //Hack: Always sync if preserve_masked_pixels is true
+            //This is kind of slow but fixes Silent Hills 
+            if (CPU.BUS.GPU.preserve_masked_pixels) {
+                return true;
+            }
+
+            uint smallestX = 1023;
+            uint smallestY = 511;
+            uint largestX = 0;
+            uint largestY = 0;
+
+            for (int i = 0; i < coords.Length; i += 2) {
+                largestX = Math.Max(largestX, coords[i]);
+                smallestX = Math.Min(smallestX, coords[i]);
+            }
+
+            for (int i = 1; i < coords.Length; i += 2) {
+                largestY = Math.Max(largestY, coords[i]);
+                smallestY = Math.Min(smallestY, coords[i]);
+            }
+
+            smallestX = Math.Min(smallestX, 1023);
+            smallestY = Math.Min(smallestY, 511);
+            largestX = Math.Min(largestX, 1023);
+            largestY = Math.Min(largestY, 511);
+
+            uint width = (largestX - smallestX);
+            uint height = (largestY - smallestY);
+
+            uint left = smallestX / IntersectionBlockLength;
+            uint right = ((smallestX + width) & 0x3FF) / IntersectionBlockLength;
+            uint up = smallestY / IntersectionBlockLength;
+            uint down = ((smallestY + height) & 0x1FF) / IntersectionBlockLength;
+
+            //ANDing with 7,15 take cares of vram access wrap when reading textures (same effect as mod 8,16)  
+            for (uint y = up; y != ((down + 1) & 0x7); y = (y + 1) & 0x7) {
+                for (uint x = left; x != ((right + 1) & 0xF); x = (x + 1) & 0xF) {
+                    if (IntersectionTable[y, x] == 1) { return true; }
+                }
+            }
+            return false;
+        }
+
+
         public void UpdateIntersectionTable(ref short[] vertices) {
             //Mark any affected blocks as dirty
             int smallestX = 1023;
