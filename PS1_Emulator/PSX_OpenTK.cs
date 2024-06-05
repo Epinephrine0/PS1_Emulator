@@ -921,7 +921,7 @@ namespace PSXEmulator {
 
             GL.Disable(EnableCap.ScissorTest);
 
-            Console.WriteLine($"From: {x0_src}, {y0_src} to {x0_dest}, {y0_dest} --- Width: {width} Height: {height}");
+            //Console.WriteLine($"From: {x0_src}, {y0_src} to {x0_dest}, {y0_dest} --- Width: {width} Height: {height}");
 
             ushort[] src_coords = new ushort[] {
                 (ushort)x0_src, (ushort)y0_src,
