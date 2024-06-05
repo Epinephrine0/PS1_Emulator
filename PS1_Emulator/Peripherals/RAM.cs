@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 
 namespace PSXEmulator {
     public class RAM {
@@ -6,61 +7,46 @@ namespace PSXEmulator {
         public Range range = new Range(0x00000000, 8*1024*1024);
         byte[] data = new byte[2 * 1024 * 1024];
 
-        public UInt32 LoadWord(UInt32 address) {
-            //CPU.cycles++;
+        public uint LoadWord(uint address) {
             uint offset = address - range.start;
+            uint final = Mirror(offset);
 
-            //Handle memory mirror, but without %  
-            //x % (2^n) is equal to x & ((2^n)-1)
-            //So x % 2MB = x & ((2^21)-1), and of course the power is just left shift
-            uint final = offset & ((1 << 21) - 1); 
+            byte b0 = data[final + 0];
+            byte b1 = data[final + 1];
+            byte b2 = data[final + 2];
+            byte b3 = data[final + 3];
 
-            UInt32 b0 = data[final + 0];
-            UInt32 b1 = data[final + 1];
-            UInt32 b2 = data[final + 2];
-            UInt32 b3 = data[final + 3];
-
-            return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
+            return (uint)(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
         }
-        public void StoreWord(UInt32 address, UInt32 value) {
-            //CPU.cycles++;
+
+        public void StoreWord(uint address, uint value) {
             uint offset = address - range.start;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
+            uint final = Mirror(offset);
 
             byte b0 = (byte)value;
             byte b1 = (byte)(value >> 8);
             byte b2 = (byte)(value >> 16);
             byte b3 = (byte)(value >> 24);
 
-
             data[final + 0] = b0;
             data[final + 1] = b1;
             data[final + 2] = b2;
             data[final + 3] = b3;
-
         }
 
-        internal UInt16 LoadHalf(UInt32 address) {
-            //CPU.cycles++;
+        public ushort LoadHalf(uint address) {
             uint offset = address - range.start;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
+            uint final = Mirror(offset);
 
-            UInt16 b0 = data[final + 0];
-            UInt16 b1 = data[final + 1];
+            ushort b0 = data[final + 0];
+            ushort b1 = data[final + 1];
 
-            return ((UInt16)(b0 | (b1 << 8)));
+            return ((ushort)(b0 | (b1 << 8)));
         }
 
-        internal void StoreHalf(UInt32 address, UInt16 value) {
-            //CPU.cycles++;
+        public void StoreHalf(uint address, ushort value) {
             uint offset = address - range.start;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
+            uint final = Mirror(offset);
 
             byte b0 = (byte)value;
             byte b1 = (byte)(value >> 8);
@@ -68,29 +54,30 @@ namespace PSXEmulator {
             data[final + 0] = b0;
             data[final + 1] = b1;
         }
-        internal byte LoadByte(UInt32 address) {
-            //CPU.cycles++;
+
+        public byte LoadByte(uint address) {
             uint offset = address - range.start;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
+            uint final = Mirror(offset);
 
             return data[final];
         }
 
-        internal void StoreByte(UInt32 address, byte value) {
-            //CPU.cycles++;
+        public void StoreByte(uint address, byte value) {
             uint offset = address - range.start;
-            int start = 0;
-            int end = data.Length;
-            uint final = (uint)(start + ((offset - start) % (end - start)));
+            uint final = Mirror(offset);
 
             data[final] = value;
         }
 
+        public uint Mirror(uint address) {
+            //Handle memory mirror, but without %  
+            //x % (2^n) is equal to x & ((2^n)-1)
+            //So x % 2MB = x & ((2^21)-1)
+            return address & ((1 << 21) - 1);
+        }
+
         public byte[] GetMemory() {
             return data;
-        }
-       
+        }      
     }
 }
