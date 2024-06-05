@@ -265,10 +265,12 @@ namespace PSXEmulator {
                 3, -1,  2, -2
             );
 
-            vec3 dither(vec3 colors, vec2 poistion) {
+            vec3 dither(vec3 colors, vec2 position) {
 
-               int x = int((poistion.x * 1023.0) - (4 * (floor((poistion.x * 1023.0)/4))));
-               int y = int((poistion.y * 511.0) - (4 * (floor((poistion.y * 511.0)/4))));
+               // % 4
+               int x = int((position.x * 1023.0)) & 3;
+               int y = int((position.y * 511.0)) & 3;
+
                int ditherOffset = int(ditheringTable[y][x]);
 
                colors = colors * vec3(255.0, 255.0, 255.0);
