@@ -623,11 +623,11 @@ namespace PSXEmulator {
             DrawOffsetY = y;   
         }
 
-        public void setTextureWindow(ushort x, ushort y, ushort z, ushort w) {
+        public void SetTextureWindow(ushort x, ushort y, ushort z, ushort w) {
             GL.Uniform4(TexWindow, x, y, z, w);
         }
 
-        public void setScissorBox(int x, int y, int width, int height) {
+        public void SetScissorBox(int x, int y, int width, int height) {
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
 
             ScissorBox_X = x;
@@ -641,7 +641,7 @@ namespace PSXEmulator {
             GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
         }
 
-        public void drawTrinangle(
+        public void DrawTrinangle(
             short x1, short y1, 
             short x2, short y2,
             short x3, short y3,
@@ -695,7 +695,7 @@ namespace PSXEmulator {
                 GL.EnableVertexAttribArray(2);
                
                 if (TextureInvalidatePrimitive(ref UV, page, clut)) {
-                    update_SamplingTexture();
+                    VramSync();
                 }
 
             }
@@ -713,7 +713,7 @@ namespace PSXEmulator {
             FrameUpdated = true;
         }
 
-        public void drawRectangle(
+        public void DrawRectangle(
             short x1, short y1,
             short x2, short y2,
             short x3, short y3,
@@ -772,7 +772,7 @@ namespace PSXEmulator {
                 GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
                 GL.EnableVertexAttribArray(2);
                 if (TextureInvalidatePrimitive(ref UV, page, clut)) {
-                    update_SamplingTexture();
+                    VramSync();
                 }
             }
             else {
@@ -822,7 +822,7 @@ namespace PSXEmulator {
             GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, texData);
         }
 
-        public void vramFill(float r, float g, float b, int x, int y, int width, int height) {
+        public void VramFill(float r, float g, float b, int x, int y, int width, int height) {
             //Fill does NOT occur when Xsiz=0 or Ysiz=0 (unlike as for Copy commands).
             //Xsiz=400h works only indirectly: Param=400h is handled as Xsiz=0, however, Param=3F1h..3FFh is rounded-up and handled as Xsiz=400h.
 
@@ -865,7 +865,7 @@ namespace PSXEmulator {
             FrameUpdated = true;
         }
 
-        public void update_vram(int x, int y , int width, int height, ref ushort[] textureData) {
+        public void UpdateVram(int x, int y , int width, int height, ref ushort[] textureData) {
             if (width == 0) { width = VRAM_WIDTH; }
             if (height == 0) { height = VRAM_HEIGHT; }            
 
@@ -905,7 +905,7 @@ namespace PSXEmulator {
             FrameUpdated = true;
         }
 
-        private void update_SamplingTexture() {
+        private void VramSync() {
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, VramFrameBuffer);
             GL.BindTexture(TextureTarget.Texture2D, SampleTexture);
             GL.CopyTexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 0, 0, VRAM_WIDTH, VRAM_HEIGHT);
@@ -941,7 +941,7 @@ namespace PSXEmulator {
             };
 
             if (TextureInvalidate(ref src_coords)) {
-                update_SamplingTexture();
+                VramSync();
             }
 
             GL.BindTexture(TextureTarget.Texture2D, SampleTexture);
@@ -960,7 +960,7 @@ namespace PSXEmulator {
 
             FrameUpdated = true;
         }
-        internal void setBlendingFunction(uint function) {
+        internal void SetBlendingFunction(uint function) {
 
             GL.Uniform1(TransparencyModeLoc, (int)function);
             //Console.WriteLine("Transparency: " +  function);
@@ -972,7 +972,7 @@ namespace PSXEmulator {
             GL.BlendEquation(function == 2? BlendEquationMode.FuncReverseSubtract : BlendEquationMode.FuncAdd);
         }
 
-        internal void maskBitSetting(int setting) {
+        internal void MaskBitSetting(int setting) {
             GL.Uniform1(MaskBitSettingLoc, setting);
         }
 
@@ -1151,7 +1151,7 @@ namespace PSXEmulator {
         public int Frames = 0;
         public string TitleCopy;
 
-        public void display() {
+        public void Display() {
             DisplayFrame();
             SwapBuffers();
             if (FrameUpdated) {
@@ -1174,7 +1174,7 @@ namespace PSXEmulator {
 
         void DisplayFrame() {
             GL.Disable(EnableCap.ScissorTest);
-            disableBlending();
+            DisableBlending();
 
             GL.Enable(EnableCap.Texture2D);
             GL.DisableVertexAttribArray(1);
@@ -1208,7 +1208,7 @@ namespace PSXEmulator {
             GL.Uniform1(RenderModeLoc, (int)RenderMode.RenderingPrimitives);
 
         }
-        public void disableBlending() {
+        public void DisableBlending() {
             ///GL.Disable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.One, BlendingFactor.Zero);
             GL.BlendEquation(BlendEquationMode.FuncAdd);

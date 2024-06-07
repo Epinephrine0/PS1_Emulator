@@ -107,13 +107,13 @@ namespace PSXEmulator {
             page = (ushort)(uv[1] >> 16);
 
             if (isSemiTransparent) {
-                window.setBlendingFunction(isTextured ? (uint)((page >> 5) & 3) : semi_transparency);
+                window.SetBlendingFunction(isTextured ? (uint)((page >> 5) & 3) : semi_transparency);
             }
             else {
-                window.disableBlending();
+                window.DisableBlending();
             }
 
-            window.drawTrinangle(
+            window.DrawTrinangle(
                 (short)vertices[0], (short)(vertices[0] >> 16),
                 (short)vertices[1], (short)(vertices[1] >> 16),
                 (short)vertices[2], (short)(vertices[2] >> 16),
@@ -130,7 +130,7 @@ namespace PSXEmulator {
             );
             if (isQuad) {
 
-                window.drawTrinangle(
+                window.DrawTrinangle(
                 (short)vertices[1], (short)(vertices[1] >> 16),
                 (short)vertices[2], (short)(vertices[2] >> 16),
                 (short)vertices[3], (short)(vertices[3] >> 16),

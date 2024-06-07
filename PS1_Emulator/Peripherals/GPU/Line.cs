@@ -72,10 +72,10 @@ namespace PSXEmulator {
             }
 
             if (isSemiTransparent) {
-                window.setBlendingFunction(semi_transparency);
+                window.SetBlendingFunction(semi_transparency);
             }
             else {
-                window.disableBlending();
+                window.DisableBlending();
             }
 
             window.DrawLines(ref vertices, ref colors, isPolyLine, isDithered);

@@ -230,7 +230,7 @@ namespace PSXEmulator {
                     scanlines -= scanlines_per_frame;
 
                     if (!display_disabled) {
-                        window.display();
+                        window.Display();
                     }
                     if (verticalRes == VerticalRes.Y480Lines) {
                         currentLine = (currentLine + 1) & 1;
@@ -328,7 +328,7 @@ namespace PSXEmulator {
                     gpuTransfer.data[gpuTransfer.dataPtr++] = (ushort)((value >> 16) & 0xFFFF);
 
                     if (gpuTransfer.dataEnd) {
-                        window.update_vram(gpuTransfer.destination_X, gpuTransfer.destination_Y,
+                        window.UpdateVram(gpuTransfer.destination_X, gpuTransfer.destination_Y,
                             gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
                         currentState = GPUState.ReadyToDecode;
                         gpuTransfer.transferType = TransferType.Off;
@@ -354,8 +354,8 @@ namespace PSXEmulator {
                     break;
 
                 case TransferType.VramFill:
-                    window.disableBlending();
-                    window.vramFill(gpuTransfer.fillColor_R, gpuTransfer.fillColor_G, gpuTransfer.fillColor_B,
+                    window.DisableBlending();
+                    window.VramFill(gpuTransfer.fillColor_R, gpuTransfer.fillColor_G, gpuTransfer.fillColor_B,
                         gpuTransfer.destination_X, gpuTransfer.destination_Y, gpuTransfer.width, gpuTransfer.height);
                     gpuTransfer.transferType = TransferType.Off;
                     currentState = GPUState.ReadyToDecode;
@@ -422,7 +422,7 @@ namespace PSXEmulator {
         private void gp0_mask_bit(UInt32 value) {
             this.force_set_mask_bit = ((value & 1) != 0);
             this.preserve_masked_pixels = (((value >> 1) & 1) != 0);
-            window.maskBitSetting((int)value);
+            window.MaskBitSetting((int)value);
         }
 
         private void gp0_texture_window(UInt32 value) {
@@ -435,7 +435,7 @@ namespace PSXEmulator {
             this.texture_window_x_offset = ((value >> 10) & 0x1f);
             this.texture_window_y_offset = ((value >> 15) & 0x1f);
 
-            window.setTextureWindow((ushort)texture_window_x_mask, (ushort)texture_window_y_mask, 
+            window.SetTextureWindow((ushort)texture_window_x_mask, (ushort)texture_window_y_mask, 
                 (ushort)texture_window_x_offset, (ushort)texture_window_y_offset);
         }
    
@@ -453,14 +453,14 @@ namespace PSXEmulator {
         private void gp0_drawing_area_BottomRight(UInt32 value) {
             this.drawing_area_bottom = (UInt16)((value >> 10) & 0x3ff);
             this.drawing_area_right = (UInt16)(value & 0x3ff);
-            window.setScissorBox(drawing_area_left, drawing_area_top,
+            window.SetScissorBox(drawing_area_left, drawing_area_top,
                 drawing_area_right - drawing_area_left, drawing_area_bottom - drawing_area_top);
         }
 
         private void gp0_drawing_area_TopLeft(UInt32 value) {
             this.drawing_area_top = (UInt16)((value >> 10) & 0x3ff);
             this.drawing_area_left = (UInt16)(value & 0x3ff);
-            window.setScissorBox(drawing_area_left, drawing_area_top,
+            window.SetScissorBox(drawing_area_left, drawing_area_top,
                 drawing_area_right - drawing_area_left, drawing_area_bottom - drawing_area_top);
         }
 
@@ -621,7 +621,7 @@ namespace PSXEmulator {
 
             //...Clear Fifo
 
-            window.disableBlending();
+            window.DisableBlending();
             //Probably more window reset stuff
 
         }

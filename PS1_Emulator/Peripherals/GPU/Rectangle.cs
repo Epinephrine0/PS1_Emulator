@@ -102,13 +102,13 @@ namespace PSXEmulator {
             }
 
             if (isSemiTransparent) {        
-                window.setBlendingFunction(semi_transparency);
+                window.SetBlendingFunction(semi_transparency);
             }
             else {
-                window.disableBlending();
+                window.DisableBlending();
             }
 
-            window.drawRectangle(
+            window.DrawRectangle(
                 x1, y1, 
                 x2, y1, 
                 x2, y2, 
