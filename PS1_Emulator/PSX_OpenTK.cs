@@ -1232,11 +1232,11 @@ namespace PSXEmulator {
                 GL.Uniform1(Display_Area_X_End_Loc, display_x_end / VRAM_WIDTH);
                 GL.Uniform1(Display_Area_Y_End_Loc, display_y_end / VRAM_HEIGHT);
 
-                if ((width / height) < ((float)this.Size.X / (float)this.Size.Y)) {
+                if ((width / height) < ((float)this.Size.X / Size.Y)) {
 
                     //Random formula by JyAli                  
-                    float newWidth = (width / height) * (float)this.Size.Y;                 //Get the new width after stretching 
-                    float offset = ((float)this.Size.X - newWidth) / this.Size.X;           //Calculate the offset and convert it to [0,2]
+                    float newWidth = (width / height) * Size.Y;                 //Get the new width after stretching 
+                    float offset = (Size.X - newWidth) / this.Size.X;           //Calculate the offset and convert it to [0,2]
 
                     GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, 0.0f);
                     GL.Uniform1(Aspect_Ratio_X_Offset_Loc, offset);
@@ -1252,8 +1252,8 @@ namespace PSXEmulator {
                 } else if ((width / height) > ((float)this.Size.X / this.Size.Y)) {
 
                     //Random formula by JyAli                  
-                    float newHeight = (height / width) * (float)this.Size.X;                 //Get the new height after stretching 
-                    float offset = ((float)this.Size.Y - newHeight) / this.Size.Y;           //Calculate the offset and convert it to [0,2]
+                    float newHeight = (height / width) * Size.X;                 //Get the new height after stretching 
+                    float offset = (Size.Y - newHeight) / this.Size.Y;           //Calculate the offset and convert it to [0,2]
 
                     GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, offset);
                     GL.Uniform1(Aspect_Ratio_X_Offset_Loc, 0.0f);
