@@ -131,6 +131,7 @@ namespace PSXEmulator {
         private short DrawOffsetX = 0;
         private short DrawOffsetY = 0;
 
+
         public bool Is24bpp = false;
 
         public bool IsUsingMouse = false;
@@ -1194,7 +1195,7 @@ namespace PSXEmulator {
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
             GL.BindTexture(TextureTarget.Texture2D, VramTexture);
 
-            HandleAspectRatio();
+            SetAspectRatio();
 
             GL.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
@@ -1214,15 +1215,15 @@ namespace PSXEmulator {
             GL.Uniform1(TransparencyModeLoc, 4);    //0-3 for the functions, 4 = disabled
         }
 
-        public void HandleAspectRatio() {
+        public void SetAspectRatio() {
             float display_x_start = CPU.BUS.GPU.display_vram_x_start;
             float display_y_start = CPU.BUS.GPU.display_vram_y_start;
 
-            float display_x_end = CPU.BUS.GPU.HorizontalRange + display_x_start;   
-            float display_y_end = CPU.BUS.GPU.VerticalRange + display_y_start;
+            float display_x_end = CPU.BUS.GPU.HorizontalRange + display_x_start - 1;   
+            float display_y_end = CPU.BUS.GPU.VerticalRange + display_y_start - 1;
 
-            float width = (display_x_end - display_x_start);
-            float height = (display_y_end - display_y_start);
+            float width = CPU.BUS.GPU.HorizontalRange;
+            float height = CPU.BUS.GPU.VerticalRange;
 
             if (!ShowTextures) {
 
@@ -1233,37 +1234,44 @@ namespace PSXEmulator {
 
                 if ((width / height) < ((float)this.Size.X / (float)this.Size.Y)) {
 
-                    float offset = (width / height) * (float)this.Size.Y;  //Random formula by JyAli
-                    offset = ((float)this.Size.X - offset) / this.Size.X;
+                    //Random formula by JyAli                  
+                    float newWidth = (width / height) * (float)this.Size.Y;                 //Get the new width after stretching 
+                    float offset = ((float)this.Size.X - newWidth) / this.Size.X;           //Calculate the offset and convert it to [0,2]
 
                     GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, 0.0f);
                     GL.Uniform1(Aspect_Ratio_X_Offset_Loc, offset);
 
+                    GL.Enable(EnableCap.ScissorTest);
                     GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                    GL.Scissor(0, 0, (int)(offset * this.Size.X), this.Size.Y);
+                    GL.Scissor(0, 0, this.Size.X, this.Size.Y);
                     GL.Clear(ClearBufferMask.ColorBufferBit);
+                    GL.Disable(EnableCap.ScissorTest);
+
                     GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
 
-                }
-                else if ((width / height) > ((float)this.Size.X / this.Size.Y)) {
+                } else if ((width / height) > ((float)this.Size.X / this.Size.Y)) {
 
-                    float offset = (height / width) * (float)this.Size.X;  //Random formula by JyAli
+                    //Random formula by JyAli                  
+                    float newHeight = (height / width) * (float)this.Size.X;                 //Get the new height after stretching 
+                    float offset = ((float)this.Size.Y - newHeight) / this.Size.Y;           //Calculate the offset and convert it to [0,2]
 
-                    GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, ((float)this.Size.Y - offset) / this.Size.Y);
+                    GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, offset);
                     GL.Uniform1(Aspect_Ratio_X_Offset_Loc, 0.0f);
 
+                    GL.Enable(EnableCap.ScissorTest);
                     GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                    GL.Scissor(0, 0, this.Size.X, (int)(offset * this.Size.Y));
+                    GL.Scissor(0, 0, this.Size.X, this.Size.Y);
                     GL.Clear(ClearBufferMask.ColorBufferBit);
+                    GL.Disable(EnableCap.ScissorTest);
+
                     GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
 
-                }
-                else {
+                } else {
                     GL.Uniform1(Aspect_Ratio_X_Offset_Loc, 0.0f);
                     GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, 0.0f);
                 }
-            }
-            else {
+            } else {
+                //Set the values to display the whole VRAM
                 GL.Uniform1(Aspect_Ratio_X_Offset_Loc, 0.0f);
                 GL.Uniform1(Aspect_Ratio_Y_Offset_Loc, 0.0f);
                 GL.Uniform1(Display_Area_X_Start_Loc, 0.0f);
