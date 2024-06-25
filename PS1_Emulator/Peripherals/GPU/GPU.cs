@@ -1,9 +1,11 @@
 ﻿using OpenTK.Graphics.ES20;
+using PSXEmulator.Peripherals.GPU;
 using PSXEmulator.Peripherals.Timers;
 using PSXEmulator.PS1_Emulator;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using static PSXEmulator.CDROMDataController;
 
 namespace PSXEmulator {
     public class GPU {
@@ -22,10 +24,10 @@ namespace PSXEmulator {
         }
         public enum TransferType { //My own states, because the CPU fucks up the main DMA direction above in the middle of a transfer
             Off = 0x0,
+            VramFill = 0x2,
             VramToVram = 0x4,     
-            CpuToGp0 = 0x5,
-            VRamToCpu = 0x6,
-            VramFill                //Does it really belong here? ask nocash
+            CpuToVram = 0x5,
+            VramToCpu = 0x6,
         }
         enum VMode {
             NTSC = 0,
@@ -79,12 +81,12 @@ namespace PSXEmulator {
         public UInt16 display_line_start;
         public UInt16 display_line_end;
         Primitive primitive = null;
-        enum GPUState {
+        public enum GPUState {
             LoadingPrimitive,
-            ReadyToDecode,
+            Idle,
             Transferring
         }
-        public struct GPUTransfer {
+        /*public struct GPUTransfer {
             public uint[] parameters;
             public ushort[] data;
             public int dataPtr;
@@ -111,8 +113,10 @@ namespace PSXEmulator {
             public TransferType transferType;        //CPU seems to set the main direction to off in the middle
                                                     //of the transfer, this should keep the direction saved
         }
-        public GPUTransfer gpuTransfer;
-        GPUState currentState = GPUState.ReadyToDecode;
+        public GPUTransfer gpuTransfer;*/
+
+        public GPU_MemoryTransfer CurrentTransfare;
+        public GPUState currentState = GPUState.Idle;
         
         Timer0 TIMER0;
         Timer1 TIMER1;
@@ -167,22 +171,23 @@ namespace PSXEmulator {
             status |= ((uint)(interrupt ? 1 : 0)) << 24;
 
             //Ready to recive command
-            status |= ((uint)(currentState == GPUState.ReadyToDecode ? 1 : 0)) << 26;   
+            status |= ((uint)(currentState == GPUState.Idle ? 1 : 0)) << 26;   
 
             //Ready to send VRam to CPU; via GPUREAD
-            status |= ((uint)((gpuTransfer.transferType == TransferType.VRamToCpu && gpuTransfer.paramsReady) ? 1 : 0)) << 27;
+            status |= 1 << 27;
 
             /*
              Bit28: Normally, this bit gets cleared when the command execution is busy (ie. once when the command and all of its parameters are received), however, for Polygon and Line Rendering commands, the bit gets cleared immediately after receiving the command word (ie. before receiving the vertex parameters).
              */
 
-            bool notReady = currentState == GPUState.LoadingPrimitive || (gpuTransfer.transferType != TransferType.Off && gpuTransfer.paramsReady);
+            //bool notReady = currentState == GPUState.LoadingPrimitive || (gpuTransfer.transferType != TransferType.Off && gpuTransfer.paramsReady);
 
             /*if (notReady) {
                 status &= (~((uint)1 << 28));   //Ready to recive DMA block, this is wrong so I hardcoded 1 
             } else {
                 status |= (1 << 28);
             }*/
+
             status |= (1 << 28);
 
             status |= ((uint)dmaDirection) << 29;
@@ -202,7 +207,6 @@ namespace PSXEmulator {
 
             //return 0b01011110100000000000000000000000;
             return status;
-
         }
         
         double scanlines = 0;
@@ -253,28 +257,20 @@ namespace PSXEmulator {
         public void write_GP0(UInt32 value) {
 
             switch (currentState) {
-                case GPUState.ReadyToDecode: gp0_decode(value); break;
+                case GPUState.Idle: gp0_decode(value); break;
 
                 case GPUState.LoadingPrimitive:
                     primitive.add(value);
                     if (primitive.isReady()) {
                         primitive.draw(ref window);
-                        currentState = GPUState.ReadyToDecode;
+                        currentState = GPUState.Idle;
                     }
                     break;
 
                 case GPUState.Transferring:
-                    if (gpuTransfer.paramsReady) {
-                        handleTransfer(value);
-                    }
-                    else {
-                        gpuTransfer.parameters[gpuTransfer.paramPtr++] = value;
-                        if (gpuTransfer.paramsReady) {
-                            gpuTransfer.data = new ushort[gpuTransfer.size];
-                            if (gpuTransfer.transferType != TransferType.CpuToGp0) {
-                                handleTransfer(value);
-                            }
-                        }
+                    CurrentTransfare.Add(value);
+                    if (CurrentTransfare.ReadyToExecute) {
+                        HandleTransfer();
                     }
                     break;
             }
@@ -307,70 +303,42 @@ namespace PSXEmulator {
                 case 0x05:
                 case 0x06:
                     currentState = GPUState.Transferring;
-                    gpuTransfer.transferType = (TransferType)opcode;
-                    gpuTransfer.paramPtr = 0;
-                    gpuTransfer.dataPtr = 0;
-                    gpuTransfer.parameters = new uint[gpuTransfer.transferType == TransferType.VramToVram ? 4 : 3];
-                    gpuTransfer.parameters[gpuTransfer.paramPtr++] = value;
+                    CurrentTransfare = new GPU_MemoryTransfer(opcode == (uint)TransferType.VramToVram ? 4 : 3, opcode);
+                    CurrentTransfare.Add(value);    
                     break;
 
-                            //Environment commands
+                                //Environment commands
                 case 0x07: environment(value); break;
 
                 default: throw new Exception("GP0: " + opcode.ToString("x") + " - " + (value >> 29));
             }
         }
 
-        private void handleTransfer(uint value) {
-            switch (gpuTransfer.transferType) {
-                case TransferType.CpuToGp0:
-                    gpuTransfer.data[gpuTransfer.dataPtr++] = (ushort)(value & 0xFFFF);
-                    gpuTransfer.data[gpuTransfer.dataPtr++] = (ushort)((value >> 16) & 0xFFFF);
-
-                    if (gpuTransfer.dataEnd) {
-                        window.UpdateVram(gpuTransfer.destination_X, gpuTransfer.destination_Y,
-                            gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
-                        currentState = GPUState.ReadyToDecode;
-                        gpuTransfer.transferType = TransferType.Off;
-
-                    }
+        private void HandleTransfer() {
+            switch (CurrentTransfare.Type) {
+                case (uint)TransferType.VramFill:
+                    window.VramFillRectangle(ref CurrentTransfare);
+                    CurrentTransfare = null;
+                    currentState = GPUState.Idle;
                     break;
 
-                case TransferType.VRamToCpu:
-                    window.ReadBackTexture(gpuTransfer.destination_X, gpuTransfer.destination_Y,
-                        gpuTransfer.width, gpuTransfer.height, ref gpuTransfer.data);
-                    //gpuTransfer.transferType = TransferType.Off;
-                    currentState = GPUState.ReadyToDecode;
+                case (uint)TransferType.VramToVram:
+                    window.VramToVramCopy(ref CurrentTransfare);
+                    CurrentTransfare = null;
+                    currentState = GPUState.Idle;
                     break;
 
-                case TransferType.VramToVram:  
-                    //Console.WriteLine("[GPU] Vram to Vram"); 
-
-                    window.VramToVramCopy((int)(gpuTransfer.parameters[1] & 0xFFFF), (int)((gpuTransfer.parameters[1] >> 16) & 0xFFFF),
-                    (int)(gpuTransfer.parameters[2] & 0xFFFF), (int)((gpuTransfer.parameters[2] >> 16) & 0xFFFF), (int)(gpuTransfer.parameters[3] & 0xFFFF), (int)((gpuTransfer.parameters[3] >> 16) & 0xFFFF));
-                  
-                    gpuTransfer.transferType = TransferType.Off;
-                    currentState = GPUState.ReadyToDecode;
+                case (uint)TransferType.CpuToVram:
+                    window.CpuToVramCopy(ref CurrentTransfare);
+                    CurrentTransfare = null;
+                    currentState = GPUState.Idle;
                     break;
 
-                case TransferType.VramFill:
-                    window.DisableBlending();
-                    window.VramFill(gpuTransfer.fillColor_R, gpuTransfer.fillColor_G, gpuTransfer.fillColor_B,
-                        gpuTransfer.destination_X, gpuTransfer.destination_Y, gpuTransfer.width, gpuTransfer.height);
-                    gpuTransfer.transferType = TransferType.Off;
-                    currentState = GPUState.ReadyToDecode;
-
+                case (uint)TransferType.VramToCpu:
+                    window.VramToCpuCopy(ref CurrentTransfare);
                     break;
 
-                default:
-                    Console.WriteLine(value.ToString("x"));
-
-                    Console.WriteLine(gpuTransfer.transferType);
-                    Console.WriteLine(gpuTransfer.paramsReady);
-                    Console.WriteLine(gpuTransfer.dataEnd);
-
-
-                    throw new NotImplementedException();
+                default: throw new NotImplementedException();
             }
         }
 
@@ -387,11 +355,8 @@ namespace PSXEmulator {
 
                 case 0x02:  //Vram Fill
                     currentState = GPUState.Transferring;
-                    gpuTransfer.transferType = TransferType.VramFill;
-                    gpuTransfer.paramPtr = 0;
-                    gpuTransfer.dataPtr = 0;
-                    gpuTransfer.parameters = new uint[gpuTransfer.transferType == TransferType.VramToVram ? 4 : 3];
-                    gpuTransfer.parameters[gpuTransfer.paramPtr++] = command;
+                    CurrentTransfare = new GPU_MemoryTransfer(3, 2);
+                    CurrentTransfare.Add(command);
                     break;
 
                 default: throw new Exception("Unknown GP0 misc command: " + opcode.ToString("x"));
@@ -486,10 +451,8 @@ namespace PSXEmulator {
         private void gp1_reset_command_buffer() {
             //Reset Fifo, which I don't emulate
             primitive = null;
-            currentState = GPUState.ReadyToDecode;
-            gpuTransfer.paramPtr = 0;
-            gpuTransfer.dataPtr = 0;
-            gpuTransfer.transferType = TransferType.Off;
+            currentState = GPUState.Idle;
+            CurrentTransfare = null;
         }
 
         private void gp1_acknowledge_irq() {
@@ -505,7 +468,6 @@ namespace PSXEmulator {
             this.display_line_end = (UInt16)((value>>10) & 0x3ff);
             UpdateVerticalRange();
         }
-
 
         private void gp1_display_horizontal_range(UInt32 value) {
             this.display_horiz_start = (UInt16)(value & 0xfff);
@@ -614,9 +576,7 @@ namespace PSXEmulator {
 
             this.displayDepth = DisplayDepth.D15Bits;
 
-            this.currentState = GPUState.ReadyToDecode;
-            this.gpuTransfer.dataPtr = 0;
-            this.gpuTransfer.paramPtr = 0;
+            this.currentState = GPUState.Idle;
             this.currentLine = 0;
 
             //...Clear Fifo
@@ -627,17 +587,16 @@ namespace PSXEmulator {
         }
 
         uint lastGPURead = 0x0;
-        internal uint gpuReadReg() {
+        internal uint GPU_ReadReg() {
             //Handle responding to GP0(C0h) (Vram to CPU), if it exists 
-            if (gpuTransfer.transferType == TransferType.VRamToCpu) {
-                ushort pixel0 = gpuTransfer.data[gpuTransfer.dataPtr++];
-                ushort pixel1 = gpuTransfer.data[gpuTransfer.dataPtr++];
-                uint merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
-                if (gpuTransfer.dataEnd) {
-                    gpuTransfer.transferType = TransferType.Off;
+            if (CurrentTransfare != null && CurrentTransfare.Type == (uint)TransferType.VramToCpu) {
+                uint data = CurrentTransfare.ReadWord();
+                if (CurrentTransfare.DataEnd) {
+                    CurrentTransfare = null;
+                    currentState = GPUState.Idle;
                 }
-                lastGPURead = merged_Pixels;
-                return merged_Pixels;
+                lastGPURead = data;
+                return data;
             }
 
             int start = 0;
@@ -687,7 +646,7 @@ namespace PSXEmulator {
         public uint LoadWord(uint address) {
             uint offset = address - range.start;
             switch (offset) {
-                case 0: return gpuReadReg();
+                case 0: return GPU_ReadReg();
                 case 4: return read_GPUSTAT();
                 default: throw new Exception("Unhandled read to offset " + offset);
             }

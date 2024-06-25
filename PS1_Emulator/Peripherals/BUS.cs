@@ -35,7 +35,6 @@ namespace PSXEmulator {
                     // KSEG2: 1024MB
                        0xffffffff, 0xffffffff
         };
-        PriorityQueue<BUSTransfare, int> TransfareQueue = new PriorityQueue<BUSTransfare, int>();
         const double GPU_FACTOR = ((double)715909) / 451584;
         public bool debug = false;
 
@@ -319,17 +318,16 @@ namespace PSXEmulator {
                             break;
 
                         case 2:  //GPU
-                            ushort pixel0 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
-                            ushort pixel1 = GPU.gpuTransfer.data[GPU.gpuTransfer.dataPtr++];
-                            uint merged_Pixels = (uint)(pixel0 | (pixel1 << 16));
-                            if (GPU.gpuTransfer.dataEnd) {
-                                GPU.gpuTransfer.transferType = GPU.TransferType.Off;
+                            uint data = GPU.CurrentTransfare.ReadWord();
+                            if (GPU.CurrentTransfare.DataEnd) {
+                                GPU.CurrentTransfare = null;
+                                GPU.currentState = GPU.GPUState.Idle;
                             }
-                            RAM.StoreWord(current_address, merged_Pixels);
+                            RAM.StoreWord(current_address, data);
                             break;
 
                         case 3: RAM.StoreWord(current_address, CDROM.DataController.ReadWord()); break;  //CD-ROM
-                        case 4: RAM.StoreWord(current_address, SPU.SPUtoDMA()); break;                     //SPU
+                        case 4: RAM.StoreWord(current_address, SPU.SPUtoDMA()); break;                    //SPU
 
                         case 6:
                             switch (transfer_size) {
@@ -349,15 +347,12 @@ namespace PSXEmulator {
 
             ch.done();
 
-            //Don't fire IRQ if it's MDEC, random workaround that may or may not work with games that need MDEC
-            //if (ch.get_portnum() == 1 || ch.get_portnum() == 0) { return; }   
-
             //DMA IRQ 
             if (((DMA.ch_irq_en >> (int)ch.get_portnum()) & 1) == 1) {
                 DMA.ch_irq_flags |= (byte)(1 << (int)ch.get_portnum());
             }
             if (DMA.IRQRequest() == 1) {
-                IRQ_CONTROL.IRQsignal(3);   //Instant IRQ is causing problems
+                IRQ_CONTROL.IRQsignal(3);   //Instant IRQ may cause problems
             };
 
         }
@@ -373,13 +368,5 @@ namespace PSXEmulator {
             SerialIO1.Tick(cycles); 
         }
     }
-
-
-   public class BUSTransfare {
-        //Priority
-        public DMAChannel CH;
-        public int Rate;
-    }
-
 }
 

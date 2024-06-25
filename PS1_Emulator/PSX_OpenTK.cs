@@ -3,6 +3,7 @@ using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
+using PSXEmulator.Peripherals.GPU;
 using PSXEmulator.Peripherals.IO;
 using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
@@ -110,6 +111,7 @@ namespace PSXEmulator {
         private int TexCoords;
         private int TexWindow;
 
+        private int IsCopy;
         private int TexModeLoc;
         private int MaskBitSettingLoc;
         private int ClutLoc;
@@ -186,8 +188,12 @@ namespace PSXEmulator {
     
             //Convert x from [0,1023] and y from [0,511] coords to [-1,1]
 
-            float xpos = ((float(vertixInput.x) + 0.5) / 512.0) - 1.0;
-            float ypos = ((float(vertixInput.y) - 0.5) / 256.0) - 1.0;
+            //float xpos = ((float(vertixInput.x) + 0.5) / 512.0) - 1.0;
+            //float ypos = ((float(vertixInput.y) - 0.5) / 256.0) - 1.0;
+
+            float xpos = ((float(vertixInput.x) / 1024.0) * 2.0) - 1.0;
+            float ypos = ((float(vertixInput.y) / 512.0) * 2.0) - 1.0;
+
 	        vec4 positions[4];
             vec2 texcoords[4];
             renderModeFrag = renderMode;
@@ -245,8 +251,9 @@ namespace PSXEmulator {
             uniform int TextureMode;
 
             uniform int isDithered;
-            uniform int transparencyMode;       //4 = disabled
+            uniform int transparencyMode;                   //4 = disabled
             uniform int maskBitSetting;
+            uniform int isCopy = 0;                         //Only change when doing copy by render
 
             flat in int renderModeFrag;
 
@@ -386,8 +393,8 @@ namespace PSXEmulator {
 
 
                 //Fix up UVs and apply texture window
-                  ivec2 UV = ivec2(floor(texCoords + vec2(0.0001, 0.0001))) & ivec2(0xff);
-                  UV = (UV & ~(u_texWindow.xy * 8)) | ((u_texWindow.xy & u_texWindow.zw) * 8); //XY contain Mask, ZW contain Offset  
+                  ivec2 UV = ivec2(floor(texCoords + vec2(0.0001, 0.0001))) & ivec2(0xFF);
+                  UV = (UV & ((u_texWindow.xy * 8) - 1)) | ((u_texWindow.xy & u_texWindow.zw) * 8); //XY contain Mask, ZW contain Offset  
 
 
   	            if(TextureMode == -1){		//No texture, for now i am using my own flag (TextureMode) instead of (inTexpage & 0x8000) 
@@ -489,26 +496,34 @@ namespace PSXEmulator {
 
 	            else {  //16 Bit texture
 
- 		               ivec2 texelCoord = UV + texpageBase;
-                       outputColor = sampleVRAM(texelCoord);
+                        
+                       if(isCopy == 0){ 
+                                ivec2 texelCoord = UV + texpageBase;
+                                outputColor = sampleVRAM(texelCoord);
+                    
+                                if (outputColor.rgba == vec4(0.0, 0.0, 0.0, 0.0) || 
+                                ((outputColor.rgba == vec4(0.0, 0.0, 0.0, 1.0)) && (transparencyMode != 4))) { discard; }
 
-                       if (outputColor.rgba == vec4(0.0, 0.0, 0.0, 0.0) || 
-                       ((outputColor.rgba == vec4(0.0, 0.0, 0.0, 1.0)) && (transparencyMode != 4))) { discard; }
-
-                       outputColor = texBlend(outputColor, vec4(color_in,1.0));	
+                                outputColor = texBlend(outputColor, vec4(color_in,1.0));	
                             
-                       //Check if pixel is transparent depending on bit 15 of the final color value
+                                //Check if pixel is transparent depending on bit 15 of the final color value
 
-                        bool isTransparent = (((sample16(texelCoord) >> 15) & 1) == 1);     
+                                 bool isTransparent = (((sample16(texelCoord) >> 15) & 1) == 1);     
 
-                        if(isTransparent && transparencyMode != 4){
-                             outputBlendColor = handleAlphaValues();
+                                 if(isTransparent && transparencyMode != 4){
+                                     outputBlendColor = handleAlphaValues();
 
-                        }else{
-                             outputBlendColor  = vec4(1.0, 1.0, 1.0, 0.0);
+                                }else{
+                                     outputBlendColor  = vec4(1.0, 1.0, 1.0, 0.0);
+                                }
+                                 
+                        } else {
+                                outputColor = sampleVRAM(ivec2(texCoords)); 
+                                outputBlendColor  = vec4(1.0, 1.0, 1.0, 0.0);
                         }
 
-                        //Handle Mask Bit setting
+ 		               
+                        //Handle Mask Bit setting (affects both render and copy commands)
 
                         if((maskBitSetting & 1) == 1){
                                 outputColor.a = 1.0;
@@ -562,7 +577,8 @@ namespace PSXEmulator {
             TexModeLoc = GL.GetUniformLocation(Shader.Program, "TextureMode");
             ClutLoc = GL.GetUniformLocation(Shader.Program, "inClut");
             TexPageLoc = GL.GetUniformLocation(Shader.Program, "inTexpage");
-            
+            IsCopy = GL.GetUniformLocation(Shader.Program, "isCopy");
+
             TransparencyModeLoc = GL.GetUniformLocation(Shader.Program, "transparencyMode");
             MaskBitSettingLoc = GL.GetUniformLocation(Shader.Program, "maskBitSetting");
             IsDitheredLoc = GL.GetUniformLocation(Shader.Program, "isDithered");
@@ -623,8 +639,16 @@ namespace PSXEmulator {
             DrawOffsetY = y;   
         }
 
+        ushort TexWindowX;
+        ushort TexWindowY;
+        ushort TexWindowZ;
+        ushort TexWindowW;
         public void SetTextureWindow(ushort x, ushort y, ushort z, ushort w) {
             GL.Uniform4(TexWindow, x, y, z, w);
+            TexWindowX = x;
+            TexWindowY = y;
+            TexWindowZ = z;
+            TexWindowW = w;
         }
 
         public void SetScissorBox(int x, int y, int width, int height) {
@@ -729,7 +753,6 @@ namespace PSXEmulator {
 
             bool isTextured, ushort clut, ushort page)  {
           
-
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
             
@@ -817,36 +840,27 @@ namespace PSXEmulator {
             FrameUpdated = true;
         }
 
-        public void ReadBackTexture(UInt16 x, UInt16 y, UInt16 width, UInt16 height, ref UInt16[] texData) {
+        public void ReadBackTexture(int x, int y, int width, int height, ref ushort[] texData) {
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, VramFrameBuffer);
             GL.ReadPixels(x, y, width, height, PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, texData);
         }
 
-        public void VramFill(float r, float g, float b, int x, int y, int width, int height) {
-            //Fill does NOT occur when Xsiz=0 or Ysiz=0 (unlike as for Copy commands).
-            //Xsiz=400h works only indirectly: Param=400h is handled as Xsiz=0, however, Param=3F1h..3FFh is rounded-up and handled as Xsiz=400h.
+        public void VramFillRectangle(ref GPU_MemoryTransfer transfare) {
+            int width = (int)transfare.Width;
+            int height = (int)transfare.Height;
 
-            //If I handle 400h as 0 jakub gpu tests don't render correctly...
-            if (/* width == 0x400 || */ width == 0 || height == 0) {
-                return;
-            }
-            if (width >= 0x3F1 && width <= 0x3FF) {
-                width = 0x400;
-            }
+            int x = (int)(transfare.Parameters[1] & 0x3F0);
+            int y = (int)((transfare.Parameters[1] >> 16) & 0x1FF);
 
-            /*The "Color" parameter is a 24bit RGB value, however, the actual fill data is 16bit: 
-            The hardware automatically converts the 24bit RGB value to 15bit RGB (with bit15=0).
-            Fill is NOT affected by the Mask settings (acts as if Mask.Bit0,1 are both zero).*/
+            float r = (transfare.Parameters[0] & 0xFF) / 255.0f;
+            float g = ((transfare.Parameters[0] >> 8) & 0xFF) / 255.0f;
+            float b = ((transfare.Parameters[0] >> 16) & 0xFF) / 255.0f;
 
-            // I assume it uses dithering to convert it, the problem is that GLclear doesn't use the same renderign pipline
-            //TODO: Find a solution 
-
-            //GL.Uniform1(isDitheredLoc, 1);     
 
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
             GL.ClearColor(r, g, b, 0.0f);       //alpha = 0 (bit 15)
-            GL.Scissor(x,y, width, height);
+            GL.Scissor(x, y, width, height);
             GL.Clear(ClearBufferMask.ColorBufferBit);
 
             short[] rectangle = new short[] {
@@ -865,12 +879,16 @@ namespace PSXEmulator {
             FrameUpdated = true;
         }
 
-        public void UpdateVram(int x, int y , int width, int height, ref ushort[] textureData) {
-            if (width == 0) { width = VRAM_WIDTH; }
-            if (height == 0) { height = VRAM_HEIGHT; }            
+        public void CpuToVramCopy(ref GPU_MemoryTransfer transfare) {
+            int width = (int)transfare.Width;
+            int height = (int)transfare.Height;
+
+            int x_dst = (int)(transfare.Parameters[1] & 0x3FF);
+            int y_dst = (int)((transfare.Parameters[1] >> 16) & 0x1FF);
+
 
             if (CPU.BUS.GPU.force_set_mask_bit) {
-                for (int i = 0; i < textureData.Length; i++) { textureData[i] |= (1 << 15); }
+                for (int i = 0; i < transfare.Data.Length; i++) { transfare.Data[i] |= (1 << 15); }
             }
 
             //Slow
@@ -888,14 +906,14 @@ namespace PSXEmulator {
 
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
             GL.BindTexture(TextureTarget.Texture2D, VramTexture);
-            GL.TexSubImage2D(TextureTarget.Texture2D, 0, x, y, width, height, 
-                PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, textureData);
+            GL.TexSubImage2D(TextureTarget.Texture2D, 0, x_dst, y_dst, width, height, 
+                PixelFormat.Rgba, PixelType.UnsignedShort1555Reversed, transfare.Data);
 
             short[] rectangle = new short[] {
-                (short)x, (short)y,
-                (short)(x+width), (short)y,
-                (short)(x+width),(short)(y+height),
-                (short)x, (short)(y+height)
+                (short)x_dst, (short)y_dst,
+                (short)(x_dst+width), (short)y_dst,
+                (short)(x_dst+width),(short)(y_dst+height),
+                (short)x_dst, (short)(y_dst+height)
             };
 
             UpdateIntersectionTable(ref rectangle);
@@ -919,47 +937,100 @@ namespace PSXEmulator {
             }
         }
 
-        public void VramToVramCopy(int x0_src, int y0_src, int x0_dest, int y0_dest, int width, int height) {
-            //Problem: this transfare should be subject to mask bit settings
+        public void VramToVramCopy(ref GPU_MemoryTransfer transfare) {   
+            //This transfare should be subject to mask bit settings
 
-            GL.Disable(EnableCap.ScissorTest);
+            //Get the dimensions
+            int width = (int)transfare.Width;
+            int height = (int)transfare.Height;
 
-            //Console.WriteLine($"From: {x0_src}, {y0_src} to {x0_dest}, {y0_dest} --- Width: {width} Height: {height}");
+            int x_src = (int)(transfare.Parameters[1] & 0x3FF);
+            int x_dst = (int)(transfare.Parameters[2] & 0x3FF);
 
+            int y_src = (int)((transfare.Parameters[1] >> 16) & 0x1FF);
+            int y_dst = (int)((transfare.Parameters[2] >> 16) & 0x1FF);
+
+            //Console.WriteLine($"From: {x_src}, {y_src} to {x_dst}, {y_dst} --- Width: {width} Height: {height}");
+
+            //Set up the verticies
             ushort[] src_coords = new ushort[] {
-                (ushort)x0_src, (ushort)y0_src,
-                (ushort)(x0_src + width), (ushort)y0_src,
-                (ushort)(x0_src + width), (ushort)(y0_src + height),
-                (ushort)x0_src, (ushort)(y0_src + height)
+                (ushort)x_src, (ushort)y_src,
+                (ushort)(x_src + width), (ushort)y_src,
+                (ushort)(x_src + width), (ushort)(y_src + height),
+                (ushort)x_src, (ushort)(y_src + height)
             };
 
             short[] dst_coords = new short[] {
-                (short)x0_dest, (short)y0_dest,
-                (short)(x0_dest + width), (short)y0_dest,
-                (short)(x0_dest + width), (short)(y0_dest + height),
-                (short)x0_dest, (short)(y0_dest + height)
+                (short)x_dst, (short)y_dst,
+                (short)(x_dst + width), (short)y_dst,
+                (short)(x_dst + width), (short)(y_dst + height),
+                (short)x_dst, (short)(y_dst + height)
             };
 
+            //Make sure we sample from an up-to-date texture
             if (TextureInvalidate(ref src_coords)) {
                 VramSync();
             }
 
+            //Bind GL stuff
             GL.BindTexture(TextureTarget.Texture2D, SampleTexture);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
 
-            //This is a lot faster than doing GL.ReadPixels then GL.TexSubImage2D
+           /* DisableBlending();  //?
+            GL.Disable(EnableCap.ScissorTest);
+
+            GL.BindBuffer(BufferTarget.ArrayBuffer, VertexBufferObject);
+            GL.BufferData(BufferTarget.ArrayBuffer, dst_coords.Length * sizeof(short), dst_coords, BufferUsageHint.StreamDraw);
+            GL.VertexAttribIPointer(0, 2, VertexAttribIntegerType.Short, 0, (IntPtr)null);
+            GL.EnableVertexAttribArray(0);
+
+            GL.DisableVertexAttribArray(1); //No need for colors buffer
+
+            GL.BindBuffer(BufferTarget.ArrayBuffer, TexCoords);
+            GL.BufferData(BufferTarget.ArrayBuffer, src_coords.Length * sizeof(ushort), src_coords, BufferUsageHint.StreamDraw);
+            GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
+            GL.EnableVertexAttribArray(2);
+
+            //Set up the uniforms
+            GL.Uniform1(RenderModeLoc, (int)RenderMode.RenderingPrimitives);
+            GL.Uniform1(TexModeLoc, 2);             //Mode = 16bpp (direct)
+            GL.Uniform1(IsDitheredLoc, 0);          //No dithering
+            GL.Uniform1(IsCopy, 1);                 //For copying this must be set to 1
+
+            //Draw a rectangle to perform the copy
+            GL.DrawArrays(PrimitiveType.TriangleFan, 0, 4);    
+            UpdateIntersectionTable(ref dst_coords);
+
+            //Restore
+            GL.Enable(EnableCap.ScissorTest);
+            GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
+            GL.Uniform1(IsCopy, 0);*/
+
+            //Summary:
+            //Instead of GL.CopyImageSubData, I copy the data by drawing a 16bpp textured rectangle at dst coords with its texture coords
+            //being the src coords. The reason is that I want it to pass through my shader for the mask bit setting to get handeled.
+            //Note that both ways are much faster than GL.ReadPixels.
+
             GL.CopyImageSubData(
-                SampleTexture, ImageTarget.Texture2D, 0, x0_src, y0_src, 0, 
-                VramTexture, ImageTarget.Texture2D, 0, x0_dest, y0_dest, 0,
+                SampleTexture, ImageTarget.Texture2D, 0, x_src, y_src, 0, 
+                VramTexture, ImageTarget.Texture2D, 0, x_dst, y_dst, 0,
                 width, height, 1);
 
             UpdateIntersectionTable(ref dst_coords);
-
-            GL.Enable(EnableCap.ScissorTest);
-            GL.Scissor(ScissorBox_X, ScissorBox_Y, ScissorBoxWidth, ScissorBoxHeight);
-
             FrameUpdated = true;
+
         }
+
+        public void VramToCpuCopy(ref GPU_MemoryTransfer transfare) {
+            int width = (int)transfare.Width;
+            int height = (int)transfare.Height;
+
+            int x_src = (int)(transfare.Parameters[1] & 0x3FF);
+            int y_src = (int)((transfare.Parameters[1] >> 16) & 0x1FF);
+
+            ReadBackTexture(x_src, y_src, width, height, ref transfare.Data);
+        }
+
         internal void SetBlendingFunction(uint function) {
 
             GL.Uniform1(TransparencyModeLoc, (int)function);
@@ -1128,23 +1199,27 @@ namespace PSXEmulator {
         //Applies Drawing offset and checks if final dimensions are valid (within range)
         private bool ApplyDrawingOffset(ref short[] vertices) {
             short maxX = -1024;
-            short maxY = -512;
+            short maxY = -1024;
             short minX = 1023;
-            short minY = 511;
+            short minY = 1023;
 
             for (int i = 0; i < vertices.Length; i += 2) {
-                vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetX));
+                //vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetX));
+                vertices[i] = (short)(Signed11Bits((ushort)vertices[i]) + DrawOffsetX);
+              
                 maxX = Math.Max(maxX, vertices[i]);
-                minX = Math.Min(minX, vertices[i]); 
+                minX = Math.Min(minX, vertices[i]);                 
             }
 
             for (int i = 1; i < vertices.Length; i += 2) {
-                vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetY));
+                //vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetY);
+                vertices[i] = (short)(Signed11Bits((ushort)vertices[i]) + DrawOffsetY);
+
                 maxY = Math.Max(maxY, vertices[i]);
                 minY = Math.Min(minY, vertices[i]);
             }
 
-            return !((Math.Abs(maxX - minX) > 1023) || (Math.Abs(maxY - minY) > 511));
+            return !((Math.Abs(maxX - minX) > 1024) || (Math.Abs(maxY - minY) > 512));
         }
 
         public System.Timers.Timer FrameTimer;
