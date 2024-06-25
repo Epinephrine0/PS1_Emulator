@@ -330,9 +330,10 @@ namespace PSXEmulator {
                         case 4: RAM.StoreWord(current_address, SPU.SPUtoDMA()); break;                    //SPU
 
                         case 6:
-                            switch (transfer_size) {
-                                case 1: RAM.StoreWord(current_address, 0xffffff); break;
-                                default: RAM.StoreWord(current_address, (base_address - 4) & 0x1fffff); break;
+                            if (transfer_size == 1) {
+                                RAM.StoreWord(current_address, 0xffffff);
+                            } else {
+                                RAM.StoreWord(current_address, (base_address - 4) & 0x1fffff);
                             }
                             break;
 
