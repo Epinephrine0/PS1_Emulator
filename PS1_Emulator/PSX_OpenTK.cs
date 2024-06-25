@@ -188,11 +188,11 @@ namespace PSXEmulator {
     
             //Convert x from [0,1023] and y from [0,511] coords to [-1,1]
 
-            //float xpos = ((float(vertixInput.x) + 0.5) / 512.0) - 1.0;
-            //float ypos = ((float(vertixInput.y) - 0.5) / 256.0) - 1.0;
+            float xpos = ((float(vertixInput.x) + 0.5) / 512.0) - 1.0;
+            float ypos = ((float(vertixInput.y) - 0.5) / 256.0) - 1.0;
 
-            float xpos = ((float(vertixInput.x) / 1024.0) * 2.0) - 1.0;
-            float ypos = ((float(vertixInput.y) / 512.0) * 2.0) - 1.0;
+            //float xpos = ((float(vertixInput.x) / 1024.0) * 2.0) - 1.0;
+            //float ypos = ((float(vertixInput.y) / 512.0) * 2.0) - 1.0;
 
 	        vec4 positions[4];
             vec2 texcoords[4];
@@ -394,7 +394,7 @@ namespace PSXEmulator {
 
                 //Fix up UVs and apply texture window
                   ivec2 UV = ivec2(floor(texCoords + vec2(0.0001, 0.0001))) & ivec2(0xFF);
-                  UV = (UV & ((u_texWindow.xy * 8) - 1)) | ((u_texWindow.xy & u_texWindow.zw) * 8); //XY contain Mask, ZW contain Offset  
+                  UV = (UV & ~(u_texWindow.xy * 8)) | ((u_texWindow.xy & u_texWindow.zw) * 8); //XY contain Mask, ZW contain Offset  
 
 
   	            if(TextureMode == -1){		//No texture, for now i am using my own flag (TextureMode) instead of (inTexpage & 0x8000) 
@@ -1212,7 +1212,7 @@ namespace PSXEmulator {
             }
 
             for (int i = 1; i < vertices.Length; i += 2) {
-                //vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetY);
+                //vertices[i] = Signed11Bits((ushort)(Signed11Bits((ushort)vertices[i]) + DrawOffsetY));
                 vertices[i] = (short)(Signed11Bits((ushort)vertices[i]) + DrawOffsetY);
 
                 maxY = Math.Max(maxY, vertices[i]);
