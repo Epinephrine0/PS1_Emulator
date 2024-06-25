@@ -17,8 +17,7 @@ namespace PSXEmulator {
         uint semi_transparency = 0;
         ushort texPage; //Unlike for Textured-Polygons, the "Texpage" must be set up separately for Rectangles, via GP0(E1h)
                         //I also added texmode in texpage (bits 7-8)
-        bool drawToDisplay = true;
-        public Rectangle(uint value, ushort texPage, uint semi_transparency, bool drawToDisplay) {  //TODO: Fix broken rectangles in Puzzle Bobble 2 
+        public Rectangle(uint value, ushort texPage, uint semi_transparency) { 
             //this.numOfParameters = numOfParameters;
             this.opcode = (value >> 24) & 0xff;
             this.texPage = texPage;
@@ -36,8 +35,7 @@ namespace PSXEmulator {
             if (size == 0) {
                 this.numOfParameters++;
             }
-            this.drawToDisplay = drawToDisplay;
-          
+            
             /*Console.WriteLine("Rectangle : " + opcode.ToString("x") + " - expected number of parameters: " + this.numOfParameters);
             Console.WriteLine("isTextured: " + isTextured);
             Console.WriteLine("isRawTextured: " + isRawTextured);

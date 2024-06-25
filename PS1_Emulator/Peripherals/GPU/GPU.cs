@@ -295,7 +295,7 @@ namespace PSXEmulator {
 
                 case 0x03:      //Rectangle Commands
                     ushort page = (ushort)(page_base_x | (((uint)page_base_y) << 4) | (((uint)texture_depth) << 7));
-                    primitive = new Rectangle(value, page, semi_transparency, draw_to_display);
+                    primitive = new Rectangle(value, page, semi_transparency);
                     currentState = GPUState.LoadingPrimitive;
                     break;
 
