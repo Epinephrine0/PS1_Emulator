@@ -1185,6 +1185,8 @@ namespace PSXEmulator {
 
             if (H < (SZ3_Saturated << 1)) {
                 //int z = (int)(countSignBit(SZ3_Saturated) - 16);
+
+                //Find leading zeroes (seems to work but has not been tested using amidog's GTE tests)
                 int z = 0;
                 for (int i = 1; i < 16; i++) {
                     if((SZ3_Saturated >> i) == 0){
@@ -1192,6 +1194,7 @@ namespace PSXEmulator {
                         break;
                     }
                 }
+
                 n = H << z;
                 uint d = (SZ3_Saturated << z);
                 uint u = (uint)(unr_table[(d - 0x7FC0) >> 7] + 0x101);
