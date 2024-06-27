@@ -1184,7 +1184,14 @@ namespace PSXEmulator {
             long n;
 
             if (H < (SZ3_Saturated << 1)) {
-                int z = (int)(countSignBit(SZ3_Saturated) - 16);
+                //int z = (int)(countSignBit(SZ3_Saturated) - 16);
+                int z = 0;
+                for (int i = 1; i < 16; i++) {
+                    if((SZ3_Saturated >> i) == 0){
+                        z = 16 - i; 
+                        break;
+                    }
+                }
                 n = H << z;
                 uint d = (SZ3_Saturated << z);
                 uint u = (uint)(unr_table[(d - 0x7FC0) >> 7] + 0x101);
@@ -1192,13 +1199,11 @@ namespace PSXEmulator {
                 d = (0x0000080 + (d * u)) >> 8;
                 n = Math.Min(0x1FFFF, ((n * d) + 0x8000) >> 16);
 
-            }
-            else {
+            } else {
                 n = 0x1FFFF;
                 FLAG |= 1 << 17;
-
+                FLAG |= (uint)1 << 31;
             }
-
 
             S[0].XY = S[1].XY;
             S[1].XY = S[2].XY;
