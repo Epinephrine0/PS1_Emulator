@@ -139,7 +139,7 @@ namespace PSXEmulator.Peripherals.SPU {
             if (headerShift > 12) { headerShift = 9; }
 
             int shift = 12 - headerShift;
-            int filter = (samples[0] & 0x70) >> 4;            //ProjectPSX ANDs it with 0X70 for some reason
+            int filter = (samples[0] & 0x70) >> 4;            //3 bits, unlike XA-ADPCM where filter is 2 bits
             if (filter > 4) { filter = 4; }
 
             int f0 = pos_xa_adpcm_table[filter];
@@ -228,7 +228,7 @@ namespace PSXEmulator.Peripherals.SPU {
             return (pitchCounter >> 12) & 0x1F;
         }
         public uint getInterpolationIndex() {
-            return (pitchCounter >> 3) & 0xFF; // >> 4 ??
+            return (pitchCounter >> 4) & 0xFF;
         }
         int signed4bits(byte value) {
             return value << 28 >> 28;
