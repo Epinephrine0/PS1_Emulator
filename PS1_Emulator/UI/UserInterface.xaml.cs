@@ -1,6 +1,9 @@
 ﻿using PSXEmulator.UI;
 using System;
+using System.Collections.Generic;
+using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
@@ -62,15 +65,13 @@ namespace PSXEmulator {
                 }
             }
         }
-        private void ConfigButton_Click(object sender, RoutedEventArgs e) {
-            //Later
-        }
+
         private void DisableAll() {
             GameList.IsHitTestVisible = false;
             PlayButton.IsHitTestVisible = false;   
-            ConfigButton.IsHitTestVisible = false;
             ImportButton.IsHitTestVisible = false;
         }
+
         private void loadBios() {
             using (OpenFileDialog openFileDialog = new OpenFileDialog()) {
                 openFileDialog.Title = "Select a PSX BIOS file";

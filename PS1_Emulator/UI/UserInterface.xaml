@@ -12,11 +12,10 @@
         AllowDrop="True"
         Drop="OnDrop">
     <Grid>
-        <Button Name = "PlayButton" Content="Start" HorizontalAlignment="Center" Margin="0,33,0,0" VerticalAlignment="Top" Height="34" Width="100" Click="PlayButton_Click" Background="#FF707070"/>
-        <Button Name = "ImportButton" Content="Load Games" HorizontalAlignment="Left" Margin="603,33,0,0" VerticalAlignment="Top" Height="34" Width="100" RenderTransformOrigin="3.391,1.291" Click="ImportButton_Click" Background="#FF707070"/>
-        <Button Name = "ConfigButton" Content="Configuration" HorizontalAlignment="Left" Margin="96,33,0,0" VerticalAlignment="Top" Height="34" Width="100" Click="ConfigButton_Click" Background="#FF707070"/>
+        <Button Name = "PlayButton" Content="Start" HorizontalAlignment="Left" Margin="200,44,0,0" VerticalAlignment="Top" Height="34" Width="100" Click="PlayButton_Click" Background="#FF707070"/>
+        <Button Name = "ImportButton" Content="Load Games" HorizontalAlignment="Left" Margin="500,44,0,0" VerticalAlignment="Top" Height="34" Width="100" RenderTransformOrigin="3.391,1.291" Click="ImportButton_Click" Background="#FF707070"/>
 
-        
+
         <ListView Name = "GameList" Margin="0,112,0,0" Background="#363535" BorderBrush = "#363535" ScrollViewer.VerticalScrollBarVisibility="Hidden">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
@@ -34,7 +33,7 @@
                             <Setter Property="Foreground" Value="White" />
                         </Trigger>
                     </Style.Triggers>
-                
+
                 </Style>
             </ListView.ItemContainerStyle>
         </ListView>
