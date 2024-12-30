@@ -87,7 +87,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: return 0xFFFFFFFF;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFFFFFFFF;
 
-                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return 0;
+                default: throw new Exception("Unhandled LoadWord from: " + address.ToString("X"));
             }
         }
 
@@ -122,7 +122,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
 
-                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return;
+                default: throw new Exception("Unhandled StoreWord from: " + address.ToString("X")); 
             }
         }
 
@@ -148,7 +148,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFFFF;
 
 
-                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return 0;
+                default: throw new Exception("Unhandled LoadHalf from: " + address.ToString("X"));
             }    
         }
 
@@ -202,7 +202,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: return 0xFF;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: return 0xFF;
 
-                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return 0; 
+                default: throw new Exception("Unhandled LoadByte from: " + address.ToString("X"));
 
             }
         }
@@ -225,7 +225,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
 
-                default: Console.WriteLine("Unhandled LoadWord from: " + address.ToString("X")); return;
+                default: throw new Exception("Unhandled StoreByte from: " + address.ToString("X")); 
             }           
         }
 
