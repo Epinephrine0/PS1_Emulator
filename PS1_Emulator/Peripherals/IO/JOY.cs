@@ -100,7 +100,7 @@ namespace PSXEmulator.Peripherals.IO {
                 case 0x8: return GetMode();
                 case 0xA: return GetCtrl();
                 case 0xE: return (ushort)(Status.Baud & 0xFFFF);
-                default: throw new Exception("Attempting to load word from: " + address.ToString("x"));
+                default: throw new Exception("Attempting to load half from: " + address.ToString("x"));
             }
         }
 
@@ -110,7 +110,7 @@ namespace PSXEmulator.Peripherals.IO {
                 case 0x8: WriteMode(data); break;
                 case 0xA: WriteCtrl(data); break;
                 case 0xE: Status.Baud = data; break;
-                default: throw new Exception("Attempting to load word from: " + address.ToString("x"));
+                default: throw new Exception("Attempting to store half to: " + address.ToString("x"));
             }
         }
 
