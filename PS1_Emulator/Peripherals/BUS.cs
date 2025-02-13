@@ -122,7 +122,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
 
-                default: throw new Exception("Unhandled StoreWord from: " + address.ToString("X")); 
+                default: throw new Exception("Unhandled StoreWord to: " + address.ToString("X")); 
             }
         }
 
@@ -179,7 +179,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
 
-                default: throw new Exception("Unhandled StoreHalf from: " + address.ToString("X")); return;
+                default: throw new Exception("Unhandled StoreHalf to: " + address.ToString("X")); return;
             }
         }
 
@@ -225,7 +225,7 @@ namespace PSXEmulator {
                 case uint when address >= 0x1F801064 && address <= 0x1F801064 + 0x00C: break;
                 case uint when address >= 0x1F801078 && address <= 0x1F801078 + 0x008: break;
 
-                default: throw new Exception("Unhandled StoreByte from: " + address.ToString("X")); 
+                default: throw new Exception("Unhandled StoreByte to: " + address.ToString("X")); 
             }           
         }
 
