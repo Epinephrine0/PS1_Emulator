@@ -71,7 +71,7 @@ namespace PSXEmulator {
                 case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadWord(physicalAddress);
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): return IRQ_CONTROL.Read(physicalAddress);
                 case uint when DMA.range.Contains(physicalAddress): return DMA.ReadWord(physicalAddress);
-                case uint when GPU.range.Contains(physicalAddress): return GPU.LoadWord(physicalAddress);
+                case uint when GPU.Range.Contains(physicalAddress): return GPU.LoadWord(physicalAddress);
                 case uint when SPU.range.Contains(physicalAddress): return SPU.LoadWord(physicalAddress);
                 case uint when Timer0.Range.Contains(physicalAddress): return Timer0.Read(physicalAddress);    
                 case uint when Timer1.Range.Contains(physicalAddress): return Timer1.Read(physicalAddress);
@@ -99,7 +99,7 @@ namespace PSXEmulator {
                 case uint when RamSize.range.Contains(physicalAddress): RamSize.StoreWord(value); break;
                 case uint when MemoryControl.range.Contains(physicalAddress): MemoryControl.Write(physicalAddress, value); break;
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): IRQ_CONTROL.Write(physicalAddress, (ushort)value); break; //Cast? could be wrong
-                case uint when GPU.range.Contains(physicalAddress): GPU.StoreWord(physicalAddress, value); break;
+                case uint when GPU.Range.Contains(physicalAddress): GPU.StoreWord(physicalAddress, value); break;
                 case uint when CacheControl.range.Contains(physicalAddress): break; //...?
                 case uint when Timer0.Range.Contains(physicalAddress): Timer0.Write(physicalAddress, value); break;    
                 case uint when Timer1.Range.Contains(physicalAddress): Timer1.Write(physicalAddress, value); break;
@@ -255,7 +255,7 @@ namespace PSXEmulator {
                     address = (address + 4) & 0x1ffffc;
 
                     uint command = RAM.LoadWord(address);
-                    GPU.write_GP0(command);
+                    GPU.WriteGP0(command);
                     num_of_words -= 1;
 
                 }
@@ -305,7 +305,7 @@ namespace PSXEmulator {
 
                     switch (ch.get_portnum()) {
                         case 0: MDEC.CommandAndParameters(data); break;   //MDECin  (RAM to MDEC)
-                        case 2: GPU.write_GP0(data); break;
+                        case 2: GPU.WriteGP0(data); break;
                         case 4: SPU.DMAtoSPU(data);  break;
                         default: throw new Exception("Unhandled DMA destination port: " + ch.get_portnum());
                     }
@@ -363,7 +363,7 @@ namespace PSXEmulator {
             Timer1.SystemClockTick(cycles);
             Timer2.SystemClockTick(cycles);
             SPU.SPU_Tick(cycles);
-            GPU.tick(cycles * GPU_FACTOR);
+            GPU.Tick(cycles * GPU_FACTOR);
             CDROM.tick(cycles);
             JOY_IO.Tick(cycles);
             SerialIO1.Tick(cycles); 

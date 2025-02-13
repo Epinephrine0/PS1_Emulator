@@ -7,25 +7,23 @@ namespace PSXEmulator {
         bool isGouraud;
         bool isPolyLine;
         bool isSemiTransparent;
-        uint semi_transparency = 0;
         bool isDithered;
-        uint opcode;
+        ushort semiTransparency;
         List<uint> buffer = new List<uint>();
         short[] vertices;
         byte[] colors;
-        public Line(uint value, uint semi_transparency, bool isDithered) {
-            opcode = value >> 24;
-            this.semi_transparency = semi_transparency;
+        public Line(uint value, bool isDithered, ushort globalSemiTransparency) {
             this.isDithered = isDithered;
+            this.semiTransparency = globalSemiTransparency;
             isGouraud = ((value >> 28) & 1) == 1;
             isPolyLine = ((value >> 27) & 1) == 1;
             isSemiTransparent = ((value >> 25) & 1) == 1;
             buffer.Add(value);
         }
-        public void add(uint value) {
+        public void Add(uint value) {
             buffer.Add(value);
         }
-        public bool isReady() {
+        public bool IsReady() {
             //When polyline mode is active, at least two vertices must be sent to the GPU.
             //The vertex list is terminated by the bits 12-15 and 28-31 equaling 0x5, or (word & 0xF000F000) == 0x50005000.
             if (isPolyLine) {   
@@ -35,7 +33,7 @@ namespace PSXEmulator {
                 return buffer.Count == (isGouraud ? 4 : 3);  
             }
         }
-        public void draw(ref Renderer window) {
+        public void Draw(ref Renderer window) {
 
             int numOfVertices = buffer.Count;
 
@@ -72,7 +70,7 @@ namespace PSXEmulator {
             }
 
             if (isSemiTransparent) {
-                window.SetBlendingFunction(semi_transparency);
+                window.SetBlendingFunction(semiTransparency);
             }
             else {
                 window.DisableBlending();

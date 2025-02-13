@@ -21,30 +21,26 @@ namespace PSXEmulator {
         bool isTextured;
         bool isSemiTransparent;
         bool isRawTextured;
+        ushort semiTransparency;
 
         uint[] vertices;
         uint[] colors;
         uint[] uv;
         List<uint> buffer = new List<uint>();
-        uint pointer;
-        uint opcode;
         ushort clut;
         ushort page;
-        int texMode;
         int numOfParameters = -1;
         int numberOfVertices = 0;
-        uint semi_transparency = 0;
-        bool isDithered = false;  
-      
-        public Polygon(uint value , uint semi_transparency, bool ditherEnabled) {
-            opcode = value >> 24;
+        bool isDithered = false;
+        bool setupArrays = false;
+        public Polygon(uint value, bool ditherEnabled, ushort globalSemiTransparency) {
             isGouraud = ((value >> 28) & 1) == 1;
             isQuad = ((value >> 27) & 1) == 1;
             isTextured = ((value >> 26) & 1) == 1;
             isSemiTransparent = ((value >> 25) & 1) == 1;
             isRawTextured = ((value >> 24) & 1) == 1;
-            this.semi_transparency = semi_transparency;
             numberOfVertices = isQuad ? 4 : 3;
+            this.semiTransparency = globalSemiTransparency;
             vertices = new uint[numberOfVertices];
             colors = new uint[numberOfVertices];
             uv = new uint[numberOfVertices];
@@ -66,15 +62,20 @@ namespace PSXEmulator {
             isDithered = ditherEnabled && (isGouraud || !isRawTextured);
         }
 
-        public void add(uint value) {
+        public void Add(uint value) {
             buffer.Add(value);
         }
-        public bool isReady() {
+
+        public bool IsReady() {
             return buffer.Count == numOfParameters;
         }
 
-        public void draw(ref Renderer window) {
-            int ptr = 0; 
+        public bool IsTextured() {
+            return isTextured;
+        }
+
+        public void SetupArrays() {
+            int ptr = 0;
             bool onlyOneColor = true;
 
             if (isGouraud) {
@@ -85,8 +86,7 @@ namespace PSXEmulator {
                         uv[i] = buffer[ptr++];
                     }
                 }
-            }
-            else {
+            } else {
                 for (int i = 0; i < numberOfVertices; i++) {
                     colors[i] = buffer[0];
                     if (onlyOneColor) {
@@ -102,12 +102,29 @@ namespace PSXEmulator {
                     }
                 }
             }
+            setupArrays = true;
+        }
+
+        public uint GetDrawMode() {
+            if (!setupArrays) {
+                SetupArrays();
+            }
+            return (uv[1] >> 16);
+        }
+   
+        public void Draw(ref Renderer window) {
+            if (!setupArrays) {
+                SetupArrays();
+            }
 
             clut = (ushort)(uv[0] >> 16);
             page = (ushort)(uv[1] >> 16);
 
             if (isSemiTransparent) {
-                window.SetBlendingFunction(isTextured ? (uint)((page >> 5) & 3) : semi_transparency);
+                if (isTextured) {
+                    semiTransparency = (byte)((page >> 5) & 3);         
+                }
+                window.SetBlendingFunction(semiTransparency);
             }
             else {
                 window.DisableBlending();

@@ -14,14 +14,17 @@ namespace PSXEmulator {
         byte R;
         byte G;
         byte B;
-        uint semi_transparency = 0;
         ushort texPage; //Unlike for Textured-Polygons, the "Texpage" must be set up separately for Rectangles, via GP0(E1h)
                         //I also added texmode in texpage (bits 7-8)
-        public Rectangle(uint value, ushort texPage, uint semi_transparency) { 
+        byte semiTransparency;
+        byte texDepth;
+
+        public Rectangle(uint value, ushort texPage, byte globalSemiTransparency, byte texDepth) { 
             //this.numOfParameters = numOfParameters;
             this.opcode = (value >> 24) & 0xff;
             this.texPage = texPage;
-            this.semi_transparency = semi_transparency; 
+            this.semiTransparency = globalSemiTransparency;
+            this.texDepth = texDepth;
             size = (byte)((value >> 27) & 0x3);
             isTextured = ((value >> 26) & 1) == 1;
             isSemiTransparent = ((value >> 25) & 1) == 1;
@@ -42,13 +45,13 @@ namespace PSXEmulator {
             Console.WriteLine("size: " + size);*/
         }
 
-        public void add(uint value) {
+        public void Add(uint value) {
             buffer.Add(value);  
         }
-        public bool isReady() {
+        public bool IsReady() {
             return buffer.Count == numOfParameters;
         }
-        public void draw(ref Renderer window) {
+        public void Draw(ref Renderer window) {
         
             //...and, of course, the GPU does render Rectangles as a single entity, without splitting them into two triangles.
             //Width and Height can be up to 1023x511
@@ -100,7 +103,7 @@ namespace PSXEmulator {
             }
 
             if (isSemiTransparent) {        
-                window.SetBlendingFunction(semi_transparency);
+                window.SetBlendingFunction(semiTransparency);
             }
             else {
                 window.DisableBlending();
@@ -113,7 +116,7 @@ namespace PSXEmulator {
                 x1, y2, 
                 R, G, B, R, G, B, R, G, B, R, G, B,
                 tx1, ty1, tx2, ty1, tx2, ty2, tx1, ty2,
-                isTextured, clut, texPage);
+                isTextured, clut, texPage, texDepth);
 
             /*window.drawTrinangle(
                 x1, y1,

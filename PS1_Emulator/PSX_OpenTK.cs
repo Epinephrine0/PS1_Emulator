@@ -751,7 +751,7 @@ namespace PSXEmulator {
             ushort tx3, ushort ty3,
             ushort tx4, ushort ty4,
 
-            bool isTextured, ushort clut, ushort page)  {
+            bool isTextured, ushort clut, ushort texPage, byte texDepth)  {
           
             GL.Viewport(0, 0, VRAM_WIDTH, VRAM_HEIGHT);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, VramFrameBuffer);
@@ -788,13 +788,13 @@ namespace PSXEmulator {
 
             if (isTextured) {
                 GL.Uniform1(ClutLoc, clut);
-                GL.Uniform1(TexPageLoc, page);
-                GL.Uniform1(TexModeLoc, (page >> 7) & 3);
+                GL.Uniform1(TexPageLoc, texPage);
+                GL.Uniform1(TexModeLoc, texDepth);
                 GL.BindBuffer(BufferTarget.ArrayBuffer, TexCoords);
                 GL.BufferData(BufferTarget.ArrayBuffer, UV.Length * sizeof(ushort), UV, BufferUsageHint.StreamDraw);
                 GL.VertexAttribPointer(2, 2, VertexAttribPointerType.UnsignedShort, false, 0, (IntPtr)null);
                 GL.EnableVertexAttribArray(2);
-                if (TextureInvalidatePrimitive(ref UV, page, clut)) {
+                if (TextureInvalidatePrimitive(ref UV, texPage, clut)) {
                     VramSync();
                 }
             }
@@ -887,7 +887,7 @@ namespace PSXEmulator {
             int y_dst = (int)((transfare.Parameters[1] >> 16) & 0x1FF);
 
 
-            if (CPU.BUS.GPU.force_set_mask_bit) {
+            if (CPU.BUS.GPU.ForceSetMaskBit) {
                 for (int i = 0; i < transfare.Data.Length; i++) { transfare.Data[i] |= (1 << 15); }
             }
 
@@ -1053,7 +1053,7 @@ namespace PSXEmulator {
 
             //Hack: Always sync if preserve_masked_pixels is true
             //This is kind of slow but fixes Silent Hills 
-            if (CPU.BUS.GPU.preserve_masked_pixels) {
+            if (CPU.BUS.GPU.PreserveMaskedPixels) {
                 return true;
             }
 
@@ -1115,7 +1115,7 @@ namespace PSXEmulator {
         public bool TextureInvalidate(ref ushort[] coords) {       
             //Hack: Always sync if preserve_masked_pixels is true
             //This is kind of slow but fixes Silent Hills 
-            if (CPU.BUS.GPU.preserve_masked_pixels) {
+            if (CPU.BUS.GPU.PreserveMaskedPixels) {
                 return true;
             }
 
@@ -1291,8 +1291,8 @@ namespace PSXEmulator {
         }
 
         public void SetAspectRatio() {
-            float display_x_start = CPU.BUS.GPU.display_vram_x_start;
-            float display_y_start = CPU.BUS.GPU.display_vram_y_start;
+            float display_x_start = CPU.BUS.GPU.DisplayVramXStart;
+            float display_y_start = CPU.BUS.GPU.DisplayVramYStart;
 
             float display_x_end = CPU.BUS.GPU.HorizontalRange + display_x_start - 1;   
             float display_y_end = CPU.BUS.GPU.VerticalRange + display_y_start - 1;
