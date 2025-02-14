@@ -22,6 +22,8 @@ namespace PSXEmulator {
         public int SelectedTrackNumber = 1;
         public byte[] LastSectorHeader = new byte[0x4];
         public byte[] LastSectorSubHeader = new byte[0x4];
+        public int BFRD = 0;
+
         public int EndOfDisk => Disk.Tracks[Disk.Tracks.Length - 1].Start + Disk.Tracks[Disk.Tracks.Length - 1].Length; 
         public struct XAFilter {
             public bool IsEnabled;
@@ -58,7 +60,6 @@ namespace PSXEmulator {
             CurrentVolume.RtoR = 0x40;
         }
 
-        public int BFRD = 0;
         public uint ReadWord() {
             if (BFRD != 1 || DataFifo.Count == 0) {
                 return 0;
