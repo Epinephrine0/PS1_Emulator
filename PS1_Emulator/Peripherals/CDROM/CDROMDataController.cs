@@ -8,7 +8,7 @@ using System.Windows.Forms.VisualStyles;
 namespace PSXEmulator {
     public class CDROMDataController {      //Inspects and directs data/audio sectors to CPU/SPU
         public byte Padding;
-        public Stack<Sector> SectorBuffer = new Stack<Sector>();
+        public Sector LastReadSector;
         public Queue<byte> DataFifo = new Queue<byte>();
         public uint BytesToSkip = 12;
         public uint SizeOfDataSegment = 0x800;
@@ -57,7 +57,12 @@ namespace PSXEmulator {
             CurrentVolume.LtoL = 0x40;
             CurrentVolume.RtoR = 0x40;
         }
+
+        public int BFRD = 0;
         public uint ReadWord() {
+            if (BFRD != 1 || DataFifo.Count == 0) {
+                return 0;
+            }
             uint b0 = DataFifo.Dequeue();
             uint b1 = DataFifo.Dequeue();
             uint b2 = DataFifo.Dequeue();
@@ -66,12 +71,14 @@ namespace PSXEmulator {
             return word;
         }
         public byte ReadByte() {
+            if (BFRD != 1 || DataFifo.Count == 0) {
+                return 0;
+            }
             return DataFifo.Dequeue();
         }
         public void MoveSectorToDataFifo() {
-            Sector recentSector = SectorBuffer.Pop();
-            for (int i = 0; i < SizeOfDataSegment; i++) {
-                DataFifo.Enqueue(recentSector.data[i]);
+            for (int i = 0; i < LastReadSector.data.Length; i++) {
+                DataFifo.Enqueue(LastReadSector.data[i]);
             }
         }
         public bool LoadNewSector(int currentIndex) {  //Only for CD-XA tracks, i.e. read command, not play command
@@ -98,19 +105,17 @@ namespace PSXEmulator {
                 }
                 return false;
             } else {
+                //Data sector (or audio but disabled)
+                //Should continue to data path
                 uint size = SizeOfDataSegment;
                 Span<byte> dataSpan = new Span<byte>(SelectedTrack, (int)(BytesToSkip + currentIndex), (int)size);
-                Sector sector = new Sector(dataSpan.ToArray()); //To array is bad
-                SectorBuffer.Push(sector);
-                /*for (uint i = 0; i < size; i++) {                                                               //Data sector (or audio but disabled)
-                    SectorBuffer.Enqueue(SelectedTrack[BytesToSkip + i + currentIndex]);                            //Should continue to data path
-                }*/
+                LastReadSector = new Sector(dataSpan.ToArray()); //To array is bad
                 return true;
             }
         }
         public void PlayCDDA(int currentIndex) {   //Handles play command
             int offset = currentIndex - Disk.Tracks[SelectedTrackNumber - 1].RoundedStart;
-
+           
             if ((offset + 0x930) >= SelectedTrack.Length) {
                 int newTrack = FindTrack(currentIndex);
                 SelectTrack(newTrack);
@@ -125,6 +130,7 @@ namespace PSXEmulator {
                     return;
                 } else {
                     SelectTrack(newTrack);
+                    offset = currentIndex - Disk.Tracks[SelectedTrackNumber - 1].RoundedStart;
                 }
             }
             //Add CD-DA Samples to the queue

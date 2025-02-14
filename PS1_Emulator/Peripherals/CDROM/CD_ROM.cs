@@ -184,7 +184,7 @@ namespace PSXEmulator {
             PRMEMPT = ParameterBuffer.Count == 0 ? 1 : 0;
             PRMWRDY = ParameterBuffer.Count < 16 ? 1 : 0;
             RSLRRDY = ResponseBuffer.HasUnreadData ? 1 : 0;
-            DRQSTS = DataController.DataFifo.Count > 0 ? 1 : 0;
+            DRQSTS = (DataController.DataFifo.Count > 0 && DataController.BFRD == 1) ? 1 : 0;
             BUSYSTS = TransmissionDelay > 0 ? 1 : 0;
             byte status = (byte)((BUSYSTS << 7) | (DRQSTS << 6)  | (RSLRRDY << 5) | (PRMWRDY << 4) | (PRMEMPT << 3) | (ADPBUSY << 2) | Index);
             return status;
@@ -244,12 +244,14 @@ namespace PSXEmulator {
         }
 
         private void RequestRegister(byte value) {
-            if ((value & 0x80) != 0) {  //Request data
+            if (((value >> 7) & 1) == 1) {  //Request data
                 //Console.WriteLine("DATA REQUESTED");
-                if (DataController.DataFifo.Count > 0 || DataController.SectorBuffer.Count == 0) { return; }
+                DataController.BFRD = 1;
+                if (DataController.DataFifo.Count > 0) { return; }
                 DataController.MoveSectorToDataFifo();
             } else {
                 //Console.WriteLine("FIFO CLEARED");
+                DataController.BFRD = 0;
                 DataController.DataFifo.Clear();
             }
         }
@@ -585,7 +587,7 @@ namespace PSXEmulator {
             cdrom.stat = 0x2;
             cdrom.Responses.Clear();
             cdrom.DataController.DataFifo.Clear();
-            cdrom.DataController.SectorBuffer.Clear();
+            //cdrom.DataController.SectorBuffer.Clear();
             cdrom.DataController.SelectTrack(1);
             cdrom.M = 0x00;
             cdrom.S = 0x02;
@@ -868,6 +870,7 @@ namespace PSXEmulator {
                         Responses.Enqueue(sectorAck);
                     }
                     ReadRate = OneSecond / (DoubleSpeed ? 150 : 75);    //Update the rate for next INTs
+
                     break;
 
                 case CDROMState.PlayingCDDA:
