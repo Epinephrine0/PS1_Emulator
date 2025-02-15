@@ -144,20 +144,20 @@ namespace PSXEmulator {
                 case 0x182: mainVolumeRight = (short)value; break;
                 case 0x184: vLOUT = (short)value; break;
                 case 0x186: vROUT = (short)value; break;
-                case 0x188: KON = KON & 0xFFFF0000 | value; break;
-                case 0x18a: KON = KON & 0x0000FFFF | (uint)value << 16; break;
-                case 0x18c: KOFF = KOFF & 0xFFFF0000 | value; break;
-                case 0x18e: KOFF = KOFF & 0x0000FFFF | (uint)value << 16; break;
-                case 0x190: PMON = PMON & 0xFFFF0000 | value; break;
-                case 0x192: PMON = PMON & 0x0000FFFF | (uint)value << 16; break;
-                case 0x194: NON = NON & 0xFFFF0000 | value; break;
-                case 0x196: NON = NON & 0x0000FFFF | (uint)value << 16; break;
-                case 0x198: EON = EON & 0xFFFF0000 | value; break;
-                case 0x19a: EON = EON & 0x0000FFFF | (uint)value << 16; break;
-                case 0x1b0: CDInputVolume = CDInputVolume & 0xFFFF0000 | value; break;
-                case 0x1b2: CDInputVolume = CDInputVolume & 0x0000FFFF | (uint)value << 16; break;
-                case 0x1b4: external_Audio_Input_Volume = external_Audio_Input_Volume & 0xFFFF0000 | value; break;
-                case 0x1b6: external_Audio_Input_Volume = external_Audio_Input_Volume & 0x0000FFFF | (uint)value << 16; break;
+                case 0x188: KON = (KON & 0xFFFF0000) | value; break;
+                case 0x18a: KON = (KON & 0x0000FFFF) | ((uint)(value << 16)); break;
+                case 0x18c: KOFF = (KOFF & 0xFFFF0000) | value; break;
+                case 0x18e: KOFF = (KOFF & 0x0000FFFF) | ((uint)(value << 16)); break;
+                case 0x190: PMON = (PMON & 0xFFFF0000) | value; break;
+                case 0x192: PMON = (PMON & 0x0000FFFF) | ((uint)(value << 16)); break;
+                case 0x194: NON = (NON & 0xFFFF0000) | value; break;
+                case 0x196: NON = (NON & 0x0000FFFF) | ((uint)(value << 16)); break;
+                case 0x198: EON = (EON & 0xFFFF0000) | value; break;
+                case 0x19a: EON = (EON & 0x0000FFFF) | ((uint)(value << 16)); break;
+                case 0x1b0: CDInputVolume = (CDInputVolume & 0xFFFF0000) | value; break;
+                case 0x1b2: CDInputVolume = (CDInputVolume & 0x0000FFFF) | ((uint)(value << 16)); break;
+                case 0x1b4: external_Audio_Input_Volume = (external_Audio_Input_Volume & 0xFFFF0000) | value; break;
+                case 0x1b6: external_Audio_Input_Volume = (external_Audio_Input_Volume & 0x0000FFFF) | ((uint)(value << 16)); break;
                 case 0x1ac: transfer_Control = value; break;
                 case 0x1a4: SPU_IRQ_Address = ((uint)value) << 3; break;    
                 case 0x1a6:
@@ -175,7 +175,7 @@ namespace PSXEmulator {
                     break;
 
                 case 0x19C:     //Read only?
-                    for (int i = 0; i < 16;i++) {
+                    for (int i = 0; i < 16; i++) {
                         voices[i].ENDX = (uint)((value >> i) & 1);
                     }
                     break;
