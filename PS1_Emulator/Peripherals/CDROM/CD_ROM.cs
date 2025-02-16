@@ -923,11 +923,10 @@ namespace PSXEmulator {
                 case CDROMState.SwappingDisk:
                     if (SwappingDelay > 0) {
                         SwappingDelay -= cycles;
-                        stat = 1 << 4;  //Lid open bit
+                        stat |= (1 << 4);  //Lid open bit
                         LidOpen = true;
                     } else {
                         State = CDROMState.Idle;
-                        stat = 0x2;
                         LidOpen = false;
                     }
                     return;
