@@ -21,7 +21,8 @@ namespace PSXEmulator {
         public byte[] LastSectorSubHeader = new byte[0x4];
         public byte Padding;
         public int BFRD = 0;
-        public int EndOfDisk => Disk.Tracks[Disk.Tracks.Length - 1].Start + Disk.Tracks[Disk.Tracks.Length - 1].Length;
+        public int EndOfTrack => Disk.Tracks[SelectedTrackNumber - 1].RoundedStart + Disk.Tracks[SelectedTrackNumber - 1].Length;
+        public int EndOfDisk => Disk.Tracks[Disk.Tracks.Length - 1].RoundedStart + Disk.Tracks[Disk.Tracks.Length - 1].Length;
         public struct Sector {
             public int TrackNumber;
             public int Start;
@@ -46,12 +47,20 @@ namespace PSXEmulator {
         }
 
         public CDROMDataController(string diskPath = null) {
+            LoadDisk(diskPath);
+            CurrentVolume.RtoL = 0x40;
+            CurrentVolume.RtoR = 0x40;
+            CurrentVolume.LtoL = 0x40;
+            CurrentVolume.RtoR = 0x40;
+        }
+
+        public void LoadDisk(string diskPath = null) {
             if (diskPath != null) {
                 Disk = new Disk(diskPath);
                 if (Disk.IsValid) {
                     SelectTrack(1);
                 } else {
-                    Console.WriteLine("[CDROM] Invalid Disk! will abort and boot the Shell");
+                    Console.WriteLine("[CDROM] Invalid Disk!");
                 }
                 if (Disk.IsAudioDisk) {
                     Console.WriteLine("[CDROM] Audio Disk detected");
@@ -60,10 +69,6 @@ namespace PSXEmulator {
                 Console.WriteLine("[CDROM] No game path provided");
                 Console.WriteLine("[CDROM] Proceeding to boot without a game");
             }
-            CurrentVolume.RtoL = 0x40;
-            CurrentVolume.RtoR = 0x40;
-            CurrentVolume.LtoL = 0x40;
-            CurrentVolume.RtoR = 0x40;
         }
 
         public uint ReadWord() {
@@ -134,8 +139,8 @@ namespace PSXEmulator {
 
         public void PlayCDDA(int currentIndex) {   //Handles play command
             int offset = currentIndex - Disk.Tracks[SelectedTrackNumber - 1].RoundedStart;
-           
-            if ((offset + 0x930) >= SelectedTrack.Length) {
+
+            if (offset >= SelectedTrack.Length) {          
                 int newTrack = FindTrack(currentIndex);
                 SelectTrack(newTrack);
                 offset = (currentIndex - Disk.Tracks[SelectedTrackNumber - 1].RoundedStart);

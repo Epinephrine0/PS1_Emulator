@@ -1403,6 +1403,17 @@ namespace PSXEmulator {
                     Console.WriteLine("Controller inputs not ignored");
                 }
                 Thread.Sleep(100);
+
+            } else if (e.Key.Equals(Keys.K)) {
+                //We borrow some functionality from Windows Forms
+                System.Windows.Forms.FolderBrowserDialog folderBrowserDialog = new System.Windows.Forms.FolderBrowserDialog();
+                folderBrowserDialog.Description = "Please Select a Game Folder to Swap";
+                folderBrowserDialog.UseDescriptionForTitle = true;
+                if (folderBrowserDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK) {
+                    Console.WriteLine("Swapping with: " + Path.GetFileName(folderBrowserDialog.SelectedPath));
+                    CPU.BUS.CDROM.SwapDisk(folderBrowserDialog.SelectedPath);
+                }
+                Thread.Sleep(100);
             }
 
             Console.ForegroundColor = previousColor;

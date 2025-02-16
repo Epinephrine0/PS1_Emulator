@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
 using System.Windows.Media.Animation;
+using static PSXEmulator.Controller;
 
 namespace PSXEmulator {
     public unsafe class CD_ROM {
@@ -39,6 +40,7 @@ namespace PSXEmulator {
 
         public enum Errors {
             SeekError = 0x04,
+            DriveDoorOpen = 0x08,
             InvalidParameter = 0x10,
             InvalidNumberOfParameters = 0x20,
             InvalidCommand = 0x40,
@@ -49,7 +51,8 @@ namespace PSXEmulator {
             Idle,
             Seeking,
             ReadingData,
-            PlayingCDDA
+            PlayingCDDA,
+            SwappingDisk
         }
 
         //Status Register
@@ -77,6 +80,7 @@ namespace PSXEmulator {
         uint LastSize;
         bool AutoPause;  //TODO
         bool CDDAReport;
+        bool ReadCDDASectors;    //Allow to Read (not play) CD-DA Sectors  
 
         int M, S, F;    
         int CurrentIndex; 
@@ -98,7 +102,7 @@ namespace PSXEmulator {
        // int PendingCommand = -1;
         int TransmissionDelay = 0;
  
-        public bool LedOpen = false;
+        public bool LidOpen = false;
 
         private delegate*<CD_ROM, void>[] LookUpTable = new delegate*<CD_ROM, void>[0xFF + 1];
         public CDROMDataController DataController;
@@ -107,15 +111,18 @@ namespace PSXEmulator {
 
         bool SeekedP;
         bool SeekedL;
+        int SwappingDelay = -1;
         public CD_ROM(string path, bool isDirectFile) {
             LoadLUT();
             DataController = new CDROMDataController(path);
         }
+
         public CD_ROM() {   //Overload for when booting EXEs
             //Stub for the CDROM Tests
             LoadLUT();
             //DataController = new CDROMDataController(@"C:\Users\Old Snake\Desktop\PS1\ROMS\Archive");
         }
+
         private void LoadLUT() {
             //Fill the functions lookUpTable with illegal first, to be safe
             for (int i = 0; i < LookUpTable.Length; i++) {
@@ -165,8 +172,10 @@ namespace PSXEmulator {
                     }
                 }
             }
+            //Console.WriteLine("CDROM: " + command.ToString("x"));
             Execute(command);
         }
+
         public void Execute(int command) {
             CurrentCommand = (byte)command;
             if (IsError) {
@@ -180,6 +189,14 @@ namespace PSXEmulator {
             LookUpTable[command](this);
             //Console.WriteLine("[CDROM] Command: 0x" + command.ToString("x"));
         }
+
+        public void SwapDisk(string path) {
+            SwappingDelay = OneSecond;       //Delay for disc lid open
+            DataController.LoadDisk(path);
+            State = CDROMState.SwappingDisk;
+            LidOpen = true;
+        }
+
         private byte CDROM_Status() {
             PRMEMPT = ParameterBuffer.Count == 0 ? 1 : 0;
             PRMWRDY = ParameterBuffer.Count < 16 ? 1 : 0;
@@ -189,6 +206,7 @@ namespace PSXEmulator {
             byte status = (byte)((BUSYSTS << 7) | (DRQSTS << 6)  | (RSLRRDY << 5) | (PRMWRDY << 4) | (PRMEMPT << 3) | (ADPBUSY << 2) | Index);
             return status;
         }
+
         public void StoreByte(uint address, byte value) {
             uint offset = address - range.start;
             switch (offset) {
@@ -268,6 +286,7 @@ namespace PSXEmulator {
                 }
             }
         }
+
         private void ApplyVolume(byte value) {
             bool isMute = (value & 1) != 0;
             bool applyVolume = ((value >> 5) & 1) != 0;
@@ -283,9 +302,11 @@ namespace PSXEmulator {
                 DataController.CurrentVolume.RtoR = RightCD_toRight_SPU_Volume;
             }
         }
+
         private static void Sync(CD_ROM cdrom) {
             Error(cdrom, Errors.InvalidCommand);
         }
+
         private static void Test(CD_ROM cdrom) {
             if (cdrom.ParameterBuffer.Count == 0) {
                 Error(cdrom, Errors.InvalidNumberOfParameters);
@@ -300,18 +321,21 @@ namespace PSXEmulator {
                 default: throw new Exception("[CDROM] Test command: unknown parameter: " + parameter.ToString("x"));
             }
         }
+
         private static void GetSCExCounters(CD_ROM cdrom) {
             //Typically, the values are "01h,01h" for Licensed PSX Data CDs, or "00h,00h" for disk missing, unlicensed data CDs, Audio CDs.
             Response ack = new Response(new byte[] { 0x1,0x1 }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
             //Seems like Spyro Year of The Dragon uses this command as one of its (many) anti piracy tricks  
         }
+
         private static void ReadSCEx(CD_ROM cdrom) {
             //19h,04h --> INT3(stat) ;Read SCEx string (and force motor on)
             Response ack = new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
             cdrom.stat |= 0x2; //Motor On
         }
+
         private static void MotorOn(CD_ROM cdrom) {
             //Activates the drive motor, works ONLY if the motor was off (otherwise fails with INT5(stat,20h);
             //that error code would normally indicate "wrong number of parameters", but means "motor already on" in this case). 
@@ -334,6 +358,7 @@ namespace PSXEmulator {
             cdrom.Responses.Enqueue(ack);
             cdrom.Responses.Enqueue(done);
         }
+
         private static void Forward(CD_ROM cdrom) {
             if (cdrom.State != CDROMState.PlayingCDDA) {
                 Error(cdrom, Errors.CannotRespondYet);
@@ -343,6 +368,7 @@ namespace PSXEmulator {
             Response ack = new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
         }
+
         private static void Backward(CD_ROM cdrom) {
             if (cdrom.State != CDROMState.PlayingCDDA) {
                 Error(cdrom, Errors.CannotRespondYet);
@@ -352,11 +378,10 @@ namespace PSXEmulator {
             Response ack = new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
         }
-        private static void GetLocL(CD_ROM cdrom) {
-         
-            if (cdrom.SeekedL || cdrom.SeekedP) {   //Error if a seek has been done but no read
+
+        private static void GetLocL(CD_ROM cdrom) {       
+            if (cdrom.SeekedL || cdrom.SeekedP || cdrom.LidOpen) {   //Error if a seek has been done but no read, also if lid is opened
                 Error(cdrom, Errors.CannotRespondYet);
-                Console.WriteLine("[CDROM] GetLoc Error: CannotRespondYet");
                 return;
             }
 
@@ -368,7 +393,13 @@ namespace PSXEmulator {
                 subHeader[0], subHeader[1], subHeader[2], subHeader[3]}, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
         }
-        private static void GetLocP(CD_ROM cdrom) { //Subchannel Q ?
+
+        private static void GetLocP(CD_ROM cdrom) {
+            if (cdrom.LidOpen) {                        //Error if if lid is opened
+                Error(cdrom, Errors.DriveDoorOpen);
+                return;
+            }
+
             //GetlocP - Command 11h - INT3(track,index,mm,ss,sect,amm,ass,asect) all BCD
             byte currentTrack = (byte)cdrom.DataController.SelectedTrackNumber;
 
@@ -415,16 +446,20 @@ namespace PSXEmulator {
             amm = DecToBcd((byte)cdm);
             ass = DecToBcd((byte)cds);
             aff = DecToBcd((byte)cdf);
+            //Console.WriteLine("GetLocP -> ALBA:" + amm.ToString("x") + ":" + ass.ToString("x") + ":" + aff.ToString("x"));
+            //Console.WriteLine("GetLocP -> LBA:" + mm.ToString("x") + ":" + ss.ToString("x") + ":" + ff.ToString("x"));
 
             Response ack = new Response(new byte[] { currentTrack, index, mm, ss, ff, amm, ass, aff }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
         }
+
         private static void SetFilter(CD_ROM cdrom) {
             cdrom.DataController.Filter.fileNumber = cdrom.ParameterBuffer.Dequeue();
             cdrom.DataController.Filter.channelNumber = cdrom.ParameterBuffer.Dequeue();
             Response ack = new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
         }
+
         private static void SeekP(CD_ROM cdrom) {
             if (cdrom.ParameterBuffer.Count > 0) {
                 Error(cdrom, Errors.InvalidNumberOfParameters);
@@ -456,7 +491,7 @@ namespace PSXEmulator {
         }
 
         private static void Play(CD_ROM cdrom) {   //CD-DA
-            int newIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F - 150) * 0x930;
+            int newIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F) * 0x930;        //No 2 sectors offset?
             cdrom.ReadRate = OneSecond / (cdrom.DoubleSpeed ? 150 : 75);
 
             if (cdrom.SetLoc) {
@@ -482,9 +517,17 @@ namespace PSXEmulator {
                 cdrom.F = cdrom.DataController.Disk.Tracks[cdrom.DataController.SelectedTrackNumber - 1].F;
                 cdrom.CurrentIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F) * 0x930;
             } else {
-                Console.WriteLine("[CDROM] CD-DA at MSF: " + cdrom.M + ":" + cdrom.S + ":" + cdrom.F);
+                //Find and select the right track
+                int trackNumber = cdrom.DataController.FindTrack(cdrom.CurrentIndex);
+                if (cdrom.DataController.SelectedTrackNumber != trackNumber) {
+                    cdrom.DataController.SelectTrack(trackNumber);     
+                }
             }
+
+            Console.WriteLine("[CDROM] CD-DA at MSF: " + cdrom.M + ":" + cdrom.S + ":" + cdrom.F +
+                " - Track: " + cdrom.DataController.SelectedTrackNumber);
         }
+
         private static void Stop(CD_ROM cdrom) {
             //The first response returns the current status (this already with bit5 cleared)
             //The second response returns the new status (with bit1 cleared)
@@ -507,6 +550,7 @@ namespace PSXEmulator {
 
             //TODO: Timing for stop while stopped? stop while paused? 
         }
+
         private static void GetTD(CD_ROM cdrom) {
             //GetTD - Command 14h,track --> INT3(stat,mm,ss) ;BCD
             /*For a disk with NN tracks, parameter values 01h..NNh return the start of the specified track, 
@@ -554,6 +598,7 @@ namespace PSXEmulator {
 
             Console.WriteLine("[CDROM] GETTN, Response (BCD): " + firstTrack + " and " + lastTrack);
         }
+
         private static void Mute(CD_ROM cdrom) {
             Response ack = new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
@@ -563,6 +608,7 @@ namespace PSXEmulator {
             Response ack = new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
         }
+
         private static void Pause(CD_ROM cdrom) {
             cdrom.Responses.Clear();    //This is very questionable
 
@@ -573,6 +619,7 @@ namespace PSXEmulator {
             cdrom.Responses.Enqueue(done);
             //Todo: Pause while paused timings?
         }
+
         private static void Init(CD_ROM cdrom) {
    
             if (cdrom.ParameterBuffer.Count > 0) {
@@ -596,7 +643,15 @@ namespace PSXEmulator {
             cdrom.Responses.Enqueue(new Response(new byte[] { cdrom.stat }, Delays.INT3_Init, Flags.INT3, CDROMState.Idle));
             cdrom.Responses.Enqueue(new Response(new byte[] { cdrom.stat }, Delays.INT2_Init, Flags.INT2, CDROMState.Idle));
         }
+
         private static void ReadNS(CD_ROM cdrom) {
+            if (cdrom.DataController.Disk.IsAudioDisk) {
+                if (!cdrom.ReadCDDASectors) {             //If Audio Disk and CDDA is disabled return error 0x40
+                    Error(cdrom, Errors.InvalidCommand);
+                    return;
+                }
+            }
+
             int newIndex = ((cdrom.M * 60 * 75) + (cdrom.S * 75) + cdrom.F - 150) * 0x930;
             cdrom.ReadRate = OneSecond / (cdrom.DoubleSpeed ? 150 : 75);
 
@@ -657,10 +712,12 @@ namespace PSXEmulator {
             cdrom.DoubleSpeed = ((cdrom.Mode >> 7) & 1) != 0;
             cdrom.AutoPause = ((cdrom.Mode >> 1) & 1) != 0;  //For audio play only
             cdrom.CDDAReport = ((cdrom.Mode >> 2) & 1) != 0; //For audio play only
-
+            cdrom.ReadCDDASectors = (cdrom.Mode & 1) != 0;  
             cdrom.DataController.XA_ADPCM_En = ((cdrom.Mode >> 6) & 1) != 0;    //(0=Off, 1=Send XA-ADPCM sectors to SPU Audio Input)
+
             cdrom.Responses.Enqueue(new Response(new byte[] { cdrom.stat }, Delays.INT3_General, Flags.INT3, cdrom.State));
         }
+
         private static void SeekL(CD_ROM cdrom) {
             if (cdrom.ParameterBuffer.Count > 0) {
                 Error(cdrom, Errors.InvalidNumberOfParameters);
@@ -694,6 +751,7 @@ namespace PSXEmulator {
             cdrom.DataController.SelectTrack(cdrom.DataController.FindTrack(cdrom.CurrentIndex));
             cdrom.SeekedL = true;
         }
+
         private static void Setloc(CD_ROM cdrom) {
             if (cdrom.ParameterBuffer.Count != 3) {
                 Error(cdrom, Errors.InvalidNumberOfParameters);
@@ -721,15 +779,22 @@ namespace PSXEmulator {
                 SS.ToString().PadLeft(2, '0') + ":" + FF.ToString().PadLeft(2, '0'));*/
 
         }
+
         private static void Error(CD_ROM cdrom, Errors code) {  //General Command Error
-            cdrom.stat = 0x3;   
-            cdrom.Responses.Enqueue(new Response(new byte[] { cdrom.stat, (byte)code }, Delays.INT5, Flags.INT5, CDROMState.Idle));
-            cdrom.stat = 0x2;
+            int open = cdrom.LidOpen ? (1 << 4) : 0;
+            CDROMState nextState = cdrom.LidOpen? CDROMState.SwappingDisk : CDROMState.Idle;
+            cdrom.stat = (byte)(0x3 | open);   
+            cdrom.Responses.Enqueue(new Response(new byte[] { cdrom.stat, (byte)code }, Delays.INT5, Flags.INT5, nextState));
+            cdrom.stat = (byte)(0x2 | open);
         }
+
         private static void Error(CD_ROM cdrom, Errors code, long Delay) {   //Overload for custom delay
-            cdrom.Responses.Enqueue(new Response(new byte[] { cdrom.stat, (byte)code }, Delay, (int)Flags.INT5, CDROMState.Idle));
-            cdrom.stat = 0x2;                
+            int open = cdrom.LidOpen ? (1 << 4) : 0;
+            CDROMState nextState = cdrom.LidOpen ? CDROMState.SwappingDisk : CDROMState.Idle;
+            cdrom.Responses.Enqueue(new Response(new byte[] { (byte)(cdrom.stat | open), (byte)code }, Delay, (int)Flags.INT5, nextState));
+            cdrom.stat = (byte)(0x2 | open);                
         }
+
         private static void GetID(CD_ROM cdrom) {
             if (cdrom.ParameterBuffer.Count > 0) {
                 Error(cdrom, Errors.InvalidNumberOfParameters);
@@ -752,7 +817,7 @@ namespace PSXEmulator {
             cdrom.Responses.Enqueue(done);
         }
         private static void GetStat(CD_ROM cdrom) {
-            if (!cdrom.LedOpen) {     //Reset shell open unless it is still opened, TODO: add disk swap
+            if (!cdrom.LidOpen) {     //Reset shell open unless it is still opened, TODO: add disk swap
                 cdrom.stat = (byte)(cdrom.stat & (~0x18));
                 cdrom.stat |= 0x2;
             }
@@ -774,6 +839,7 @@ namespace PSXEmulator {
             Response ack = new Response(new byte[] { 0x94, 0x09, 0x19, 0xC0 }, Delays.INT3_General, Flags.INT3, cdrom.State);
             cdrom.Responses.Enqueue(ack);
         }
+
         private byte[] GetCDDAReport() {  //TODO
             //Report --> INT1(stat,track,index,mm/amm,ss+80h/ass,sect/asect,peaklo,peakhi)
             bool isEven = ((F / 10) & 1) == 0;
@@ -797,6 +863,7 @@ namespace PSXEmulator {
             }
             return new byte[] { stat, DecToBcd((byte)track), DecToBcd((byte)index) , DecToBcd((byte)mm), (byte)(DecToBcd((byte)ss) | or), DecToBcd((byte)ff), 0x00, 0xFF };
         }
+
         void IncrementIndex(byte offset) {
             F = (F + 1 + SkipRate);
             if (F >= 75) { S = S + (F / 75); F = F % 75; }
@@ -817,6 +884,7 @@ namespace PSXEmulator {
                 Console.WriteLine("[CDROM] Reached end of disk!");
             }
         }
+
         private void Step(int cycles) {
             int count = Responses.Count;
             for (int i = 0; i < count; i++) {
@@ -829,7 +897,8 @@ namespace PSXEmulator {
                 }
             }
         }
-        internal void tick(int cycles) {
+
+        public void tick(int cycles) {
             Step(cycles);
             
             if (Responses.Count > 0) {
@@ -851,6 +920,18 @@ namespace PSXEmulator {
                     stat = 0x2; 
                     return;
 
+                case CDROMState.SwappingDisk:
+                    if (SwappingDelay > 0) {
+                        SwappingDelay -= cycles;
+                        stat = 1 << 4;  //Lid open bit
+                        LidOpen = true;
+                    } else {
+                        State = CDROMState.Idle;
+                        stat = 0x2;
+                        LidOpen = false;
+                    }
+                    return;
+
                 case CDROMState.Seeking:
                     stat |= (1 << 6);
                     return;
@@ -859,10 +940,19 @@ namespace PSXEmulator {
                     if ((ReadRate -= cycles) > 0) {
                         return;
                     }
+
+                    if (CurrentIndex >= DataController.EndOfDisk) {
+                        Response pause = new Response(new byte[] { stat }, Delays.Zero, Flags.INT4, CDROMState.Idle);
+                        Responses.Enqueue(pause);
+                        Console.WriteLine("[CDROM] End of Disk!");
+                        return;
+                    }
+
                     stat |= (1 << 5);   //Read at least one sector before setting the bit
 
                     /*Console.WriteLine("[CDROM] Data Read at " + M.ToString().PadLeft(2,'0') + ":" + S.ToString().PadLeft(2, '0') + ":" + F.ToString().PadLeft(2, '0')
                         + " --- Index :" + CurrentIndex.ToString("x"));*/
+
                     bool sendToCPU = DataController.LoadNewSector(CurrentIndex);
                     IncrementIndex(150);
                     if (sendToCPU) {
@@ -877,6 +967,14 @@ namespace PSXEmulator {
                     if ((ReadRate -= cycles) > 0) {
                         return;
                     }
+
+                    if (CurrentIndex >= DataController.EndOfDisk || (CurrentIndex >= DataController.EndOfTrack && AutoPause)) {
+                        Response pause = new Response(new byte[] { stat }, Delays.Zero, Flags.INT4, CDROMState.Idle);
+                        Responses.Enqueue(pause);
+                        Console.WriteLine("[CDROM] CD-DA Paused Track: " + DataController.SelectedTrackNumber);
+                        return;
+                    }
+
                     //Console.WriteLine("[CDROM] Play at MSF: " + M.ToString().PadLeft(2,'0') + ":" + S.ToString().PadLeft(2, '0') + ":" + F.ToString().PadLeft(2, '0'));
 
                     stat |= (1 << 7);   //Play at least one sector before setting the bit
@@ -886,15 +984,18 @@ namespace PSXEmulator {
                     } else {
                         Console.WriteLine("[CD-ROM] Ignoring play command (No cue)");
                     }
+
                     if (CDDAReport && IsReportableSector) {  
                         Response report = new Response(GetCDDAReport(), Delays.Zero, Flags.INT1, CDROMState.PlayingCDDA);
                         Responses.Enqueue(report);
                     }
-                    IncrementIndex(0);
+
+                    IncrementIndex(0);              
                     ReadRate = OneSecond / (DoubleSpeed ? 150 : 75);    //Update the rate for next INTs
                     break;
             }
         }
+
         private static (int, int, int) BytesToMSF(int totalSize) {
             int totalFrames = totalSize / 2352;
             int M = totalFrames / (60 * 75);
@@ -902,18 +1003,23 @@ namespace PSXEmulator {
             int F = (totalFrames % (60 * 75)) % 75;
             return (M, S, F);
         }
+
         private static byte DecToBcd(byte value) {
             return (byte)(value + 6 * (value / 10));
         }
+
         private static int BcdToDec(byte value) {
             return value - 6 * (value >> 4);
         }
+
         private static bool IsValidBCD(byte value) {
             return ((value & 0xF) < 0xA) && (((value >> 4) & 0xF) < 0xA);
         }
+
         private static bool IsValidSetloc(int M, int S, int F) {
             return M <= 99 && S <= 59 && F <= 74;
         }
+
         private static long CalculateSeekTime(int position, int destination) {
             long wait = (long)((long)OneSecond * 2 * 0.001 * (Math.Abs((position - destination)) / (75 * 0x930)));
             //Console.WriteLine("Difference of: " + (Math.Abs((position - destination)) / (75 * 0x930)) + " Seconds");
