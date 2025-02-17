@@ -212,6 +212,9 @@ namespace PSXEmulator.Peripherals.MDEC {
                                 }
 
                                 CurrentBlock = 0;
+                                k = 64;
+                                val = 0;
+                                n = 0;
 
                                 yuv_to_rgb(ref blk[2], DataOutputSigned == 1, 0, 0);
                                 yuv_to_rgb(ref blk[3], DataOutputSigned == 1, 8, 0);    //0,8 in PSX-SPX
@@ -501,9 +504,9 @@ namespace PSXEmulator.Peripherals.MDEC {
 
         }
         private void DecodeMacroblock(uint value) {
-            uint depth = value >> 27 & 0x3;
-            uint signed = value >> 26 & 1;
-            uint outBit15 = value >> 25 & 1;
+            uint depth = (value >> 27) & 0x3;
+            uint signed = (value >> 26) & 1;
+            uint outBit15 = (value >> 25) & 1;
             ushort numberOfParameters = (ushort)(value & 0xFFFF);
 
             DataOutputDepth = depth;
