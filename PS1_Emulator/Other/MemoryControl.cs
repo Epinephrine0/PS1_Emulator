@@ -16,28 +16,45 @@ namespace PSXEmulator {
         const uint EXPANSION2_DELAY = 0x1F80101C;
         const uint COMMON_DELAY = 0x1F801020;
 
+        //Values
+         uint EXPANSION1_BASE_VALUE = 0x1F000000;
+         uint EXPANSION2_BASE_VALUE = 0x1F802000;
+         uint EXPANSION1_DELAY_VALUE = 0x0013243F;
+         uint EXPANSION3_DELAY_VALUE = 0x00003022;
+         uint BIOS_ROM_VALUE = 0x0013243F;
+         uint SPU_DELAY_VALUE = 0x200931E1;
+         uint CDROM_DELAY_VALUE = 0x00020843;
+         uint EXPANSION2_DELAY_VALUE = 0x00070777;
+         uint COMMON_DELAY_VALUE = 0x00031125;
+
         public uint Read(uint address) {
-            //Return the "usually" value based on PSX-SPX
-            //Some of them have multiple "usually" value..
             switch (address) {
-                case EXPANSION1_BASE: return 0x1F000000;
-                case EXPANSION2_BASE: return 0x1F802000;
-                case EXPANSION1_DELAY: return 0x0013243F;
-                case EXPANSION3_DELAY: return 0x00003022;
-                case BIOS_ROM: return 0x0013243F;
-                case SPU_DELAY: return 0x200931E1;
-                case CDROM_DELAY: return 0x00020843;
-                case EXPANSION2_DELAY: return 0x00070777;
-                case COMMON_DELAY: return 0x00031125;
-                default: throw new Exception("Memory Control load at address: " + address.ToString("x"));
+                case EXPANSION1_BASE: return EXPANSION1_BASE_VALUE;
+                case EXPANSION2_BASE: return EXPANSION2_BASE_VALUE;
+                case EXPANSION1_DELAY: return EXPANSION1_DELAY_VALUE;
+                case EXPANSION3_DELAY: return EXPANSION3_DELAY_VALUE;
+                case BIOS_ROM: return BIOS_ROM_VALUE;
+                case SPU_DELAY: return SPU_DELAY_VALUE;
+                case CDROM_DELAY: return CDROM_DELAY_VALUE;
+                case EXPANSION2_DELAY: return EXPANSION2_DELAY_VALUE;
+                case COMMON_DELAY: return COMMON_DELAY_VALUE;
+                default: throw new Exception("Memory Control Read at address: " + address.ToString("x"));
             }
          }
 
         public void Write(uint address, uint value) {
-            //Ignore writing
-            //TODO: Implement the actual delays?
-            //Console.WriteLine("[MemoryControl1] Ignored writing to: " + address.ToString("x"));
+            switch (address) {
+                case EXPANSION1_BASE: EXPANSION1_BASE_VALUE = value; break; 
+                case EXPANSION2_BASE: EXPANSION2_BASE_VALUE = value; break;
+                case EXPANSION1_DELAY: EXPANSION1_DELAY_VALUE = value; break;
+                case EXPANSION3_DELAY: EXPANSION3_DELAY_VALUE = value; break;
+                case BIOS_ROM: BIOS_ROM_VALUE = value; break;
+                case SPU_DELAY: SPU_DELAY_VALUE = value; break;
+                case CDROM_DELAY: CDROM_DELAY_VALUE = value; break;
+                case EXPANSION2_DELAY: EXPANSION2_DELAY_VALUE = value; break;
+                case COMMON_DELAY: COMMON_DELAY_VALUE = value; break;
+                default: throw new Exception("Memory Control Write at address: " + address.ToString("x"));
+            }
         }
-
     }
 }
