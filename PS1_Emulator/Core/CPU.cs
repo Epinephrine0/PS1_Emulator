@@ -198,7 +198,7 @@ namespace PSXEmulator {
             /*if (BUS.debug) {
                 Console.WriteLine("[" + Current_PC.ToString("x").PadLeft(8, '0') + "]" + " --- " + CurrentInstruction.Getfull().ToString("x").PadLeft(8,'0'));
             }*/
-
+    
             ExecuteInstruction(CurrentInstruction);
             RegisterTransfer(this);
         }
@@ -901,11 +901,13 @@ namespace PSXEmulator {
              }
         }
 
-        private static void bxx(CPU cpu,Instruction instruction) {         //*
-            uint value = (uint)instruction.Getfull();
-            
+        private static void bxx(CPU cpu,Instruction instruction) {      
+            bool bgez = ((instruction.Getfull() >> 16) & 1) == 1;
+            bool link = ((instruction.Getfull() >> 17) & 0xF) == 0x8;
+            uint linkAddress = cpu.Next_PC;             //Save Next_PC before a branch overwrites it
+
             //if rs is $ra, then the value used for the comparison is $ra's value before linking.
-            if (((value >> 16) & 1) == 1) {
+            if (bgez) {
                 //BGEZ
                 if ((int)cpu.GPR[instruction.Get_rs()] >= 0) {
                     branch(cpu,instruction.GetSignedImmediate());
@@ -917,10 +919,10 @@ namespace PSXEmulator {
                 }
             }
 
-            if (((value >> 17) & 0xF) == 0x8) {
+            if (link) {
                //Store return address in $31 if the value of bits [20:17] == 0x8
                 cpu.DirectWrite.RegisterNumber = (uint)Register.ra;
-                cpu.DirectWrite.Value = cpu.Next_PC;
+                cpu.DirectWrite.Value = linkAddress;
             }
         }
 
