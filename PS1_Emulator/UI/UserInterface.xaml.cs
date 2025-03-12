@@ -6,8 +6,11 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
+using MessageBox = System.Windows.Forms.MessageBox;
 
 namespace PSXEmulator {
     /// <summary>
@@ -22,9 +25,12 @@ namespace PSXEmulator {
         const string COPYRIGHT = "Sony Computer Entertainment Inc.";
         bool HasValidBios;  
         Settings UserSettings;
+        Thread EmulatorThread;
 
         public UserInterface() {
             InitializeComponent();
+
+            EmulatorThread = new Thread(() => StartEmulator());
             Console.ForegroundColor = ConsoleColor.White;
 
             this.Title = "PSX Emulator";
@@ -122,6 +128,16 @@ namespace PSXEmulator {
             Boot();
         }
         private void ImportButton_Click(object sender, RoutedEventArgs e) {
+            if (EmulatorThread.IsAlive) {
+                MessageBox.Show(
+                    "Please close the emulator before loading games.",
+                    "Emulator is already running",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                    );
+                return;
+            }
+
             using (var fbd = new FolderBrowserDialog()) {
                 DialogResult result = fbd.ShowDialog();
                 if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath)) {
@@ -146,23 +162,32 @@ namespace PSXEmulator {
         private void OnClose(object sender, EventArgs e) {
             SaveSettings();
         }
-
+        
         private void Boot() {
             SaveSettings();     //Save before booting to prevent losing settings if the emulator crashed
-
-            this.Visibility = Visibility.Hidden;     //Hide UI
-
             Console.ForegroundColor = ConsoleColor.Green;
 
-            PSX_OpenTK MainEmu = new PSX_OpenTK(UserSettings.BIOSPath, BootPath,IsEXE);            /* Emulation loop starts */
-            MainEmu = null;
+            if (!EmulatorThread.IsAlive) {
+                EmulatorThread = new Thread(() => StartEmulator());
+                EmulatorThread.Start();
+            } else {
+                MessageBox.Show(
+                    "Please close the emulator before booting again.",
+                    "Emulator is already running",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning
+                    );
+            }
+        }
+
+        private void StartEmulator() {
+            Console.WriteLine("Emulation Thread ID: {0}", Thread.CurrentThread.ManagedThreadId);
+            PSX_OpenTK MainEmu = new PSX_OpenTK(UserSettings.BIOSPath, BootPath, IsEXE);        /* Emulation loop starts */
             ResetBootConfig();
             GC.Collect();
-
             Console.Clear();
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("Main Emulation loop terminated");
-            this.Visibility = Visibility.Visible;
+            Console.WriteLine("Emulation thread terminated.");
         }
 
         private void Window_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {

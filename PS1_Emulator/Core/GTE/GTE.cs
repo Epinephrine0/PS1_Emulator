@@ -1,7 +1,8 @@
-﻿using System;
+﻿using PSXEmulator.Core.Common;
+using System;
 
 namespace PSXEmulator {
-    internal class GTE {
+    public class GTE {
 
         public Command currentCommand;
 
@@ -64,9 +65,9 @@ namespace PSXEmulator {
             S[3] = new Vector3();
         }
 
-        public uint read(uint rt) {
+        public uint read(uint rd) {
 
-            switch (rt) {
+            switch (rd) {
                 case 0:  return V[0].XY;
                 case 1:  return (uint)V[0].Z;
                 case 2:  return V[1].XY;
@@ -138,8 +139,8 @@ namespace PSXEmulator {
             throw new Exception("We should not reach here");
 
         }
-        
-        internal void write(uint rd, uint value) {
+
+        public void write(uint rd, uint value) {
            
             switch (rd) {
                 case 0:  V[0].XY = value; break;
@@ -303,15 +304,15 @@ namespace PSXEmulator {
 
             return counter;
         }
-        public void execute(Instruction currentCommand) {
-            uint opcode = currentCommand.Get_Subfunction();        //0-5
+        public void execute(uint currentCommand) {
+            uint opcode = currentCommand & 0x3F;        //0-5
             FLAG = 0;
 
-            sf = (uint)((currentCommand.Getfull() >> 19) & 1);
-            lm = (currentCommand.Getfull() >> 10 & 1) == 1;
-            tx = currentCommand.Getfull() >> 13 & 3;
-            vx = currentCommand.Getfull() >> 15 & 3;
-            mx = currentCommand.Getfull() >> 17 & 3;
+            sf = ((currentCommand >> 19) & 1);
+            lm = ((currentCommand >> 10) & 1) == 1;
+            tx = (currentCommand >> 13) & 3;
+            vx = (currentCommand >> 15) & 3;
+            mx = (currentCommand >> 17) & 3;
 
             switch (opcode) {
                 case 0x01:
@@ -1285,7 +1286,7 @@ namespace PSXEmulator {
 
     }
 
-    class Command {
+   public class Command {
         public int delay;
         public Instruction value;
 

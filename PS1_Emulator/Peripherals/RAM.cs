@@ -1,7 +1,4 @@
-﻿using System;
-using System.Runtime.InteropServices;
-
-namespace PSXEmulator {
+﻿namespace PSXEmulator {
     public class RAM {
         //2MB RAM can be mirrored to the first 8MB (strangely, enabled by default)
         public Range range = new Range(0x00000000, 8*1024*1024);
@@ -66,7 +63,7 @@ namespace PSXEmulator {
             uint offset = address - range.start;
             uint final = Mirror(offset);
 
-            data[final] = value;
+             data[final] = value;
         }
 
         public uint Mirror(uint address) {
@@ -76,8 +73,8 @@ namespace PSXEmulator {
             return address & ((1 << 21) - 1);
         }
 
-        public byte[] GetMemory() {
-            return data;
+        public ref byte[] GetMemoryReference() {
+            return ref data;
         }      
     }
 }

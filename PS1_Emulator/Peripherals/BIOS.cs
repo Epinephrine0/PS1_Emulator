@@ -38,6 +38,9 @@ namespace PSXEmulator {
        
             return (ushort)(b0 | (b1 << 8));
         }
+        public ref byte[] GetMemoryReference() {
+            return ref data;
+        }
 
     }
 }

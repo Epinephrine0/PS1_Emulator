@@ -3,6 +3,7 @@ using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
 using System;
 using System.Collections.Generic;
+using Windows.ApplicationModel.Activation;
 
 namespace PSXEmulator {
     public class BUS {      //Main BUS, connects the CPU to everything
@@ -38,6 +39,8 @@ namespace PSXEmulator {
         const double GPU_FACTOR = ((double)715909) / 451584;
         public bool debug = false;
 
+        public uint BUS_Cycles = 0;
+
         public BUS(
             BIOS BIOS, RAM RAM, Scratchpad Scratchpad,
             CD_ROM CDROM, SPU SPU, DMA DMA, JOY JOY_IO,SIO1 SIO1, MemoryControl MemCtrl, 
@@ -65,9 +68,12 @@ namespace PSXEmulator {
 
         public uint LoadWord(uint address) {           
             uint physicalAddress = Mask(address);
-            //CPU.cycles++;
+      
+
             switch (physicalAddress) {
-                case uint when RAM.range.Contains(physicalAddress): return RAM.LoadWord(physicalAddress);
+                case uint when RAM.range.Contains(physicalAddress): 
+                    BUS_Cycles++; 
+                    return RAM.LoadWord(physicalAddress);
                 case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadWord(physicalAddress);
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): return IRQ_CONTROL.Read(physicalAddress);
                 case uint when DMA.range.Contains(physicalAddress): return DMA.ReadWord(physicalAddress);
@@ -93,7 +99,8 @@ namespace PSXEmulator {
 
         public void StoreWord(uint address,uint value) {
             uint physicalAddress = Mask(address);
-            //CPU.cycles++;
+            //BUS_Cycles++;
+
             switch (physicalAddress) {
                 case uint when RAM.range.Contains(physicalAddress): RAM.StoreWord(physicalAddress, value); break;
                 case uint when RamSize.range.Contains(physicalAddress): RamSize.StoreWord(value); break;
@@ -128,9 +135,12 @@ namespace PSXEmulator {
 
         public ushort LoadHalf(uint address) {
             uint physicalAddress = Mask(address);
-            //CPU.cycles++;
+
+
             switch (physicalAddress) {
-                case uint when RAM.range.Contains(physicalAddress): return RAM.LoadHalf(physicalAddress);
+                case uint when RAM.range.Contains(physicalAddress): 
+                    BUS_Cycles++; 
+                    return RAM.LoadHalf(physicalAddress);
                 case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadHalf(physicalAddress);
                 case uint when SPU.range.Contains(physicalAddress): return SPU.LoadHalf(physicalAddress);
                 case uint when IRQ_CONTROL.range.Contains(physicalAddress): return (ushort)IRQ_CONTROL.Read(physicalAddress);
@@ -154,7 +164,8 @@ namespace PSXEmulator {
 
         public void StoreHalf(uint address, ushort value) {
             uint physicalAddress = Mask(address);
-            //CPU.cycles++;
+            //BUS_Cycles++;
+
             switch (physicalAddress) {
                 case uint when RAM.range.Contains(physicalAddress): RAM.StoreHalf(physicalAddress, value); break;
                 case uint when SPU.range.Contains(physicalAddress): SPU.StoreHalf(physicalAddress, value); break;
@@ -185,9 +196,12 @@ namespace PSXEmulator {
 
         public byte LoadByte(uint address) {
             uint physicalAddress = Mask(address);
-            //CPU.cycles++;
+
+
             switch (physicalAddress) {
-                case uint when RAM.range.Contains(physicalAddress): return RAM.LoadByte(physicalAddress);
+                case uint when RAM.range.Contains(physicalAddress): 
+                    BUS_Cycles++; 
+                    return RAM.LoadByte(physicalAddress);
                 case uint when BIOS.range.Contains(physicalAddress): return BIOS.LoadByte(physicalAddress);
                 case uint when CDROM.range.Contains(physicalAddress): return CDROM.LoadByte(physicalAddress);
                 case uint when DMA.range.Contains(physicalAddress): return DMA.LoadByte(physicalAddress);
@@ -209,7 +223,8 @@ namespace PSXEmulator {
 
         public void StoreByte(uint address, byte value) {
             uint physicalAddress = Mask(address);
-            //CPU.cycles++;
+            //BUS_Cycles++;
+
             switch (physicalAddress) {
                 case uint when RAM.range.Contains(physicalAddress): RAM.StoreByte(physicalAddress, value); break;
                 case uint when Scratchpad.range.Contains(physicalAddress): Scratchpad.StoreByte(physicalAddress, value); break;
@@ -227,6 +242,12 @@ namespace PSXEmulator {
 
                 default: throw new Exception("Unhandled StoreByte to: " + address.ToString("X")); 
             }           
+        }
+
+        public uint GetBusCycles() {
+            uint numberOfCycles = BUS_Cycles;
+            BUS_Cycles = 0;
+            return (uint)(BUS_Cycles * RamSize.RamReadDelay);
         }
 
         public uint Mask(uint address) { 

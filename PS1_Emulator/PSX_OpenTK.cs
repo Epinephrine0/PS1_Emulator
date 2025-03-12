@@ -3,6 +3,9 @@ using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
+using PSXEmulator.Core;
+using PSXEmulator.Core.Interpreter;
+using PSXEmulator.Core.Recompiler;
 using PSXEmulator.Peripherals.GPU;
 using PSXEmulator.Peripherals.IO;
 using PSXEmulator.Peripherals.MDEC;
@@ -16,13 +19,15 @@ using System.Timers;
 namespace PSXEmulator {
     public class PSX_OpenTK {
         public Renderer mainWindow;
-        public PSX_OpenTK(string biosPath, string bootPath, bool isBootingEXE) { 
+        public PSX_OpenTK(string biosPath, string bootPath, bool isBootingEXE) {
+            GLFWProvider.CheckForMainThread = false;
+
             var nativeWindowSettings = new NativeWindowSettings() {
                 Size = new Vector2i(1024, 512),
                 Title = "OpenGL",
                 Flags = ContextFlags.ForwardCompatible,
                 APIVersion = Version.Parse("4.6.0"),
-                WindowBorder = WindowBorder.Resizable,  
+                WindowBorder = WindowBorder.Resizable,
             };
 
             var Gws = GameWindowSettings.Default;
@@ -68,10 +73,25 @@ namespace PSXEmulator {
                 JOY_IO, SerialIO1, MemoryControl,RamSize,CacheControl,
                 Ex1,Ex2,Timer0,Timer1,Timer2,Mdec,Gpu
                 );
-            CPU CPU = new CPU(isBootingEXE, bootPath, Bus);
 
-            mainWindow.CPU = CPU;
+            string cpuType = "";
+
+            bool IsRecompiler = true;
+            CPU CPU;
+            if (IsRecompiler) {
+                CPU = new CPURecompiler(isBootingEXE, bootPath, Bus);
+                cpuType = "MSIL JIT";
+            } else {
+                CPU = new CPUInterpreter(isBootingEXE, bootPath, Bus);
+                cpuType = "Interpreter";
+            }
+
+            mainWindow.MainCPU = CPU;
+
             mainWindow.Title += " | ";
+            mainWindow.Title += cpuType;
+            mainWindow.Title += " | ";
+
             if (bootPath != null) {
                 mainWindow.Title += Path.GetFileName(bootPath);
             } else {
@@ -98,7 +118,11 @@ namespace PSXEmulator {
     }
 
     public class Renderer : GameWindow {    //Now it gets really messy 
-        public CPU CPU;
+        //public CPUInterpreter CPU;
+        public CPU MainCPU;
+
+        public bool IsEmuPaused; 
+
         const int VRAM_WIDTH = 1024;
         const int VRAM_HEIGHT = 512;
 
@@ -887,7 +911,7 @@ namespace PSXEmulator {
             int y_dst = (int)((transfare.Parameters[1] >> 16) & 0x1FF);
 
 
-            if (CPU.BUS.GPU.ForceSetMaskBit) {
+            if (MainCPU.GetBUS().GPU.ForceSetMaskBit) {
                 for (int i = 0; i < transfare.Data.Length; i++) { transfare.Data[i] |= (1 << 15); }
             }
 
@@ -1053,7 +1077,7 @@ namespace PSXEmulator {
 
             //Hack: Always sync if preserve_masked_pixels is true
             //This is kind of slow but fixes Silent Hills 
-            if (CPU.BUS.GPU.PreserveMaskedPixels) {
+            if (MainCPU.GetBUS().GPU.PreserveMaskedPixels) {
                 return true;
             }
 
@@ -1115,7 +1139,7 @@ namespace PSXEmulator {
         public bool TextureInvalidate(ref ushort[] coords) {       
             //Hack: Always sync if preserve_masked_pixels is true
             //This is kind of slow but fixes Silent Hills 
-            if (CPU.BUS.GPU.PreserveMaskedPixels) {
+            if (MainCPU.GetBUS().GPU.PreserveMaskedPixels) {
                 return true;
             }
 
@@ -1291,14 +1315,14 @@ namespace PSXEmulator {
         }
 
         public void SetAspectRatio() {
-            float display_x_start = CPU.BUS.GPU.DisplayVramXStart;
-            float display_y_start = CPU.BUS.GPU.DisplayVramYStart;
+            float display_x_start = MainCPU.GetBUS().GPU.DisplayVramXStart;
+            float display_y_start = MainCPU.GetBUS().GPU.DisplayVramYStart;
 
-            float display_x_end = CPU.BUS.GPU.HorizontalRange + display_x_start - 1;   
-            float display_y_end = CPU.BUS.GPU.VerticalRange + display_y_start - 1;
+            float display_x_end = MainCPU.GetBUS().GPU.HorizontalRange + display_x_start - 1;   
+            float display_y_end = MainCPU.GetBUS().GPU.VerticalRange + display_y_start - 1;
 
-            float width = CPU.BUS.GPU.HorizontalRange;
-            float height = CPU.BUS.GPU.VerticalRange;
+            float width = MainCPU.GetBUS().GPU.HorizontalRange;
+            float height = MainCPU.GetBUS().GPU.VerticalRange;
 
             if (!ShowTextures) {
 
@@ -1370,34 +1394,40 @@ namespace PSXEmulator {
             if (e.Key.Equals(Keys.Escape)) {
                 Close();
 
-            }else if (e.Key.Equals(Keys.D)) {
+            } else if (e.Key.Equals(Keys.D)) {
                 Console.WriteLine("Toggle Debug");
-                CPU.BUS.debug = !CPU.BUS.debug;
+                MainCPU.GetBUS().debug = !MainCPU.GetBUS().debug;
                 Thread.Sleep(100);
 
-            }else if (e.Key.Equals(Keys.P)) {
-                CPU.IsPaused = !CPU.IsPaused;
+            } else if (e.Key.Equals(Keys.P)) {
+                IsEmuPaused = !IsEmuPaused;
                 Thread.Sleep(100);
 
-            }else if (e.Key.Equals(Keys.Tab)) {
+            } else if (e.Key.Equals(Keys.Tab)) {
                 ShowTextures = !ShowTextures;
                 Thread.Sleep(100);
 
-            }else if (e.Key.Equals(Keys.F)) {
+            } else if (e.Key.Equals(Keys.F)) {
                 IsFullScreen = !IsFullScreen;
                 this.WindowState = IsFullScreen ? WindowState.Fullscreen : WindowState.Normal;
                 this.CursorState = IsFullScreen ? CursorState.Hidden : CursorState.Normal;
                 Thread.Sleep(100);
 
-            }else if (e.Key.Equals(Keys.F1)) {
+            } else if (e.Key.Equals(Keys.F1)) {
                 Console.WriteLine("Dumping memory...");
-                File.WriteAllBytes("MemoryDump.bin", CPU.BUS.RAM.GetMemory());
+                File.WriteAllBytes("MemoryDump.bin", MainCPU.GetBUS().RAM.GetMemoryReference());
                 Console.WriteLine("Done!");
                 Thread.Sleep(100);
 
-            }else if (e.Key.Equals(Keys.C)) {
-                CPU.BUS.JOY_IO.Controller1.IgnoreInput = !CPU.BUS.JOY_IO.Controller1.IgnoreInput;
-                if (CPU.BUS.JOY_IO.Controller1.IgnoreInput) {
+            } else if (e.Key.Equals(Keys.F2)) {
+                Console.WriteLine("Resetting...");
+                MainCPU.Reset();
+
+                Thread.Sleep(100);
+
+            } else if (e.Key.Equals(Keys.C)) {
+                MainCPU.GetBUS().JOY_IO.Controller1.IgnoreInput = !MainCPU.GetBUS().JOY_IO.Controller1.IgnoreInput;
+                if (MainCPU.GetBUS().JOY_IO.Controller1.IgnoreInput) {
                     Console.WriteLine("Controller inputs ignored");
                 } else {
                     Console.WriteLine("Controller inputs not ignored");
@@ -1405,7 +1435,8 @@ namespace PSXEmulator {
                 Thread.Sleep(100);
 
             } else if (e.Key.Equals(Keys.K)) {
-                //We borrow some functionality from Windows Forms
+                /* Does not work on this thread. TODO: Move to main thread with the UI
+                 //We borrow some functionality from Windows Forms
                 System.Windows.Forms.FolderBrowserDialog folderBrowserDialog = new System.Windows.Forms.FolderBrowserDialog();
                 folderBrowserDialog.Description = "Please Select a Game Folder to Swap";
                 folderBrowserDialog.UseDescriptionForTitle = true;
@@ -1414,6 +1445,7 @@ namespace PSXEmulator {
                     CPU.BUS.CDROM.SwapDisk(folderBrowserDialog.SelectedPath);
                 }
                 Thread.Sleep(100);
+                 */
             }
 
             Console.ForegroundColor = previousColor;
@@ -1421,16 +1453,22 @@ namespace PSXEmulator {
 
         protected override void OnUpdateFrame(FrameEventArgs args) {
             base.OnUpdateFrame(args);
+
+            if (IsEmuPaused) {
+                return;
+            }
+
             //Clock the CPU
-            CPU.tick();
+            MainCPU.Tick();
+
             //CPU.BUS.SerialIO1.CheckRemoteEnd();
 
             //Read controller input 
-            CPU.BUS.JOY_IO.Controller1.ReadInput(JoystickStates[0]);
-            //cpu.bus.IO_PORTS.controller2.readInput(JoystickStates[1]);
+            MainCPU.GetBUS().JOY_IO.Controller1.ReadInput(JoystickStates[0]);
         }
       
         protected override void OnUnload() {
+            //CacheManager.SaveCache(CPU.CacheBlocks);
 
             // Unbind all the resources by binding the targets to 0/null.
             // Unbind all the resources by binding the targets to 0/null.

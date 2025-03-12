@@ -9,7 +9,7 @@ namespace PSXEmulator {
 
         [STAThread]
         static void Main(string[] args) {
-           
+            
             //PSX_OpenTK emu = new PSX_OpenTK();
             Console.Title = "TTY Console";
             Console.SetWindowSize(CONSOLE_WIDTH, CONSOLE_HEIGHT);
