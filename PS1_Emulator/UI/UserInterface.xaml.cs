@@ -1,13 +1,9 @@
 ﻿using PSXEmulator.UI;
 using System;
-using System.Collections.Generic;
-using System.Drawing.Imaging;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
 using MessageBox = System.Windows.Forms.MessageBox;
@@ -166,7 +162,6 @@ namespace PSXEmulator {
         private void Boot() {
             SaveSettings();     //Save before booting to prevent losing settings if the emulator crashed
             Console.ForegroundColor = ConsoleColor.Green;
-
             if (!EmulatorThread.IsAlive) {
                 EmulatorThread = new Thread(() => StartEmulator());
                 EmulatorThread.Start();
@@ -185,7 +180,7 @@ namespace PSXEmulator {
             PSX_OpenTK MainEmu = new PSX_OpenTK(UserSettings.BIOSPath, BootPath, IsEXE);        /* Emulation loop starts */
             ResetBootConfig();
             GC.Collect();
-            Console.Clear();
+            //Console.Clear();
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine("Emulation thread terminated.");
         }

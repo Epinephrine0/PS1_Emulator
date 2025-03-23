@@ -3,7 +3,7 @@ using System.Reflection.Emit;
 using System.Reflection;
 using PSXEmulator.Core.Common;
 
-namespace PSXEmulator.Core.Recompiler {
+namespace PSXEmulator.Core.MSIL_Recompiler {
 
     //Implements R3000 MIPS instructions in MSIL
     public static class MSIL_JIT {          
@@ -12,32 +12,32 @@ namespace PSXEmulator.Core.Recompiler {
         [assembly: SecurityRules(SecurityRuleSet.Level2, SkipVerificationInFullTrust = true)]
 
         //Get all needed fields and methods
-        private static FieldInfo? GPR = typeof(CPURecompiler).GetField("GPR");
+        private static FieldInfo? GPR = typeof(CPU_MSIL_Recompiler).GetField("GPR");
 
-        private static FieldInfo? DirectWrite = typeof(CPURecompiler).GetField("DirectWrite");
-        private static FieldInfo? DelayedWrite = typeof(CPURecompiler).GetField("DelayedRegisterLoad");     //For memory access
-        private static FieldInfo? ReadyWrite = typeof(CPURecompiler).GetField("ReadyRegisterLoad");        //LWL/LWR Need to access it
+        private static FieldInfo? DirectWrite = typeof(CPU_MSIL_Recompiler).GetField("DirectWrite");
+        private static FieldInfo? DelayedWrite = typeof(CPU_MSIL_Recompiler).GetField("DelayedRegisterLoad");     //For memory access
+        private static FieldInfo? ReadyWrite = typeof(CPU_MSIL_Recompiler).GetField("ReadyRegisterLoad");        //LWL/LWR Need to access it
 
-        private static FieldInfo? RegisterNumber = typeof(CPURecompiler.RegisterLoad).GetField("RegisterNumber");
-        private static FieldInfo? Value = typeof(CPURecompiler.RegisterLoad).GetField("Value");
+        private static FieldInfo? RegisterNumber = typeof(CPU_MSIL_Recompiler.RegisterLoad).GetField("RegisterNumber");
+        private static FieldInfo? Value = typeof(CPU_MSIL_Recompiler.RegisterLoad).GetField("Value");
 
-        private static FieldInfo? COP0 = typeof(CPURecompiler).GetField("Cop0");
-        private static FieldInfo? COP0_SR = typeof(CPURecompiler.COP0).GetField("SR");
-        private static FieldInfo? COP0_Cause = typeof(CPURecompiler.COP0).GetField("Cause");
-        private static FieldInfo? COP0_EPC = typeof(CPURecompiler.COP0).GetField("EPC");
+        private static FieldInfo? COP0 = typeof(CPU_MSIL_Recompiler).GetField("Cop0");
+        private static FieldInfo? COP0_SR = typeof(CPU_MSIL_Recompiler.COP0).GetField("SR");
+        private static FieldInfo? COP0_Cause = typeof(CPU_MSIL_Recompiler.COP0).GetField("Cause");
+        private static FieldInfo? COP0_EPC = typeof(CPU_MSIL_Recompiler.COP0).GetField("EPC");
 
-        private static FieldInfo? Current_PC = typeof(CPURecompiler).GetField("Current_PC");
-        private static FieldInfo? PC = typeof(CPURecompiler).GetField("PC");
-        private static FieldInfo? Next_PC = typeof(CPURecompiler).GetField("Next_PC");
+        private static FieldInfo? Current_PC = typeof(CPU_MSIL_Recompiler).GetField("Current_PC");
+        private static FieldInfo? PC = typeof(CPU_MSIL_Recompiler).GetField("PC");
+        private static FieldInfo? Next_PC = typeof(CPU_MSIL_Recompiler).GetField("Next_PC");
   
-        private static FieldInfo? BranchBool = typeof(CPURecompiler).GetField("Branch");
-        private static FieldInfo? DelaySlotBool = typeof(CPURecompiler).GetField("DelaySlot");
+        private static FieldInfo? BranchBool = typeof(CPU_MSIL_Recompiler).GetField("Branch");
+        private static FieldInfo? DelaySlotBool = typeof(CPU_MSIL_Recompiler).GetField("DelaySlot");
 
-        private static FieldInfo? HI = typeof(CPURecompiler).GetField("HI");
-        private static FieldInfo? LO = typeof(CPURecompiler).GetField("LO");
+        private static FieldInfo? HI = typeof(CPU_MSIL_Recompiler).GetField("HI");
+        private static FieldInfo? LO = typeof(CPU_MSIL_Recompiler).GetField("LO");
 
-        private static FieldInfo? BUS = typeof(CPURecompiler).GetField("BUS");
-        private static FieldInfo? GTE = typeof(CPURecompiler).GetField("GTE");
+        private static FieldInfo? BUS = typeof(CPU_MSIL_Recompiler).GetField("BUS");
+        private static FieldInfo? GTE = typeof(CPU_MSIL_Recompiler).GetField("GTE");
 
         private static MethodInfo? BUS_LoadWordFunction = typeof(BUS).GetMethod("LoadWord");
         private static MethodInfo? BUS_LoadHalfFunction = typeof(BUS).GetMethod("LoadHalf");
@@ -50,11 +50,11 @@ namespace PSXEmulator.Core.Recompiler {
         private static MethodInfo? GTE_WriteFunction = typeof(GTE).GetMethod("write");
         private static MethodInfo? GTE_executeFunction = typeof(GTE).GetMethod("execute");
 
-        private static MethodInfo? ExceptionFunction = typeof(CPURecompiler).GetMethod("Exception");
-        private static MethodInfo? BranchFunction = typeof(CPURecompiler).GetMethod("branch");
-        private static MethodInfo? Get_IscIsolateCacheFunction = typeof(CPURecompiler).GetMethod("get_IscIsolateCache");
+        private static MethodInfo? ExceptionFunction = typeof(CPU_MSIL_Recompiler).GetMethod("Exception");
+        private static MethodInfo? BranchFunction = typeof(CPU_MSIL_Recompiler).GetMethod("branch");
+        private static MethodInfo? Get_IscIsolateCacheFunction = typeof(CPU_MSIL_Recompiler).GetMethod("get_IscIsolateCache");
 
-        public static void EmitSyscall(CacheBlock cache) {
+        public static void EmitSyscall(MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             //Call Exception function with Syscall Value (0x8) 
@@ -64,7 +64,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Call, ExceptionFunction);   //Call Exception
         }
 
-        public static void EmitBreak(CacheBlock cache) {
+        public static void EmitBreak(MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             //Call Exception function with Break Value (0x9) 
@@ -73,7 +73,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Call, ExceptionFunction);   //Call Exception
         }
 
-        public static void EmitSlti(uint rs, uint rt, uint imm, bool signed, CacheBlock cache) {
+        public static void EmitSlti(uint rs, uint rt, uint imm, bool signed, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             Label done = il.DefineLabel();
@@ -106,7 +106,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rt, result, false);
         }
 
-        public static void EmitSlt(uint rs, uint rt, uint rd, bool signed, CacheBlock cache) {
+        public static void EmitSlt(uint rs, uint rt, uint rd, bool signed, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             Label done = il.DefineLabel();
@@ -141,7 +141,7 @@ namespace PSXEmulator.Core.Recompiler {
         }
 
 
-        public static void EmitBranchIf(uint rs, uint rt, uint imm, int type, CacheBlock cache) {
+        public static void EmitBranchIf(uint rs, uint rt, uint imm, int type, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder nextPC_Copy = il.DeclareLocal(typeof(uint));
@@ -184,7 +184,7 @@ namespace PSXEmulator.Core.Recompiler {
             //No link for these instructions
         }
 
-        public static void EmitJalr(uint rs, uint rd, CacheBlock cache) {
+        public static void EmitJalr(uint rs, uint rd, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder targetAddress = il.DeclareLocal(typeof(uint));
@@ -216,7 +216,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Stfld, BranchBool);                             //Set CPU.Branch = true
         }
 
-        public static void EmitJR(uint rs, CacheBlock cache) {
+        public static void EmitJR(uint rs, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder targetAddress = il.DeclareLocal(typeof(uint));
@@ -233,7 +233,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Stfld, BranchBool);                             //Set CPU.Branch = true
         }
 
-        public static void EmitJal(uint targetAddress, CacheBlock cache) {
+        public static void EmitJal(uint targetAddress, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             //Link to reg 31 then jump
@@ -257,7 +257,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Stfld, BranchBool);                             //Set CPU.Branch = true
         }
 
-        public static void EmitJump(uint targetAddress, CacheBlock cache) {
+        public static void EmitJump(uint targetAddress, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             il.Emit(OpCodes.Ldarg, 0);                                      //Load CPU object reference
@@ -269,7 +269,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Stfld, BranchBool);                             //Set CPU.Branch = true
         }
 
-        public static void EmitBXX(uint rs, uint imm, bool link, bool bgez, CacheBlock cache) {
+        public static void EmitBXX(uint rs, uint imm, bool link, bool bgez, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder nextPC_Copy = il.DeclareLocal(typeof(uint));
@@ -296,17 +296,17 @@ namespace PSXEmulator.Core.Recompiler {
             }
         }
 
-        public static void EmitArithmeticU(uint rs, uint rt, uint rd, int type, CacheBlock cache) {
+        public static void EmitArithmeticU(uint rs, uint rt, uint rd, int type, MSILCacheBlock cache) {
             //We just emit normal add since we don't check for overflows anyway
             EmitArithmetic(rs, rt, rd, type, cache);
         }
 
-        public static void EmitArithmeticI_U(uint rs, uint rt, uint imm, int type, CacheBlock cache) {
+        public static void EmitArithmeticI_U(uint rs, uint rt, uint imm, int type, MSILCacheBlock cache) {
             //We just emit normal addi since we don't check for overflows anyway
             EmitArithmetic_i(rs, rt, imm, type, cache);
         }
 
-        public static void EmitArithmetic_i(uint rs, uint rt, uint imm, int type, CacheBlock cache) {
+        public static void EmitArithmetic_i(uint rs, uint rt, uint imm, int type, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             //This should check for signed overflow, but it can be ignored as no games rely on this 
@@ -329,7 +329,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rt, res, false);
         }
 
-        public static void EmitArithmetic(uint rs, uint rt, uint rd, int type, CacheBlock cache) {
+        public static void EmitArithmetic(uint rs, uint rt, uint rd, int type, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             //This should check for signed overflow, but it can be ignored as no games rely on this 
@@ -354,7 +354,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rd, res, false);
         }
 
-        public static void EmitLogic_i(uint rs, uint rt, uint imm, int type, CacheBlock cache) {
+        public static void EmitLogic_i(uint rs, uint rt, uint imm, int type, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
             
             LocalBuilder res = il.DeclareLocal(typeof(uint));
@@ -378,7 +378,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rt, res, false);
         }
 
-        public static void EmitLogic(uint rs, uint rt, uint rd, int type, CacheBlock cache) {
+        public static void EmitLogic(uint rs, uint rt, uint rd, int type, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder res = il.DeclareLocal(typeof(uint));
@@ -404,7 +404,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rd, res, false);
         }
 
-        public static void EmitShift(uint rt, uint rd, uint amount, uint direction, CacheBlock cache) {
+        public static void EmitShift(uint rt, uint rd, uint amount, uint direction, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder res = il.DeclareLocal(typeof(uint));
@@ -425,7 +425,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rd, res, false);
         }
 
-        public static void EmitShift_v(uint rs, uint rt, uint rd, uint direction, CacheBlock cache) {
+        public static void EmitShift_v(uint rs, uint rt, uint rd, uint direction, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder res = il.DeclareLocal(typeof(uint));
@@ -451,7 +451,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rd, res, false);
         }
 
-        public static void EmitDIV(uint rs, uint rt, bool signed, CacheBlock cache) {
+        public static void EmitDIV(uint rs, uint rt, bool signed, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder numerator = il.DeclareLocal(typeof(uint));
@@ -577,7 +577,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.MarkLabel(End);
         }
 
-        public static void EmitMULT(uint rs, uint rt, bool signed, CacheBlock cache) {
+        public static void EmitMULT(uint rs, uint rt, bool signed, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder result = il.DeclareLocal(typeof(ulong));
@@ -605,13 +605,13 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Stfld, HI);                                           //Write it to HI
         }
 
-        public static void EmitLUI(uint rt, uint imm, CacheBlock cache) {
+        public static void EmitLUI(uint rt, uint imm, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             EmitRegWrite(il, rt, imm << 16, false);     
         }
 
-        public static void EmitMTC0(uint rt, uint rd, CacheBlock cache) {
+        public static void EmitMTC0(uint rt, uint rd, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder regValue = il.DeclareLocal(typeof(uint));
@@ -628,7 +628,7 @@ namespace PSXEmulator.Core.Recompiler {
             }
         }
 
-        public static void EmitMFC0(uint rt, uint rd, CacheBlock cache) {
+        public static void EmitMFC0(uint rt, uint rd, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder regValue = il.DeclareLocal(typeof(uint));
@@ -678,7 +678,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.MarkLabel(end);
         }
 
-        public static void EmitRFE(CacheBlock cache) {
+        public static void EmitRFE(MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder originalSr = il.DeclareLocal(typeof(uint));
@@ -727,7 +727,7 @@ namespace PSXEmulator.Core.Recompiler {
         }
 
 
-        public static void EmitMF(uint rd, bool isHI, CacheBlock cache) {
+        public static void EmitMF(uint rd, bool isHI, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder regValue = il.DeclareLocal(typeof(uint));
@@ -739,7 +739,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rd, regValue, false);        
         }
 
-        public static void EmitMT(uint rs, bool isHI, CacheBlock cache) {
+        public static void EmitMT(uint rs, bool isHI, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder regValue = il.DeclareLocal(typeof(uint));
@@ -752,7 +752,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Stfld, isHI ? HI : LO);                         //Load CPU.HI / CPU.LO
         }
 
-        public static void EmitCOP2Command(uint instruction, CacheBlock cache) {
+        public static void EmitCOP2Command(uint instruction, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             //Call cpu.GTE.execute(instruction);
@@ -762,7 +762,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Callvirt, GTE_executeFunction);  //Call the gte execute
         }
 
-        public static void EmitMFC2_CFC2(uint rt, uint rd, CacheBlock cache) {
+        public static void EmitMFC2_CFC2(uint rt, uint rd, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder result = il.DeclareLocal(typeof(uint));
@@ -778,7 +778,7 @@ namespace PSXEmulator.Core.Recompiler {
             EmitRegWrite(il, rt, result, true);
         }
 
-        public static void EmitMTC2_CTC2(uint rt, uint rd, CacheBlock cache) {
+        public static void EmitMTC2_CTC2(uint rt, uint rd, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder rtValue = il.DeclareLocal(typeof(uint));
@@ -794,7 +794,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Callvirt, GTE_WriteFunction); //Call the gte write function
         }
 
-        public static void EmitLWC2(uint rs, uint rt, uint imm, CacheBlock cache) {
+        public static void EmitLWC2(uint rs, uint rt, uint imm, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder address = il.DeclareLocal(typeof(uint));
@@ -818,7 +818,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Callvirt, GTE_WriteFunction);    //Call the gte write function
         }
 
-        public static void EmitSWC2(uint rs, uint rt, uint imm, CacheBlock cache) {
+        public static void EmitSWC2(uint rs, uint rt, uint imm, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
 
@@ -844,7 +844,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Callvirt, BUS_StoreWordFunction);   //Load the store word function
         }
 
-        public static void EmitMemoryLoad(uint rs, uint rt, uint imm, int size, bool signed, CacheBlock cache) {
+        public static void EmitMemoryLoad(uint rs, uint rt, uint imm, int size, bool signed, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             Label end = il.DefineLabel();
@@ -895,7 +895,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.MarkLabel(end);
         }
 
-        public static void EmitMemoryStore(uint rs, uint rt, uint imm, int size, CacheBlock cache) {
+        public static void EmitMemoryStore(uint rs, uint rt, uint imm, int size, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             Label end = il.DefineLabel();
@@ -943,7 +943,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.MarkLabel(end);
         }
 
-        public static void EmitLWL_LWR(uint rs, uint rt, uint imm, bool left, CacheBlock cache) {
+        public static void EmitLWL_LWR(uint rs, uint rt, uint imm, bool left, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
 
@@ -958,7 +958,7 @@ namespace PSXEmulator.Core.Recompiler {
             Label bypassDelay = il.DefineLabel();
             Label loadMemory = il.DefineLabel();
 
-            Label[] caseTable = new Label[] { il.DefineLabel(), il.DefineLabel(), il.DefineLabel(), il.DefineLabel() };
+            Label[] caseTable = [il.DefineLabel(), il.DefineLabel(), il.DefineLabel(), il.DefineLabel()];
             Label defaultCase = il.DefineLabel();
 
             //Check cache isolation!
@@ -1077,7 +1077,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.MarkLabel(end);
         }
 
-        public static void EmitSWL_SWR(uint rs, uint rt, uint imm, bool left, CacheBlock cache) {
+        public static void EmitSWL_SWR(uint rs, uint rt, uint imm, bool left, MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             LocalBuilder address = il.DeclareLocal(typeof(uint));
@@ -1090,7 +1090,7 @@ namespace PSXEmulator.Core.Recompiler {
             Label final = il.DefineLabel();
             Label loadMemory = il.DefineLabel();
 
-            Label[] caseTable = new Label[] { il.DefineLabel(), il.DefineLabel(), il.DefineLabel(), il.DefineLabel() };
+            Label[] caseTable = [il.DefineLabel(), il.DefineLabel(), il.DefineLabel(), il.DefineLabel()];
             Label defaultCase = il.DefineLabel();
 
             //Check cache isolation!
@@ -1246,7 +1246,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Add);                        //Add them 
         }
 
-        public static void EmitRegisterTransfare(CacheBlock cache) {
+        public static void EmitRegisterTransfare(MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             /*Label skip = il.DefineLabel();
@@ -1379,7 +1379,7 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Call, RegisterTransfareMeth);
         }
 
-        public static void EmitBranchDelayHandler(CacheBlock cache) {
+        public static void EmitBranchDelayHandler(MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
 
             /*
@@ -1418,22 +1418,22 @@ namespace PSXEmulator.Core.Recompiler {
             il.Emit(OpCodes.Call, BranchDelayMeth);
         }
 
-        public static void EmitSavePC(CacheBlock cache) {
+        public static void EmitSavePC(MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
             /*
              cpu.Current_PC = cpu.PC;
             */
 
-            /*il.Emit(OpCodes.Ldarg, 0);
+            il.Emit(OpCodes.Ldarg, 0);
             il.Emit(OpCodes.Ldarg, 0);
             il.Emit(OpCodes.Ldfld, PC);
-            il.Emit(OpCodes.Stfld, Current_PC);*/
+            il.Emit(OpCodes.Stfld, Current_PC);
 
-            il.Emit(OpCodes.Ldarg, 0);
-            il.Emit(OpCodes.Call, SavePCMeth);
+           // il.Emit(OpCodes.Ldarg, 0);
+           // il.Emit(OpCodes.Call, SavePCMeth);
         }
 
-        public static void EmitRet(CacheBlock cache) {
+        public static void EmitRet(MSILCacheBlock cache) {
             ILGenerator il = cache.IL_Emitter;
             il.Emit(OpCodes.Ret);
         }
@@ -1448,7 +1448,7 @@ namespace PSXEmulator.Core.Recompiler {
         public static DynamicMethod RegisterTransfareMeth;
 
         public static void PreCompileSavePC() {
-            DynamicMethod method = new DynamicMethod("SavePC", typeof(void), [typeof(CPURecompiler)], true);
+            DynamicMethod method = new DynamicMethod("SavePC", typeof(void), [typeof(CPU_MSIL_Recompiler)], true);
             ILGenerator il = method.GetILGenerator();
             il.Emit(OpCodes.Ldarg, 0);
             il.Emit(OpCodes.Ldarg, 0);
@@ -1460,7 +1460,7 @@ namespace PSXEmulator.Core.Recompiler {
         }
 
         public static void PreCompileDelayHandler() {
-            DynamicMethod method = new DynamicMethod("DelayHandler", typeof(void), [typeof(CPURecompiler)], true);
+            DynamicMethod method = new DynamicMethod("DelayHandler", typeof(void), [typeof(CPU_MSIL_Recompiler)], true);
             ILGenerator il = method.GetILGenerator();
             il.Emit(OpCodes.Ldarg, 0);
             il.Emit(OpCodes.Ldarg, 0);
@@ -1491,7 +1491,7 @@ namespace PSXEmulator.Core.Recompiler {
         }
 
         public static void PreCompileRT() {
-            DynamicMethod method = new DynamicMethod("RT", typeof(void), [typeof(CPURecompiler)], true);
+            DynamicMethod method = new DynamicMethod("RT", typeof(void), [typeof(CPU_MSIL_Recompiler)], true);
             ILGenerator il = method.GetILGenerator();
             Label skip = il.DefineLabel();
 
@@ -1624,7 +1624,7 @@ namespace PSXEmulator.Core.Recompiler {
         }
     }
 
-    public class CacheBlock {
+    public class MSILCacheBlock {
         [assembly: AllowPartiallyTrustedCallers]
         [assembly: SecurityTransparent]
         [assembly: SecurityRules(SecurityRuleSet.Level2, SkipVerificationInFullTrust = true)]
@@ -1637,13 +1637,13 @@ namespace PSXEmulator.Core.Recompiler {
         public DynamicMethod FunctionBlock;
         public ILGenerator IL_Emitter;
 
-        public delegate void Instruction(CPURecompiler cpu);
+        public delegate void Instruction(CPU_MSIL_Recompiler cpu);
         public Instruction FunctionPointer;
 
         public void Init(uint address) {
             Address = address;
             FunctionBlock = new DynamicMethod("Block", typeof(void),
-            [typeof(CPURecompiler)], true);
+            [typeof(CPU_MSIL_Recompiler)], true);
             IL_Emitter = FunctionBlock.GetILGenerator(15 * 1024);
             FunctionPointer = null;
             IsCompiled = false;

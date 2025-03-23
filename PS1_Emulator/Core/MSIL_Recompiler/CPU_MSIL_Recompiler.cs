@@ -1,18 +1,22 @@
 ﻿using PSXEmulator.Core;
 using PSXEmulator.Core.Common;
-using PSXEmulator.Core.Recompiler;
+using PSXEmulator.Core.MSIL_Recompiler;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace PSXEmulator {
-    public unsafe partial class CPURecompiler : CPU {
+    public unsafe partial class CPU_MSIL_Recompiler : CPU {
         [assembly: AllowPartiallyTrustedCallers]
         [assembly: SecurityTransparent]
         [assembly: SecurityRules(SecurityRuleSet.Level2, SkipVerificationInFullTrust = true)]
 
-        const uint CYCLES_PER_FRAME = 33868800 / 60;
+        const uint CYCLES_PER_SECOND = 33868800;
+        const uint CYCLES_PER_FRAME = CYCLES_PER_SECOND / 60;
+
+        double CyclesDone = 0;  
 
         //BUS connects CPU to other peripherals
         public BUS BUS;
@@ -71,9 +75,9 @@ namespace PSXEmulator {
         Instruction CurrentInstruction = new Instruction();
         Instruction InterpreterInstruction = new Instruction();
 
-        public CacheBlock[] BIOS_CacheBlocks;
-        public CacheBlock[] RAM_CacheBlocks;
-        public CacheBlock CurrentBlock = new CacheBlock();
+        public MSILCacheBlock[] BIOS_CacheBlocks;
+        public MSILCacheBlock[] RAM_CacheBlocks;
+        public MSILCacheBlock CurrentBlock = new MSILCacheBlock();
 
         public const uint BIOS_START = 0x1FC00000;
         public const uint BIOS_SIZE = 512 * 1024;        //512 KB
@@ -81,7 +85,7 @@ namespace PSXEmulator {
 
         bool IsReadingFromBIOS => BUS.BIOS.range.Contains(BUS.Mask(PC));
 
-        public CPURecompiler(bool isEXE, string? EXEPath, BUS bus) {
+        public CPU_MSIL_Recompiler(bool isEXE, string? EXEPath, BUS bus) {
             PC = 0xbfc00000;                   //BIOS initial PC       
             Next_PC = PC + 4;
             BUS = bus;
@@ -108,15 +112,15 @@ namespace PSXEmulator {
             // CacheBlocks = CacheManager.LoadCache(this);
 
             //Initialize JIT cache for BIOS region
-            BIOS_CacheBlocks = new CacheBlock[BIOS_SIZE >> 2];
+            BIOS_CacheBlocks = new MSILCacheBlock[BIOS_SIZE >> 2];
             for (int i = 0; i < BIOS_CacheBlocks.Length; i++) {
-                BIOS_CacheBlocks[i] = new CacheBlock();
+                BIOS_CacheBlocks[i] = new MSILCacheBlock();
             }
 
             //Initialize JIT cache for RAM region
-            RAM_CacheBlocks = new CacheBlock[RAM_SIZE >> 2];
+            RAM_CacheBlocks = new MSILCacheBlock[RAM_SIZE >> 2];
             for (int i = 0; i < RAM_CacheBlocks.Length; i++) {
-                RAM_CacheBlocks[i] = new CacheBlock();
+                RAM_CacheBlocks[i] = new MSILCacheBlock();
             }
         }
 
@@ -155,7 +159,7 @@ namespace PSXEmulator {
             
             uint temp = pc;
             bool end = false;
-            CacheBlock[] currentCache = isBios ? BIOS_CacheBlocks : RAM_CacheBlocks;
+            MSILCacheBlock[] currentCache = isBios ? BIOS_CacheBlocks : RAM_CacheBlocks;
             CurrentBlock = currentCache[block];
             CurrentBlock.Init(pc);
 
@@ -185,7 +189,7 @@ namespace PSXEmulator {
                 Console.WriteLine("[JIT]: " + PC.ToString("x"));
             }
 
-            CacheBlock[] currentCache;
+            MSILCacheBlock[] currentCache;
             int totalCycles = 0;
             int cycleMultiplier = 0;
 
@@ -212,7 +216,7 @@ namespace PSXEmulator {
                 MSIL_LUT.MainLookUpTable[instruction.GetOpcode()](this, instruction);
             }
 
-            CurrentBlock.Checksum ^= instruction.FullValue;
+            CurrentBlock.Checksum += instruction.FullValue;
             CurrentBlock.Total++;
             MSIL_JIT.EmitRegisterTransfare(CurrentBlock);
         }
@@ -236,16 +240,19 @@ namespace PSXEmulator {
         }
 
         private bool InvalidateRAM_Block(uint block) {  //For RAM Blocks only
-            uint address = RAM_CacheBlocks[block].Address;
+            uint address = BUS.Mask(RAM_CacheBlocks[block].Address);
+            uint numberOfInstructions = RAM_CacheBlocks[block].Total;
+            ReadOnlySpan<byte> rawMemory = new ReadOnlySpan<byte>(BUS.RAM.GetMemoryReference()).Slice((int)address, (int)(numberOfInstructions * 4));
+            ReadOnlySpan<uint> instructionsSpan = MemoryMarshal.Cast<byte, uint>(rawMemory);
+
             uint memoryChecksum = 0;
 
-            for (int i = 0; i < RAM_CacheBlocks[block].Total; i++) {
-                uint memAddress = (uint)(address + (i * 4));
-                uint memoryValue = BUS.LoadWord(memAddress);
-                memoryChecksum ^= memoryValue;
+            for (int i = 0; i < instructionsSpan.Length; i++) {
+                memoryChecksum += instructionsSpan[i];
             }
 
-            return RAM_CacheBlocks[block].Checksum == memoryChecksum;
+            bool isValid = RAM_CacheBlocks[block].Checksum == memoryChecksum;
+            return isValid;
         }
 
         private bool IsJumpOrBranch(Instruction instruction) {
@@ -267,7 +274,7 @@ namespace PSXEmulator {
             return false;
         }
 
-        private static int IRQCheck(CPURecompiler cpu) {
+        private static int IRQCheck(CPU_MSIL_Recompiler cpu) {
             if (IRQ_CONTROL.isRequestingIRQ()) {  //Interrupt check 
                 cpu.Cop0.Cause |= (1 << 10);
                 //Skip IRQs if the current instruction is a GTE instruction to avoid the BIOS skipping it
@@ -279,7 +286,7 @@ namespace PSXEmulator {
             return 0;
         }
 
-        private static void HandleDelay(CPURecompiler cpu) {
+        private static void HandleDelay(CPU_MSIL_Recompiler cpu) {
             //Not used as currently this is being precompiled and emitted in IL then called
             //We could instead call this C# method..
             cpu.DelaySlot = cpu.Branch;   //Branch delay 
@@ -288,12 +295,12 @@ namespace PSXEmulator {
             cpu.Next_PC = cpu.Next_PC + 4;
         }
 
-        private static bool InstructionIsGTE(CPURecompiler cpu) {
+        private static bool InstructionIsGTE(CPU_MSIL_Recompiler cpu) {
             return false; //Does not work with current JIT
             return (cpu.CurrentInstruction.FullValue & 0xFE000000) == 0x4A000000;
         }
 
-        private void RegisterTransfer(CPURecompiler cpu){
+        private void RegisterTransfer(CPU_MSIL_Recompiler cpu){
             //Not used as currently this is being precompiled and emitted in IL then called
             //We could instead call this C# method..
 
@@ -427,7 +434,7 @@ namespace PSXEmulator {
             Next_PC = PC + 4;
         }
 
-        public static void Exception(CPURecompiler cpu, uint exceptionCause) {
+        public static void Exception(CPU_MSIL_Recompiler cpu, uint exceptionCause) {
             //If the next instruction is a GTE instruction skip the exception
             //Otherwise the BIOS will try to handle the GTE bug by skipping the instruction  
             uint handler;                                         //Get the handler
@@ -465,20 +472,21 @@ namespace PSXEmulator {
             cpu.Next_PC = cpu.PC + 4;
         }
        
-        public static void branch(CPURecompiler cpu, uint offset) {
+        public static void branch(CPU_MSIL_Recompiler cpu, uint offset) {
             offset = offset << 2;
             cpu.Next_PC = cpu.Next_PC + offset;
             cpu.Next_PC = cpu.Next_PC - 4;        //Cancel the +4 from the emu cycle 
             cpu.Branch = true;
         }
 
-        public void Tick() {
+        public void TickFrame() {
             for (int i = 0; i < CYCLES_PER_FRAME;) { 
                 int add = emu_cycle();
                 i += add;
                 BUS.Tick(add);
                 IRQCheck(this);
             }
+            CyclesDone += CYCLES_PER_FRAME;
         }
 
         public void Reset() {
@@ -488,6 +496,12 @@ namespace PSXEmulator {
 
         public ref BUS GetBUS() {
             return ref BUS;
+        }
+
+        public double GetSpeed() {
+            double returnValue = (CyclesDone / CYCLES_PER_SECOND) * 100;
+            CyclesDone = 0;
+            return Math.Round(returnValue, 2);
         }
     }
 }

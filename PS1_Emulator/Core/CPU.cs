@@ -1,7 +1,8 @@
 ﻿namespace PSXEmulator.Core {
     public interface CPU {
         public abstract void Reset();
-        public abstract void Tick();
+        public abstract void TickFrame();
+        public abstract double GetSpeed();
 
         public ref BUS GetBUS();
 

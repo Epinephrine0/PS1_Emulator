@@ -5,7 +5,8 @@ using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using PSXEmulator.Core;
 using PSXEmulator.Core.Interpreter;
-using PSXEmulator.Core.Recompiler;
+using PSXEmulator.Core.MSIL_Recompiler;
+using PSXEmulator.Core.x64_Recompiler;
 using PSXEmulator.Peripherals.GPU;
 using PSXEmulator.Peripherals.IO;
 using PSXEmulator.Peripherals.MDEC;
@@ -31,8 +32,9 @@ namespace PSXEmulator {
             };
 
             var Gws = GameWindowSettings.Default;
-            Gws.RenderFrequency = 60;   
-            Gws.UpdateFrequency = 60;
+            Gws.RenderFrequency = 00;   
+            Gws.UpdateFrequency = 00;
+         
             nativeWindowSettings.Location = new Vector2i((1980 - nativeWindowSettings.Size.X) / 2, (1080 - nativeWindowSettings.Size.Y) / 2);
 
             /*try {
@@ -45,6 +47,7 @@ namespace PSXEmulator {
             
 
             mainWindow = new Renderer(Gws, nativeWindowSettings);
+            mainWindow.VSync = VSyncMode.Off;
 
             Console.OutputEncoding = Encoding.UTF8;
 
@@ -77,12 +80,21 @@ namespace PSXEmulator {
             string cpuType = "";
 
             bool IsRecompiler = true;
+            bool Is_x64 = true;
+
             CPU CPU;
             if (IsRecompiler) {
-                CPU = new CPURecompiler(isBootingEXE, bootPath, Bus);
-                cpuType = "MSIL JIT";
+                if (Is_x64) {
+                    CPU = CPU_x64_Recompiler.GetOrCreateCPU(isBootingEXE, bootPath, Bus);
+                    cpuType = "x64 JIT";
+
+                } else {
+                    CPU = new CPU_MSIL_Recompiler(isBootingEXE, bootPath, Bus);
+                    cpuType = "MSIL JIT";
+                }
+
             } else {
-                CPU = new CPUInterpreter(isBootingEXE, bootPath, Bus);
+                CPU = new CPU_Interpreter(isBootingEXE, bootPath, Bus);
                 cpuType = "Interpreter";
             }
 
@@ -1258,6 +1270,7 @@ namespace PSXEmulator {
                 FrameUpdated = false;
             }     
         }
+
         private void SetTimer() {
             // Create a timer with a 1 second interval.
             FrameTimer = new System.Timers.Timer(1000);
@@ -1266,8 +1279,9 @@ namespace PSXEmulator {
             FrameTimer.AutoReset = true;
             FrameTimer.Enabled = true;
         }
+
         private void OnTimedEvent(Object source, ElapsedEventArgs e) {
-           this.Title = TitleCopy + "FPS: " + Frames;
+           this.Title = TitleCopy + "FPS: " + Frames + " | CPU: " + MainCPU.GetSpeed().ToString("0.00") + "%";
            Frames = 0;
         }
 
@@ -1459,7 +1473,20 @@ namespace PSXEmulator {
             }
 
             //Clock the CPU
-            MainCPU.Tick();
+            MainCPU.TickFrame();
+
+            /*try {
+                MainCPU.TickFrame();
+            } catch(Exception e) {
+                Console.WriteLine(e.Message);
+                Console.WriteLine(e.StackTrace);
+                if (MainCPU.GetType() == typeof(CPU_x64_Recompiler)) {
+                    CPU_x64_Recompiler cpu = (CPU_x64_Recompiler)MainCPU;
+                    cpu.Dispose();      //Ensure to call dispose to free memory
+                    Close();
+                    throw new Exception();
+                }
+            }*/
 
             //CPU.BUS.SerialIO1.CheckRemoteEnd();
 
@@ -1468,7 +1495,10 @@ namespace PSXEmulator {
         }
       
         protected override void OnUnload() {
-            //CacheManager.SaveCache(CPU.CacheBlocks);
+            if (MainCPU.GetType() == typeof(CPU_x64_Recompiler)) {
+                CPU_x64_Recompiler cpu = (CPU_x64_Recompiler)MainCPU;
+                cpu.Dispose();
+            }
 
             // Unbind all the resources by binding the targets to 0/null.
             // Unbind all the resources by binding the targets to 0/null.
