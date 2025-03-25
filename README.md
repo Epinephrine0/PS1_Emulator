@@ -33,8 +33,8 @@ The project is a personal project for the purpose of learning more about emulati
 - DMA
 
 ## What Are The Next Goals 
-- Optimize CPU Recompilers
-- Implement CPU ICACHE
+- Optimize CPU recompilers
+- Implement CPU I-Cache
 - Implement accurate instruction timing
 - Fix GPU semi-transparency bugs
 - Implement SPU noise generator 
