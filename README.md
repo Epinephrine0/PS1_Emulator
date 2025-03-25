@@ -24,7 +24,7 @@ The project is a personal project for the purpose of learning more about emulati
   - SPU Reverb
 - CDROM
   - Most commands
-  - CDXA and CDDA support
+  - XA-ADPCM and CDDA support
   - Audio disks support
 - MDEC
   - All modes (4/8/15/24) BPP
