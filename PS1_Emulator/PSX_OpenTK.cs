@@ -12,10 +12,15 @@ using PSXEmulator.Peripherals.IO;
 using PSXEmulator.Peripherals.MDEC;
 using PSXEmulator.Peripherals.Timers;
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Timers;
+using System.Windows.Forms;
+using Keys = OpenTK.Windowing.GraphicsLibraryFramework.Keys;
 
 namespace PSXEmulator {
     public class PSX_OpenTK {
@@ -85,6 +90,11 @@ namespace PSXEmulator {
             CPU CPU;
             if (IsRecompiler) {
                 if (Is_x64) {
+                    if (RuntimeInformation.ProcessArchitecture != Architecture.X64 || !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                        MessageBox.Show("Unsupported OS/Architecture.\nProgram will exit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        throw new NotSupportedException();
+                    }
+
                     CPU = CPU_x64_Recompiler.GetOrCreateCPU(isBootingEXE, bootPath, Bus);
                     cpuType = "x64 JIT";
 
@@ -1262,6 +1272,8 @@ namespace PSXEmulator {
         public int Frames = 0;
         public string TitleCopy;
 
+
+
         public void Display() {
             DisplayFrame();
             SwapBuffers();
@@ -1271,6 +1283,7 @@ namespace PSXEmulator {
             }     
         }
 
+
         private void SetTimer() {
             // Create a timer with a 1 second interval.
             FrameTimer = new System.Timers.Timer(1000);
@@ -1278,12 +1291,27 @@ namespace PSXEmulator {
             FrameTimer.Elapsed += OnTimedEvent;
             FrameTimer.AutoReset = true;
             FrameTimer.Enabled = true;
+            //TimerLoop();
         }
 
         private void OnTimedEvent(Object source, ElapsedEventArgs e) {
-           this.Title = TitleCopy + "FPS: " + Frames + " | CPU: " + MainCPU.GetSpeed().ToString("0.00") + "%";
+           this.Title = TitleCopy + "FPS: " + Frames + " | CPU: " + MainCPU.GetSpeed() + "%";
            Frames = 0;
         }
+
+       /* private async Task TimerLoop() {
+            while (true) {
+                await Task.Delay(1000); // Sample every second
+                double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
+                stopwatch.Restart(); // Reset for next interval
+
+                double cycles = MainCPU.GetSpeed();
+                double speed = (cycles / (33868800 * elapsedSeconds)) * 100;
+
+                this.Title = TitleCopy + $" FPS: {Frames} | CPU: {speed:0.00}%";
+                Frames = 0;
+            }
+        }*/
 
         void DisplayFrame() {
             GL.Disable(EnableCap.ScissorTest);

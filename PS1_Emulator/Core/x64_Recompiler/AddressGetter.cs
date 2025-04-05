@@ -73,12 +73,49 @@
             return (ulong)&CPU_Struct_Ptr->COP0_EPC;
         }
 
+        public static ulong GetBIOSCacheBlockAddress() {
+            return (ulong)&x64CacheBlocksStructs->BIOS_CacheBlocks;
+        }
+
+        public static ulong GetRAMCacheBlockAddress() {
+            return (ulong)&x64CacheBlocksStructs->RAM_CacheBlocks;
+        }
+
+        public static ulong GetGetBlockAddress() {
+            delegate* unmanaged[Stdcall]<uint*, ulong> ptr = &GetNativeBlock;
+            return (ulong)ptr;
+        }
+
+        public static ulong GetNeedsRecompilationAddress() {
+            delegate* unmanaged[Stdcall]<x64CacheBlockInternalStruct*, uint*, uint> ptr = &NeedsRecompilation;
+            return (ulong)ptr;
+        }
+
+        public static ulong GetRecompileBlockAddress() {
+            delegate* unmanaged[Stdcall]<x64CacheBlockInternalStruct*, uint*, void> ptr = &RecompileInJIT;
+            return (ulong)ptr;
+        }
+
+        public static ulong GetInvalidateBlockAddress() {
+            delegate* unmanaged[Stdcall]<x64CacheBlockInternalStruct*, uint> ptr = &InvalidateRAM_Block;
+            return (ulong)ptr;
+        }
+
         public static ulong GetRegisterTransfareAddress() {
             return (ulong)NativeMemoryManager.RegisterTransfare;
         }
 
         public static ulong GetExceptionAddress() {
             delegate* unmanaged[Stdcall]<CPUNativeStruct*, uint, void> ptr = &ExceptionWrapper;
+            return (ulong)ptr;
+        }
+        public static ulong GetIRQCheckAddress() {
+            delegate* unmanaged[Stdcall]<void> ptr = &CheckIRQInJIT;
+            return (ulong)ptr;
+        }
+
+        public static ulong GetBUSTickddress() {
+            delegate* unmanaged[Stdcall]<int, void> ptr = &BUSTickWrapper;
             return (ulong)ptr;
         }
 

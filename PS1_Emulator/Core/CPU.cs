@@ -2,7 +2,7 @@
     public interface CPU {
         public abstract void Reset();
         public abstract void TickFrame();
-        public abstract double GetSpeed();
+        public abstract long GetSpeed();
 
         public ref BUS GetBUS();
 

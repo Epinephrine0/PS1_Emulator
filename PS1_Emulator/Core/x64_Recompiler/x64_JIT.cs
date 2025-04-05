@@ -5,11 +5,13 @@ using System.IO;
 using static Iced.Intel.AssemblerRegisters;
 using static PSXEmulator.Core.x64_Recompiler.AddressGetter;
 using System.Collections.Generic;
+using System.Security.Permissions;
+using OpenTK.Graphics.ES20;
 
 namespace PSXEmulator.Core.x64_Recompiler {
 
     //Implements R3000 MIPS instructions in x64 assembly
-    public static class x64_JIT {
+    public static unsafe class x64_JIT {
         //Register usage:
         //EAX, ECX, EDX, EDI, ESI, R8 -> General Calculations
         //R15 -> Loading 64 bit immediate addresses
@@ -1197,9 +1199,152 @@ namespace PSXEmulator.Core.x64_Recompiler {
 
         public static Span<byte> EmitDispatcher() {
             Assembler asm = new Assembler(64);
-            const uint CYCLES_PER_FRAME = 33868800 / 60;
-          
-            return null;
+            Label dispatcherBody = asm.CreateLabel();
+            Label executeBlock = asm.CreateLabel();
+
+            Label isBIOSBlock = asm.CreateLabel();
+            Label validate = asm.CreateLabel();
+            Label recompile = asm.CreateLabel();
+
+            Label endOfFunction = asm.CreateLabel();
+
+            const int CYCLES_PER_FRAME = 33868800 / 60;
+            const int BIOS_START = 0x1FC00000;
+            int sizeOfBlock = sizeof(x64CacheBlockInternalStruct);
+
+            EmitSaveNonVolatileRegisters(asm);
+            asm.mov(rbp, rsp);                          //Copy stack pointer
+
+            asm.mov(r12d, 0);                           //Counter
+
+            asm.sub(rsp, 40);                           //Prepare shadow space
+
+            asm.Label(ref dispatcherBody);
+            asm.mov(__qword_ptr[rbp - 8], r12d);        //Save r12
+
+            //Two Big branches: BIOS or RAM
+            asm.mov(rax, __dword_ptr[GetPCAddress()]);
+            asm.and(rax, 0x1FFFFFFF);                   //Mask PC
+            asm.cmp(rax, BIOS_START);
+            asm.jge(isBIOSBlock);                       //if >= go to BIOS 
+
+            //Else is ram block
+            asm.and(rax, ((1 << 21) - 1));  //%2 MB
+            asm.shr(rax, 2);                //>> 2
+
+            if (Utility.IsPowerOf2(sizeOfBlock)) {
+                byte power = (byte)Math.Log2(sizeOfBlock);
+                asm.shl(rax, power);
+            } else {
+                asm.mov(rcx, sizeOfBlock);
+                asm.mul(rcx);                  //rdx:rax = rax*rcx
+            }
+
+            asm.mov(r15, GetRAMCacheBlockAddress());    //Get the base address for ram blocks
+            asm.add(rax, r15);
+            asm.mov(rbx, rax);                          //Save block address in callee saved-reg rbx
+
+            //Check if this RAM block needs recompilation
+            asm.mov(rax, __dword_ptr[rax + 4]);         //Read "IsCompiled"
+            asm.cmp(eax, 1);
+            asm.je(validate);
+
+            //Call recompile function
+            asm.Label(ref recompile);
+            asm.mov(rcx, rbx);                          //Parameter 1 is block pointer
+            asm.mov(rdx, GetPCAddress());               //Parameter 2 is PC pointer
+            asm.mov(r15, GetRecompileBlockAddress());
+            asm.call(r15);
+            asm.jmp(executeBlock);                     
+
+            asm.Label(ref validate);
+            //Call invalidate function  --> This happens on every compiled RAM block and is slowing down the dispatcher
+            //TODO: Inline this
+            asm.mov(rcx, rbx);
+            asm.mov(r15, GetInvalidateBlockAddress());
+            asm.call(r15);
+            asm.cmp(rax, 0);
+            asm.je(recompile);
+            asm.jmp(executeBlock);
+
+            /////////////////////////////////////////////////////////////////////////
+            asm.Label(ref isBIOSBlock);
+            asm.sub(rax, BIOS_START);       //-= BIOS Start
+            asm.shr(rax, 2);                //>> 2
+
+            if (Utility.IsPowerOf2(sizeOfBlock)) {
+                byte power = (byte)Math.Log2(sizeOfBlock);
+                asm.shl(rax, power);
+            } else {
+                asm.mov(rcx, sizeOfBlock);
+                asm.mul(rcx);                  //rdx:rax = rax*rcx
+            }
+
+            asm.mov(r15, GetBIOSCacheBlockAddress());    //Get the base address for BIOS blocks
+            asm.add(rax, r15);
+            asm.mov(rbx, rax);                           //Save block address in callee saved-reg rbx
+
+            //Check if this BIOS block is compiled
+            asm.mov(rax, __dword_ptr[rax + 4]);
+            asm.cmp(eax, 1);
+            asm.je(executeBlock);
+
+            //else call recompile function
+            asm.mov(rcx, rbx);                          //Parameter 1 is block pointer
+            asm.mov(rdx, GetPCAddress());               //Parameter 2 is PC pointer
+            asm.mov(r15, GetRecompileBlockAddress());
+            asm.call(r15);
+            asm.jmp(executeBlock);
+
+            //////////////////////////////////////////////////////////////////////////
+            asm.Label(ref executeBlock);
+
+            //Block pointer in rbx
+            //Now the block is ready for execution
+            asm.mov(r15, __qword_ptr[rbx + 24]);        //Get function pointer in r15
+
+            asm.mov(__qword_ptr[rbp - 16], rbx);        //Save rbx
+
+            asm.call(r15);                              //Execute block -- Assume all registers are destroyed except rbp and rsp
+
+            asm.mov(rbx, __qword_ptr[rbp - 16]);        //Restore rbx
+
+            //Call BUS.Tick
+            asm.mov(rcx, __dword_ptr[rbx + 12]);        //Get total cycles in rcx
+            asm.mov(r15, GetBUSTickddress());
+            asm.call(r15);
+
+            //Call IRQ Check
+            asm.mov(r15, GetIRQCheckAddress());
+            asm.call(r15);
+
+            asm.mov(r12d, __qword_ptr[rbp - 8]);        //Restore r12
+            asm.add(r12d, __dword_ptr[rbx + 12]);       //Add counter by total cycles
+        
+            asm.cmp(r12d, CYCLES_PER_FRAME);
+            
+            asm.jb(dispatcherBody);
+
+            asm.add(rsp, 40);                           //undo shadow space
+            asm.mov(eax, r12d);                         //Return cycles done (32-bit int)
+
+            EmitRestoreNonVolatileRegisters(asm);
+            asm.ret();
+
+            asm.Label(ref endOfFunction);
+            asm.nop();
+
+
+            MemoryStream stream = new MemoryStream();
+            AssemblerResult result = asm.Assemble(new StreamCodeWriter(stream), 0, BlockEncoderOptions.ReturnNewInstructionOffsets);
+            int endOfBlock = (int)result.GetLabelRIP(endOfFunction);
+            Span<byte> emittedCode = new Span<byte>(stream.GetBuffer()).Slice(0, endOfBlock);
+            return emittedCode;
+
+            //Debug
+            /*asm.mov(rcx, r12);
+            asm.mov(r15, GetPrintAddress());
+            asm.call(r15);*/
         }
 
         public static Span<byte> PrecompileRegisterTransfare() {
@@ -1300,11 +1445,11 @@ namespace PSXEmulator.Core.x64_Recompiler {
     }
 
     public unsafe class x64CacheBlock {     
-        public uint Address;        
+        public uint Address;
+        public bool IsCompiled;
         public uint TotalMIPS_Instructions;
         public uint TotalCycles;
         public uint MIPS_Checksum;
-        public bool IsCompiled;
         public int SizeOfAllocatedBytes;
         public delegate* unmanaged[Stdcall]<void> FunctionPointer;
 
