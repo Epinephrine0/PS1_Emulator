@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.2.32519.379
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSXSharp", "PSXSharp\PSXSharp.csproj", "{60F0196C-0DCD-2355-7259-BED2D8382CEC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{60F0196C-0DCD-2355-7259-BED2D8382CEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{60F0196C-0DCD-2355-7259-BED2D8382CEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{60F0196C-0DCD-2355-7259-BED2D8382CEC}.Debug|x64.ActiveCfg = Debug|x64
+		{60F0196C-0DCD-2355-7259-BED2D8382CEC}.Debug|x64.Build.0 = Debug|x64
+		{60F0196C-0DCD-2355-7259-BED2D8382CEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{60F0196C-0DCD-2355-7259-BED2D8382CEC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{60F0196C-0DCD-2355-7259-BED2D8382CEC}.Release|x64.ActiveCfg = Release|x64
+		{60F0196C-0DCD-2355-7259-BED2D8382CEC}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {ADBF3AA7-ED6E-44CE-899F-F8055FFADC7B}
+	EndGlobalSection
+EndGlobal
