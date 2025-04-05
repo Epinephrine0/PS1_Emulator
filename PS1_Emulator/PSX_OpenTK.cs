@@ -1295,7 +1295,7 @@ namespace PSXEmulator {
         }
 
         private void OnTimedEvent(Object source, ElapsedEventArgs e) {
-           this.Title = TitleCopy + "FPS: " + Frames + " | CPU: " + MainCPU.GetSpeed() + "%";
+           this.Title = TitleCopy + "FPS: " + Frames + " | CPU: " + MainCPU.GetSpeed().ToString("00.00") + "%";
            Frames = 0;
         }
 

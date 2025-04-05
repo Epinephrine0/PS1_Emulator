@@ -1196,10 +1196,10 @@ namespace PSXEmulator.Core.Interpreter {
             return ref BUS;
         }
 
-        public long GetSpeed() {
+        public double GetSpeed() {
             double returnValue = (CyclesDone / CYCLES_PER_SECOND) * 100;
             CyclesDone = 0;
-            return (long)Math.Round(returnValue, 2);
+            return returnValue;
         }
     }
 }

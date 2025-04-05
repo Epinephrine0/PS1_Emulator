@@ -21,7 +21,7 @@ namespace PSXEmulator.Core.x64_Recompiler {
         const uint CYCLES_PER_SECOND = 33868800;
         const uint CYCLES_PER_FRAME = CYCLES_PER_SECOND / 60;
 
-        long CyclesDone = 0;
+        double CyclesDone = 0;
 
         bool IsReadingFromBIOS => (CPU_Struct_Ptr->PC & 0x1FFFFFFF) >= BIOS_START;
 
@@ -703,10 +703,10 @@ namespace PSXEmulator.Core.x64_Recompiler {
         }
 
         //Sampled every second by timer
-        public long GetSpeed() {
-            double cycles = CyclesDone;
+        public double GetSpeed() {
+            double returnValue = (CyclesDone / CYCLES_PER_SECOND) * 100;
             CyclesDone = 0;
-            return (long)((cycles / CYCLES_PER_SECOND) * 100);
+            return returnValue;
         }
 
         ~CPU_x64_Recompiler() {
